@@ -1,0 +1,58 @@
+name: Deploy Prod (Admin)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-admin-prod
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build:prod
+
+      - name: Clean target folder on server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST_PROD }}
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY_PROD }}
+          script: |
+            TARGET=/www/wwwroot/admin.sensenran-guzi.com
+            mkdir -p "$TARGET"
+            cd "$TARGET"
+            chattr -i .user.ini 2>/dev/null || true
+            find . -mindepth 1 -maxdepth 1 \
+              ! -name '.well-known' \
+              ! -name '.user.ini' \
+              -exec rm -rf {} + || true
+            [ -f .user.ini ] && chattr +i .user.ini 2>/dev/null || true
+
+      - name: Upload dist to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST_PROD }}
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY_PROD }}
+          source: 'dist/*'
+          target: /www/wwwroot/admin.sensenran-guzi.com/
+          strip_components: 1

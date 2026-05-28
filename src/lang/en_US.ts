@@ -81,5 +81,15 @@ export default {
     layoutSetting: 'Layout Setting',
     personalCenter: 'Personal Center',
     logout: 'Logout'
+  },
+  // Sensenran-Guzi business placeholders (D01 GZ-SYS-001)
+  gzHello: {
+    common: 'Guzi Universe — Common Module',
+    bean: 'Guzi Universe — Bean Booking',
+    user: 'Guzi Universe — Member Center',
+    news: 'Guzi Universe — News Center',
+    ord: 'Guzi Universe — Pre-Order (V1.1)',
+    gacha: 'Guzi Universe — Gacha (V1.1)',
+    admin: 'Guzi Universe — Admin Extension (V1.1)'
   }
 };

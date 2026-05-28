@@ -81,5 +81,15 @@ export default {
     layoutSetting: '布局设置',
     personalCenter: '个人中心',
     logout: '退出登录'
+  },
+  // 谷子宇宙业务占位（D01 GZ-SYS-001）
+  gzHello: {
+    common: '谷子宇宙 — 通用模块',
+    bean: '谷子宇宙 — 拼豆预约',
+    user: '谷子宇宙 — 会员中心',
+    news: '谷子宇宙 — 资讯中心',
+    ord: '谷子宇宙 — 预定货品（V1.1）',
+    gacha: '谷子宇宙 — 扭蛋机（V1.1）',
+    admin: '谷子宇宙 — 后台扩展（V1.1）'
   }
 };

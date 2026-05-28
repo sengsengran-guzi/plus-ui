@@ -1,0 +1,61 @@
+name: Deploy Staging (Admin)
+
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-admin-staging
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build:prod
+
+      - name: Clean target folder on server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST_STAGING }}
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY_STAGING }}
+          script: |
+            TARGET=/www/wwwroot/admin.sensenran-guzi.com
+            mkdir -p "$TARGET"
+            cd "$TARGET"
+            # 宝塔可能给 .user.ini 加了不可变锁，先解锁
+            chattr -i .user.ini 2>/dev/null || true
+            # 清掉旧的前端产物，保留宝塔/SSL 系统文件
+            find . -mindepth 1 -maxdepth 1 \
+              ! -name '.well-known' \
+              ! -name '.user.ini' \
+              -exec rm -rf {} + || true
+            # 恢复 .user.ini 不可变锁（如果存在）
+            [ -f .user.ini ] && chattr +i .user.ini 2>/dev/null || true
+
+      - name: Upload dist to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST_STAGING }}
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY_STAGING }}
+          source: 'dist/*'
+          target: /www/wwwroot/admin.sensenran-guzi.com/
+          strip_components: 1
