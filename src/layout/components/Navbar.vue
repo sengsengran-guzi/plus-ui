@@ -11,6 +11,9 @@
     </template>
     <div class="right-menu flex align-center">
       <template v-if="appStore.device !== 'mobile'">
+        <!-- GZ-ADMIN-004 谷子门店切换器（V1.0 单门店占位，BEAN-001 完工后接入真实数据源） -->
+        <store-selector v-if="!isSuperadmin" class="gz-store-selector" />
+
         <el-select
           v-if="userId === 1 && tenantEnabled"
           v-model="companyName"
@@ -107,6 +110,7 @@ import { ElMessageBoxOptions } from 'element-plus/es/components/message-box/src/
 import { NavTypeEnum } from '@/enums/NavTypeEnum';
 import Logo from "@/layout/components/Sidebar/Logo.vue";
 import TopBar from './TopBar'
+import StoreSelector from '@/components/StoreSelector/index.vue';
 
 const appStore = useAppStore();
 const userStore = useUserStore();
@@ -119,6 +123,10 @@ const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 const userId = ref(userStore.userId);
 const navType = computed(() => settingsStore.navType);
 const showLogo = computed(() => settingsStore.sidebarLogo);
+
+// GZ-ADMIN-004 用 ruoyi 自带的 admin/admin123 兜底账号登录时不显示业务门店切换器
+//   （兜底账号属系统层，与谷子业务无关；owner / staff 登录才显示）
+const isSuperadmin = computed(() => userStore.roles.includes('superadmin'));
 
 const companyName = ref(undefined);
 const tenantList = ref<TenantVO[]>([]);

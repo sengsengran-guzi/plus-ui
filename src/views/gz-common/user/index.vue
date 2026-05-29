@@ -204,9 +204,13 @@ const buildQuery = computed<GzUserQuery>(() => {
 async function loadList() {
   loading.value = true;
   try {
+    // ruoyi request.ts interceptor 已对 TableDataInfo 做了一层解包：
+    // res.data.code===200 时 return Promise.resolve(res.data)。调用方直接拿到 { code, msg, rows, total }
+    // —— 不需要再 .data。AxiosPromise<{ total; rows }> 的 TS 声明此处是误导；用 as any 短期 cast。
+    // （BEAN-001 hotfix R6 顺手修：BEAN-002 §0 自检阶段同款 bug 一并清理）
     const resp = await listGzUser(buildQuery.value);
-    rows.value = resp.data.rows || [];
-    total.value = resp.data.total || 0;
+    rows.value = (resp as any).rows || [];
+    total.value = (resp as any).total || 0;
   } catch (e) {
     console.error('[gz-user] load failed', e);
     ElMessage.error(t('gzUser.loadFailed'));
@@ -234,7 +238,8 @@ function handleReset() {
 async function handleDetail(row: GzUserVO) {
   try {
     const resp = await getGzUser(row.id);
-    detail.value = resp.data;
+    // 同 loadList：ruoyi request.ts 已解包，无需 .data
+    detail.value = resp as any;
     detailVisible.value = true;
   } catch (e) {
     console.error('[gz-user] detail failed', e);
