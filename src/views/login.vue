@@ -205,7 +205,10 @@ const initTenantList = async () => {
   if (tenantEnabled.value) {
     tenantList.value = data.voList;
     if (tenantList.value != null && tenantList.value.length !== 0) {
-      loginForm.value.tenantId = tenantList.value[0].tenantId;
+      // 单客户产品：默认选业务公司（谷子宇宙），跳过 ruoyi 系统租户 000000；
+      // 系统租户仍保留在下拉里，超管需要时手动切回 000000 登录。
+      const bizTenant = tenantList.value.find((item) => item.tenantId !== '000000');
+      loginForm.value.tenantId = (bizTenant ?? tenantList.value[0]).tenantId;
     }
   }
 };
