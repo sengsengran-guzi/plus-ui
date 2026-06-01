@@ -20,9 +20,9 @@ selenium-debug.log
 *.sln
 *.local
 
+# 项目用 pnpm，npm/yarn lock 不应出现；pnpm-lock.yaml 必须入库（CI --frozen-lockfile + cache 依赖）
 package-lock.json
 yarn.lock
-pnpm-lock.yaml
 
 # 编译生成的文件
 auto-imports.d.ts
