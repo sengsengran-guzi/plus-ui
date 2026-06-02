@@ -222,15 +222,12 @@ const rows = ref<GzBeanBookingVO[]>([]);
 const total = ref<number>(0);
 const storeOptions = ref<GzBeanStoreVO[]>([]);
 
-/** 默认今天 */
-function today(): string {
-  const d = new Date();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${day}`;
-}
-
-const dateRange = ref<[string, string] | null>([today(), today()]);
+/**
+ * 日期范围默认空（看全部预约）。
+ * 拼豆预约是「未来到店」预约，按 sess_date（到店日）筛 —— 默认 today-today 会把所有非今天的
+ * 预约挡在视野外（管理者最关心的恰是未来的待到店）。故默认不筛日期，管理者按需缩小范围。
+ */
+const dateRange = ref<[string, string] | null>(null);
 
 const query = reactive<GzBeanBookingQuery>({
   pageNum: 1,
@@ -292,7 +289,7 @@ function handleReset() {
   query.statusList = [];
   query.mobile = undefined;
   query.bookingNo = undefined;
-  dateRange.value = [today(), today()];
+  dateRange.value = null;
   query.pageNum = 1;
   loadList();
 }
