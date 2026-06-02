@@ -136,6 +136,27 @@ export default {
     saveSuccess: '保存成功',
     saveFailed: '保存失败，请稍后重试'
   },
+  // 首页轮播 banner 配置（GZ-HOME-001）
+  gzHomeBanner: {
+    title: '首页 Banner 配置',
+    alertTitle: '说明',
+    alertDesc: '配置小程序首页顶部轮播 banner（即首页主视觉位）。图片上传到 OSS；跳转链接填站内小程序路由（如 /pages/bean/index），留空则该图不可点；可拖动上移/下移调整顺序，关闭「启用」可临时下线不删除。空配置时小程序首页降级展示「去拼豆预约」占位图。',
+    refresh: '刷新',
+    save: '保存',
+    reset: '重置',
+    add: '+ 新增 Banner',
+    remove: '删除',
+    moveUp: '上移',
+    moveDown: '下移',
+    enabled: '启用',
+    disabled: '停用',
+    empty: '暂无 banner，点下方「新增 Banner」添加',
+    linkLabel: '跳转链接',
+    linkPlaceholder: '如 /pages/bean/index（站内路由），留空则不可点',
+    loadFailed: '加载失败，请稍后重试',
+    saveSuccess: '保存成功',
+    saveFailed: '保存失败，请稍后重试'
+  },
   // 业务文件上传测试页（D02 GZ-SYS-005）
   gzFile: {
     title: '业务文件上传测试',

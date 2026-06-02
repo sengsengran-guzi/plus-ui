@@ -135,6 +135,27 @@ export default {
     saveSuccess: 'Saved successfully',
     saveFailed: 'Save failed, please retry later'
   },
+  // Home carousel banner config (GZ-HOME-001)
+  gzHomeBanner: {
+    title: 'Home Banner Config',
+    alertTitle: 'Note',
+    alertDesc: 'Configure the miniapp home top carousel banner (the home hero slot). Images upload to OSS; link is an in-app route (e.g. /pages/bean/index), leave blank to make it non-clickable; reorder with up/down, toggle off to take offline without deleting. When empty, the home shows a "Go to bean booking" placeholder.',
+    refresh: 'Refresh',
+    save: 'Save',
+    reset: 'Reset',
+    add: '+ Add Banner',
+    remove: 'Remove',
+    moveUp: 'Up',
+    moveDown: 'Down',
+    enabled: 'On',
+    disabled: 'Off',
+    empty: 'No banners yet. Click "Add Banner" below.',
+    linkLabel: 'Link',
+    linkPlaceholder: 'e.g. /pages/bean/index (in-app route); blank = non-clickable',
+    loadFailed: 'Load failed, please retry later',
+    saveSuccess: 'Saved successfully',
+    saveFailed: 'Save failed, please retry later'
+  },
   // Business file upload test page (D02 GZ-SYS-005)
   gzFile: {
     title: 'Business File Upload Test',
