@@ -50,14 +50,19 @@ const props = defineProps({
   /** 编辑器高度（px） */
   height: { type: Number, default: 480 },
   /** 单张图片大小上限（MB） */
-  fileSize: { type: Number, default: 5 }
+  fileSize: { type: Number, default: 5 },
+  /**
+   * 内嵌图片上传的 usageType（落 gz_file_object.usage_type）。
+   * 默认 news_inline（资讯）；预购商品详情复用本编辑器时传 preorder_product_image（GZ-ORD-101）。
+   */
+  usageType: { type: String, default: 'news_inline' }
 });
 const emit = defineEmits<{ (e: 'update:modelValue', v: string): void }>();
 
 const baseApi = import.meta.env.VITE_APP_BASE_API;
-// AC3：图片走 SYS-005，usageType=news_inline
+// 图片走 SYS-005；usageType 由调用方决定（资讯=news_inline / 预购商品=preorder_product_image）
 const uploadUrl = baseApi + '/system/gz/file/upload';
-const uploadData = { usageType: 'news_inline' };
+const uploadData = computed(() => ({ usageType: props.usageType }));
 const uploadHeaders = globalHeaders();
 
 const quillEditorRef = ref();
