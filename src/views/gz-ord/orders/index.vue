@@ -10,10 +10,12 @@
 
       <el-alert :title="t('gzOrdOrders.alertTitle')" type="info" :description="t('gzOrdOrders.alertDesc')" show-icon :closable="false" class="mb-3" />
 
-      <!-- 业务类型 tab（全部 / 预购 / 扭蛋 / 测试单） -->
+      <!-- 业务类型 tab（全部 / 扭蛋 / 测试单）
+           GZ-ORD-110 预购下线：隐藏 preorder 业务类型筛选项（仅去入口，不删能力/数据）；
+           preorder 历史订单仍可经「全部」聚合查询（数据保留原则）。
+           恢复 = 反向加回 <el-radio-button label="preorder"> 一行。 -->
       <el-radio-group v-model="query.businessType" class="mb-3" @change="handleQuery">
         <el-radio-button label="">{{ t('gzOrdOrders.tabAll') }}</el-radio-button>
-        <el-radio-button label="preorder">{{ t('gzOrdOrders.tabPreorder') }}</el-radio-button>
         <el-radio-button label="gacha">{{ t('gzOrdOrders.tabGacha') }}</el-radio-button>
         <el-radio-button label="test">{{ t('gzOrdOrders.tabTest') }}</el-radio-button>
       </el-radio-group>
