@@ -13,7 +13,9 @@
     "preview": "vite preview",
     "lint:eslint": "eslint",
     "lint:eslint:fix": "eslint --fix",
-    "prettier": "prettier --write ."
+    "prettier": "prettier --write .",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "repository": {
     "type": "git",

@@ -44,6 +44,8 @@ export interface GzOrdProductVO {
   name: string;
   /** 主图 file_id（string） */
   mainImageId?: string | null;
+  /** 主图签名 URL（列表缩略图直用；后端解析，空回退占位图） */
+  mainImageUrl?: string | null;
   /** 图集 逗号分隔 file_id */
   galleryImageIds?: string | null;
   /** 商品详情富文本 HTML（详情才返回；列表不投影） */
@@ -60,6 +62,8 @@ export interface GzOrdProductVO {
   status: string;
   /** 销量 */
   salesCount: number;
+  /** SKU 数（列表展示用） */
+  skuCount?: number;
   /** 同 IP 内排序 */
   sortNo: number;
   /** 乐观锁版本 */
@@ -109,8 +113,20 @@ export interface GzOrdProductQuery {
   name?: string;
   status?: string;
   ipTag?: string;
+  /** 截止日范围起 yyyy-MM-dd */
+  deadlineStart?: string;
+  /** 截止日范围止 yyyy-MM-dd */
+  deadlineEnd?: string;
   pageNum?: number;
   pageSize?: number;
+}
+
+/** 批量上下架结果（与 GzOrdBatchStatusVO.java 对齐，AC 7） */
+export interface GzOrdBatchStatusResult {
+  /** 成功流转的商品 id（string） */
+  success: string[];
+  /** 被跳过的项（id + 原因） */
+  skipped: Array<{ id: string; reason: string }>;
 }
 
 /** GET /list — 分页查询商品（status/ipTag/name 筛选；不含 SKU） */
@@ -163,5 +179,14 @@ export function delGzOrdProduct(ids: Array<string | number> | string | number) {
   return request({
     url: `/system/gz/ord/product/${idStr}`,
     method: 'delete'
+  });
+}
+
+/** PUT /status — 批量上下架（过滤 auto_off / 无 SKU / 已截止，返回 success/skipped；AC 7） */
+export function batchStatusGzOrdProduct(ids: Array<string | number>, status: string): AxiosPromise<GzOrdBatchStatusResult> {
+  return request({
+    url: '/system/gz/ord/product/status',
+    method: 'put',
+    data: { ids: ids.map((i) => String(i)), status }
   });
 }

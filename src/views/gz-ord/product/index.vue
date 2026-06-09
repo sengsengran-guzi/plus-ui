@@ -23,6 +23,16 @@
             <el-option v-for="s in statusOptions" :key="s.value" :label="s.label" :value="s.value" />
           </el-select>
         </el-form-item>
+        <el-form-item :label="t('gzOrdProduct.colDeadline')">
+          <el-date-picker
+            v-model="deadlineRange"
+            type="daterange"
+            value-format="YYYY-MM-DD"
+            :start-placeholder="t('gzOrdProduct.deadlineStart')"
+            :end-placeholder="t('gzOrdProduct.deadlineEnd')"
+            style="width: 250px"
+          />
+        </el-form-item>
         <el-form-item>
           <el-button type="primary" :icon="Search" @click="handleQuery">{{ t('gzOrdProduct.search') }}</el-button>
           <el-button :icon="Refresh" @click="handleReset">{{ t('gzOrdProduct.reset') }}</el-button>
@@ -30,12 +40,39 @@
       </el-form>
 
       <!-- 工具栏 -->
-      <div class="mb-3">
+      <div class="mb-3 toolbar">
         <el-button v-hasPermi="['gz:ord:product:add']" type="primary" :icon="Plus" @click="handleAdd">{{ t('gzOrdProduct.add') }}</el-button>
+        <el-dropdown v-hasPermi="['gz:ord:product:status']" :disabled="selectedIds.length === 0" @command="handleBatchStatus">
+          <el-button :disabled="selectedIds.length === 0">
+            {{ t('gzOrdProduct.batchOps') }}<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="on_shelf">{{ t('gzOrdProduct.batchOnShelf') }}</el-dropdown-item>
+              <el-dropdown-item command="off_shelf">{{ t('gzOrdProduct.batchOffShelf') }}</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+        <el-button v-hasPermi="['gz:ord:product:import']" :icon="Top" @click="handleImport">{{ t('gzOrdProduct.import') }}</el-button>
+        <el-button v-hasPermi="['gz:ord:product:export']" :icon="Download" @click="handleExport">{{ t('gzOrdProduct.export') }}</el-button>
       </div>
 
       <!-- 列表 -->
-      <el-table :data="rows" border>
+      <el-table :data="rows" border @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="48" align="center" />
+        <el-table-column :label="t('gzOrdProduct.colImage')" width="80" align="center">
+          <template #default="{ row }">
+            <el-image
+              v-if="row.mainImageUrl"
+              :src="row.mainImageUrl"
+              :preview-src-list="[row.mainImageUrl]"
+              fit="cover"
+              preview-teleported
+              style="width: 48px; height: 48px; border-radius: 4px"
+            />
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
         <el-table-column :label="t('gzOrdProduct.colName')" prop="name" min-width="180" show-overflow-tooltip />
         <el-table-column :label="t('gzOrdProduct.ipTag')" prop="ipTag" width="120" align="center">
           <template #default="{ row }">
@@ -43,9 +80,22 @@
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column :label="t('gzOrdProduct.status')" prop="status" width="110" align="center">
+        <el-table-column :label="t('gzOrdProduct.colSku')" width="80" align="center">
+          <template #default="{ row }">{{ row.skuCount ?? '-' }}</template>
+        </el-table-column>
+        <el-table-column :label="t('gzOrdProduct.status')" prop="status" width="130" align="center">
           <template #default="{ row }">
-            <el-tag :type="statusTagType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
+            <!-- auto_off 态展示为禁用 switch + tag（AC 3，admin 不可手动切，决策 D5） -->
+            <el-tag v-if="row.status === 'auto_off'" type="warning" size="small">{{ statusLabel(row.status) }}</el-tag>
+            <el-switch
+              v-else
+              v-hasPermi="['gz:ord:product:changeStatus']"
+              :model-value="row.status === 'on_shelf'"
+              :active-text="t('gzOrdProduct.stOnShelf')"
+              :inactive-text="t('gzOrdProduct.stOffShelf')"
+              inline-prompt
+              @change="(v: boolean) => handleSwitchStatus(row, v)"
+            />
           </template>
         </el-table-column>
         <el-table-column :label="t('gzOrdProduct.colDeadline')" prop="deadlineTime" width="170" align="center" />
@@ -53,21 +103,11 @@
           <template #default="{ row }">{{ row.deliveryDateText || row.deliveryDateExact || '-' }}</template>
         </el-table-column>
         <el-table-column :label="t('gzOrdProduct.colSales')" prop="salesCount" width="90" align="center" />
-        <el-table-column :label="t('gzOrdProduct.colAction')" fixed="right" width="280" align="center">
+        <el-table-column :label="t('gzOrdProduct.colAction')" fixed="right" width="160" align="center">
           <template #default="{ row }">
             <el-button v-hasPermi="['gz:ord:product:edit']" type="primary" link size="small" @click="handleEdit(row)">{{ t('gzOrdProduct.edit') }}</el-button>
-            <el-button
-              v-if="row.status === 'off_shelf' || row.status === 'auto_off'"
-              v-hasPermi="['gz:ord:product:changeStatus']"
-              type="success"
-              link
-              size="small"
-              @click="handleChangeStatus(row, 'on_shelf')"
-            >
+            <el-button v-if="row.status === 'auto_off'" v-hasPermi="['gz:ord:product:changeStatus']" type="success" link size="small" @click="handleChangeStatus(row, 'on_shelf')">
               {{ t('gzOrdProduct.onShelf') }}
-            </el-button>
-            <el-button v-if="row.status === 'on_shelf'" v-hasPermi="['gz:ord:product:changeStatus']" type="warning" link size="small" @click="handleChangeStatus(row, 'off_shelf')">
-              {{ t('gzOrdProduct.offShelf') }}
             </el-button>
             <el-button v-hasPermi="['gz:ord:product:remove']" type="danger" link size="small" @click="handleDel(row)">{{ t('gzOrdProduct.del') }}</el-button>
           </template>
@@ -131,6 +171,10 @@
           <el-input v-model="mainImageIdStr" :placeholder="t('gzOrdProduct.mainImagePlaceholder')" />
         </el-form-item>
 
+        <el-form-item :label="t('gzOrdProduct.galleryImages')">
+          <el-input v-model="galleryImageIdsStr" :placeholder="t('gzOrdProduct.galleryPlaceholder')" />
+        </el-form-item>
+
         <!-- SKU 子表（可编辑行；price 元↔分） -->
         <el-form-item :label="t('gzOrdProduct.skuList')" prop="skuList">
           <div class="sku-block">
@@ -174,14 +218,44 @@
         <el-button type="primary" :loading="submitting" @click="handleSubmit">{{ t('gzOrdProduct.confirm') }}</el-button>
       </template>
     </el-dialog>
+
+    <!-- Excel 导入弹窗（AC 8；行级校验全失败回滚，msg 含逐行错误） -->
+    <el-dialog v-model="upload.open" :title="t('gzOrdProduct.importTitle')" width="420px" append-to-body>
+      <el-upload
+        ref="uploadRef"
+        :limit="1"
+        accept=".xlsx, .xls"
+        :headers="upload.headers"
+        :action="upload.url"
+        :disabled="upload.isUploading"
+        :on-progress="handleFileUploadProgress"
+        :on-success="handleFileSuccess"
+        :auto-upload="false"
+        drag
+      >
+        <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+        <div class="el-upload__text">{{ t('gzOrdProduct.uploadDrag') }}</div>
+        <template #tip>
+          <div class="text-center el-upload__tip">
+            <span>{{ t('gzOrdProduct.uploadTip') }}</span>
+            <el-link type="primary" :underline="false" style="font-size: 12px; vertical-align: baseline" @click="importTemplate">{{ t('gzOrdProduct.downloadTemplate') }}</el-link>
+          </div>
+        </template>
+      </el-upload>
+      <template #footer>
+        <el-button @click="upload.open = false">{{ t('gzOrdProduct.cancel') }}</el-button>
+        <el-button type="primary" @click="submitFileForm">{{ t('gzOrdProduct.confirm') }}</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts" name="GzOrdProduct">
-import { ref, reactive, computed } from 'vue';
-import { Search, Refresh, Plus } from '@element-plus/icons-vue';
-import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus';
+import { ref, reactive, computed, getCurrentInstance, type ComponentInternalInstance } from 'vue';
+import { Search, Refresh, Plus, ArrowDown, Top, Download, UploadFilled } from '@element-plus/icons-vue';
+import { ElMessage, ElMessageBox, type FormInstance, type UploadInstance, type UploadFile } from 'element-plus';
 import { useI18n } from 'vue-i18n';
+import { globalHeaders } from '@/utils/request';
 import NewsEditor from '@/views/gz-news/article/components/NewsEditor.vue';
 import {
   listGzOrdProduct,
@@ -189,12 +263,14 @@ import {
   addGzOrdProduct,
   updateGzOrdProduct,
   changeStatusGzOrdProduct,
+  batchStatusGzOrdProduct,
   delGzOrdProduct,
   type GzOrdProductVO,
   type GzOrdProductQuery
 } from '@/api/gz-ord/product';
 
 const { t } = useI18n();
+const { proxy } = getCurrentInstance() as ComponentInternalInstance;
 
 const loading = ref(false);
 const submitting = ref(false);
@@ -202,6 +278,15 @@ const rows = ref<GzOrdProductVO[]>([]);
 const total = ref(0);
 
 const query = reactive<GzOrdProductQuery>({ pageNum: 1, pageSize: 10 });
+
+// 截止日范围 picker（[start, end] → query.deadlineStart/End）
+const deadlineRange = ref<[string, string] | null>(null);
+
+// 批量选中行 id
+const selectedIds = ref<string[]>([]);
+function handleSelectionChange(selection: GzOrdProductVO[]) {
+  selectedIds.value = selection.map((r) => r.id);
+}
 
 // 状态选项（doc/11 §6.1；auto_off 仅 cron 写，列表筛选可见但 admin 不可手动设）
 const statusOptions = computed(() => [
@@ -232,6 +317,8 @@ async function loadList() {
   }
 }
 function handleQuery() {
+  query.deadlineStart = deadlineRange.value?.[0] || undefined;
+  query.deadlineEnd = deadlineRange.value?.[1] || undefined;
   query.pageNum = 1;
   loadList();
 }
@@ -239,6 +326,9 @@ function handleReset() {
   query.name = undefined;
   query.ipTag = undefined;
   query.status = undefined;
+  query.deadlineStart = undefined;
+  query.deadlineEnd = undefined;
+  deadlineRange.value = null;
   query.pageNum = 1;
   loadList();
 }
@@ -270,6 +360,7 @@ const form = reactive<{
   name: string;
   ipTag?: string | null;
   mainImageId?: string | null;
+  galleryImageIds?: string | null;
   deadlineTime?: string;
   deliveryDateText?: string | null;
   deliveryDateExact?: string | null;
@@ -287,6 +378,12 @@ const form = reactive<{
 const mainImageIdStr = computed({
   get: () => form.mainImageId ?? '',
   set: (v: string) => (form.mainImageId = v.trim() === '' ? null : v.trim())
+});
+
+// galleryImageIds 逗号分隔 file_id 双向（空串视为 null）
+const galleryImageIdsStr = computed({
+  get: () => form.galleryImageIds ?? '',
+  set: (v: string) => (form.galleryImageIds = v.trim() === '' ? null : v.trim())
 });
 
 const formTitle = computed(() => (formMode.value === 'add' ? t('gzOrdProduct.addDialogTitle') : t('gzOrdProduct.editDialogTitle')));
@@ -327,6 +424,7 @@ async function handleEdit(row: GzOrdProductVO) {
     form.name = d.name;
     form.ipTag = d.ipTag;
     form.mainImageId = d.mainImageId ?? null;
+    form.galleryImageIds = d.galleryImageIds ?? null;
     form.deadlineTime = d.deadlineTime;
     form.deliveryDateText = d.deliveryDateText ?? null;
     form.deliveryDateExact = d.deliveryDateExact ?? null;
@@ -354,6 +452,7 @@ function resetForm() {
   form.name = '';
   form.ipTag = null;
   form.mainImageId = null;
+  form.galleryImageIds = null;
   form.deadlineTime = undefined;
   form.deliveryDateText = null;
   form.deliveryDateExact = null;
@@ -379,6 +478,7 @@ function buildPayload() {
     name: form.name,
     ipTag: form.ipTag,
     mainImageId: form.mainImageId,
+    galleryImageIds: form.galleryImageIds,
     deadlineTime: form.deadlineTime,
     // F6.1 二选一：按 deliveryMode 仅带一个
     deliveryDateText: deliveryMode.value === 'text' ? form.deliveryDateText : null,
@@ -445,6 +545,78 @@ async function handleDel(row: GzOrdProductVO) {
   await delGzOrdProduct(row.id);
   ElMessage.success(t('gzOrdProduct.delSuccess'));
   loadList();
+}
+
+// el-switch 切换状态（on_shelf ⇄ off_shelf；auto_off 态不渲染 switch）
+async function handleSwitchStatus(row: GzOrdProductVO, on: boolean) {
+  const target = on ? 'on_shelf' : 'off_shelf';
+  try {
+    await changeStatusGzOrdProduct(row.id, target);
+    ElMessage.success(t('gzOrdProduct.changeStatusSuccess'));
+  } catch (e) {
+    console.error('[gz-ord-product] switch status failed', e);
+  } finally {
+    loadList();
+  }
+}
+
+// ---------------- 批量上下架（AC 7；返回 success/skipped 汇总提示） ----------------
+async function handleBatchStatus(target: string) {
+  if (selectedIds.value.length === 0) return;
+  const confirmKey = target === 'on_shelf' ? 'batchOnShelfConfirm' : 'batchOffShelfConfirm';
+  await ElMessageBox.confirm(t(`gzOrdProduct.${confirmKey}`, { n: selectedIds.value.length }), t('gzOrdProduct.confirmTitle'), { type: 'warning' });
+  const resp = await batchStatusGzOrdProduct(selectedIds.value, target);
+  const result = (resp as any).data as { success: string[]; skipped: Array<{ id: string; reason: string }> };
+  if (result.skipped.length === 0) {
+    ElMessage.success(t('gzOrdProduct.batchAllOk', { n: result.success.length }));
+  } else {
+    const reasons = result.skipped.map((s) => `#${s.id}：${s.reason}`).join('；');
+    ElMessageBox.alert(
+      `<div style='max-height:60vh;overflow:auto'>${t('gzOrdProduct.batchPartial', { ok: result.success.length, skip: result.skipped.length })}<br/>${reasons}</div>`,
+      t('gzOrdProduct.batchResultTitle'),
+      { dangerouslyUseHTMLString: true }
+    );
+  }
+  loadList();
+}
+
+// ---------------- Excel 导入 / 导出（AC 8） ----------------
+const uploadRef = ref<UploadInstance>();
+const upload = reactive({
+  open: false,
+  isUploading: false,
+  headers: globalHeaders(),
+  url: import.meta.env.VITE_APP_BASE_API + '/system/gz/ord/product/importData'
+});
+function handleImport() {
+  upload.open = true;
+}
+function handleExport() {
+  proxy?.download(
+    'system/gz/ord/product/export',
+    { ...query },
+    `gz_ord_product_${new Date().getTime()}.xlsx`
+  );
+}
+function importTemplate() {
+  proxy?.download('system/gz/ord/product/importTemplate', {}, `gz_ord_product_template_${new Date().getTime()}.xlsx`);
+}
+function handleFileUploadProgress() {
+  upload.isUploading = true;
+}
+function handleFileSuccess(response: any, file: UploadFile) {
+  upload.open = false;
+  upload.isUploading = false;
+  uploadRef.value?.handleRemove(file);
+  ElMessageBox.alert(
+    `<div style='overflow:auto;max-height:70vh;padding:10px 20px 0'>${response.msg}</div>`,
+    t('gzOrdProduct.importResultTitle'),
+    { dangerouslyUseHTMLString: true }
+  );
+  loadList();
+}
+function submitFileForm() {
+  uploadRef.value?.submit();
 }
 
 loadList();
