@@ -50,3 +50,13 @@ export function listPayout(query: GzPayPayoutQuery): AxiosPromise<GzPayPayoutVO[
 export function getPayout(id: string): AxiosPromise<GzPayPayoutVO> {
   return request({ url: `/system/gz/pay/payout/${id}`, method: 'get' });
 }
+
+/** 失败重试（owner，按业务单号；failed→created→重新受理，GZ-RECYCLE-003 / ADR-0006 §14.N6） */
+export function retryPayout(businessOrderNo: string): AxiosPromise<GzPayPayoutVO> {
+  return request({ url: `/system/gz/pay/payout/${businessOrderNo}/retry`, method: 'post' });
+}
+
+/** 主动查单一次（owner，对 processing 单按业务单号查单推进，ADR-0006 §3） */
+export function queryPayoutOnce(businessOrderNo: string): AxiosPromise<GzPayPayoutVO> {
+  return request({ url: `/system/gz/pay/payout/${businessOrderNo}/query`, method: 'post' });
+}

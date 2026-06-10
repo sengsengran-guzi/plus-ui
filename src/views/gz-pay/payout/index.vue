@@ -39,9 +39,11 @@
         </el-table-column>
         <el-table-column :label="t('gzPayPayout.colTransferredTime')" prop="transferredTime" width="170" />
         <el-table-column :label="t('gzPayPayout.colCreateTime')" prop="createTime" width="170" />
-        <el-table-column :label="t('gzPayPayout.colAction')" width="90" fixed="right">
+        <el-table-column :label="t('gzPayPayout.colAction')" width="220" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openDetail(row)">{{ t('gzPayPayout.detail') }}</el-button>
+            <el-button v-if="row.status === 'failed'" link type="warning" @click="onRetry(row)">{{ t('gzPayPayout.retry') }}</el-button>
+            <el-button v-if="row.status === 'processing'" link type="primary" @click="onQueryOnce(row)">{{ t('gzPayPayout.queryOnce') }}</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -78,7 +80,8 @@
 <script setup lang="ts" name="GzPayPayout">
 import { ref, reactive, toRefs, getCurrentInstance, type ComponentInternalInstance } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { listPayout, type GzPayPayoutVO, type GzPayPayoutQuery } from '@/api/gz-pay/payout';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { listPayout, retryPayout, queryPayoutOnce, type GzPayPayoutVO, type GzPayPayoutQuery } from '@/api/gz-pay/payout';
 
 const { t } = useI18n();
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
@@ -129,6 +132,29 @@ function resetQuery() {
 function openDetail(row: GzPayPayoutVO) {
   detail.value = row;
   detailVisible.value = true;
+}
+
+/** failed 单失败重试（owner，按 businessOrderNo）。 */
+async function onRetry(row: GzPayPayoutVO) {
+  await ElMessageBox.confirm(t('gzPayPayout.retryConfirm'), t('gzPayPayout.tip'), { type: 'warning' });
+  try {
+    await retryPayout(row.businessOrderNo);
+    ElMessage.success(t('gzPayPayout.retryOk'));
+    loadList();
+  } catch (e) {
+    ElMessage.error(t('gzPayPayout.opFailed'));
+  }
+}
+
+/** processing 单主动查单一次（owner）。 */
+async function onQueryOnce(row: GzPayPayoutVO) {
+  try {
+    await queryPayoutOnce(row.businessOrderNo);
+    ElMessage.success(t('gzPayPayout.queryOk'));
+    loadList();
+  } catch (e) {
+    ElMessage.error(t('gzPayPayout.opFailed'));
+  }
 }
 
 loadList();
