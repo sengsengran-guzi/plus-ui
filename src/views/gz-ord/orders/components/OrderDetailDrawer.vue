@@ -90,7 +90,19 @@
             </el-button>
           </span>
         </el-tooltip>
-        <el-button v-if="vo.businessType !== 'test'" @click="handleGotoLogistics">{{ t('gzOrdOrders.gotoLogistics') }}</el-button>
+        <!-- GZ-ADMIN-104 物流 2 态推进（owner 兜底；store 端主形态在 mp） -->
+        <template v-if="canPushLogistics">
+          <el-button v-if="vo.logisticsStatus === 'in_japan'" v-hasPermi="['gz:ord:logistics:push']" type="primary" @click="openForwardDispatch">
+            {{ t('gzOrdOrders.logiToDispatch') }}
+          </el-button>
+          <template v-else-if="vo.logisticsStatus === 'in_china_dispatching'">
+            <el-button v-hasPermi="['gz:ord:logistics:push']" @click="openCarrierEdit">{{ t('gzOrdOrders.logiEditCarrier') }}</el-button>
+            <el-button v-hasPermi="['gz:ord:logistics:push']" type="primary" @click="handleToDelivered">{{ t('gzOrdOrders.logiToDelivered') }}</el-button>
+          </template>
+          <el-button v-if="vo.logisticsStatus !== 'in_japan'" v-hasPermi="['gz:ord:logistics:rollback']" type="warning" plain @click="openRollback">
+            {{ t('gzOrdOrders.logiRollback') }}
+          </el-button>
+        </template>
       </div>
 
       <RefundConfirmDialog
@@ -101,20 +113,54 @@
         :amount-cent="vo.amountCent"
         @refunded="onRefunded"
       />
+
+      <!-- 发往中国 / 改单号 弹窗（快递 9 选 1 + 单号必填） -->
+      <el-dialog v-model="carrierDialogVisible" :title="carrierDialogTitle" width="420px" append-to-body>
+        <el-form label-width="90px">
+          <el-form-item :label="t('gzOrdOrders.colCarrier')" required>
+            <el-select v-model="carrierForm.cnCarrierCode" :placeholder="t('gzOrdOrders.logiCarrierPlaceholder')" style="width: 100%">
+              <el-option v-for="c in gz_express_carrier" :key="c.value" :label="c.label" :value="c.value" />
+            </el-select>
+          </el-form-item>
+          <el-form-item :label="t('gzOrdOrders.colTracking')" required>
+            <el-input v-model="carrierForm.cnTrackingNo" :placeholder="t('gzOrdOrders.logiTrackingPlaceholder')" />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="carrierDialogVisible = false">{{ t('gzOrdOrders.cancel') }}</el-button>
+          <el-button type="primary" :disabled="!carrierForm.cnCarrierCode || !carrierForm.cnTrackingNo" @click="submitCarrier">
+            {{ t('gzOrdOrders.refundConfirm') }}
+          </el-button>
+        </template>
+      </el-dialog>
+
+      <!-- owner 回退弹窗（reason 必填） -->
+      <el-dialog v-model="rollbackDialogVisible" :title="t('gzOrdOrders.logiRollback')" width="420px" append-to-body>
+        <el-form label-width="90px">
+          <el-form-item :label="t('gzOrdOrders.logiRollbackReason')" required>
+            <el-input v-model="rollbackReason" type="textarea" :rows="3" :placeholder="t('gzOrdOrders.logiRollbackPlaceholder')" maxlength="255" />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="rollbackDialogVisible = false">{{ t('gzOrdOrders.cancel') }}</el-button>
+          <el-button type="warning" :disabled="!rollbackReason.trim()" @click="submitRollback">{{ t('gzOrdOrders.refundConfirm') }}</el-button>
+        </template>
+      </el-dialog>
     </template>
   </div>
 </template>
 
 <script setup lang="ts" name="OrderDetailDrawer">
-import { ref, computed, watch } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ref, reactive, computed, watch, getCurrentInstance, toRefs } from 'vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { useI18n } from 'vue-i18n';
-import { useRouter } from 'vue-router';
 import { getUnifiedOrder, type GzUnifiedOrderVO } from '@/api/gz-ord/orders';
+import { forwardLogistics, updateLogisticsCarrier, rollbackLogistics } from '@/api/gz-ord/logistics';
 import RefundConfirmDialog from './RefundConfirmDialog.vue';
 
 const { t } = useI18n();
-const router = useRouter();
+const { proxy } = getCurrentInstance() as any;
+const { gz_express_carrier } = toRefs<any>(proxy?.useDict('gz_express_carrier'));
 
 const props = defineProps<{ transactionId: string }>();
 const emit = defineEmits<{ (e: 'refunded'): void }>();
@@ -122,6 +168,19 @@ const emit = defineEmits<{ (e: 'refunded'): void }>();
 const loading = ref(false);
 const vo = ref<GzUnifiedOrderVO | null>(null);
 const refundDialogRef = ref<InstanceType<typeof RefundConfirmDialog>>();
+
+// 物流推进（非 test 单 + 非已退款 + 非已签收终态可操作）
+const canPushLogistics = computed(
+  () => !!vo.value && vo.value.businessType !== 'test' && vo.value.businessStatus !== 'refunded'
+);
+const carrierDialogVisible = ref(false);
+const carrierDialogMode = ref<'dispatch' | 'edit'>('dispatch');
+const carrierForm = reactive<{ cnCarrierCode: string; cnTrackingNo: string }>({ cnCarrierCode: '', cnTrackingNo: '' });
+const carrierDialogTitle = computed(() =>
+  carrierDialogMode.value === 'dispatch' ? t('gzOrdOrders.logiToDispatch') : t('gzOrdOrders.logiEditCarrier')
+);
+const rollbackDialogVisible = ref(false);
+const rollbackReason = ref('');
 
 // 仅 paid 态可申请退款（已退款 / 未支付 / test 单不可）
 const canRefund = computed(() => vo.value?.payStatus === 'paid');
@@ -154,11 +213,59 @@ function onRefunded() {
   load();
   emit('refunded');
 }
-function handleGotoLogistics() {
-  // 推进物流占位：跳 D11 GZ-ADMIN-104 物流推进（本 ticket 不实现写入）
-  router.push({ path: '/gz-ord-logistics', query: { orderNo: vo.value?.businessOrderNo || '' } }).catch(() => {
-    ElMessage.info(t('gzOrdOrders.logisticsComingSoon'));
-  });
+// ---- GZ-ADMIN-104 物流 2 态推进 ----
+function logiKey() {
+  return { businessType: vo.value!.businessType, businessOrderNo: vo.value!.businessOrderNo || vo.value!.outTradeNo };
+}
+function openForwardDispatch() {
+  carrierDialogMode.value = 'dispatch';
+  carrierForm.cnCarrierCode = '';
+  carrierForm.cnTrackingNo = '';
+  carrierDialogVisible.value = true;
+}
+function openCarrierEdit() {
+  carrierDialogMode.value = 'edit';
+  carrierForm.cnCarrierCode = vo.value?.cnCarrierCode || '';
+  carrierForm.cnTrackingNo = vo.value?.cnTrackingNo || '';
+  carrierDialogVisible.value = true;
+}
+async function submitCarrier() {
+  try {
+    if (carrierDialogMode.value === 'dispatch') {
+      await forwardLogistics({ ...logiKey(), cnCarrierCode: carrierForm.cnCarrierCode, cnTrackingNo: carrierForm.cnTrackingNo });
+    } else {
+      await updateLogisticsCarrier({ ...logiKey(), cnCarrierCode: carrierForm.cnCarrierCode, cnTrackingNo: carrierForm.cnTrackingNo });
+    }
+    ElMessage.success(t('gzOrdOrders.logiSuccess'));
+    carrierDialogVisible.value = false;
+    load();
+  } catch (e) {
+    console.error('[gz-ord-logistics] submit carrier failed', e);
+  }
+}
+async function handleToDelivered() {
+  await ElMessageBox.confirm(t('gzOrdOrders.logiToDeliveredConfirm'), t('gzOrdOrders.logiToDelivered'), { type: 'warning' });
+  try {
+    await forwardLogistics(logiKey());
+    ElMessage.success(t('gzOrdOrders.logiSuccess'));
+    load();
+  } catch (e) {
+    console.error('[gz-ord-logistics] to delivered failed', e);
+  }
+}
+function openRollback() {
+  rollbackReason.value = '';
+  rollbackDialogVisible.value = true;
+}
+async function submitRollback() {
+  try {
+    await rollbackLogistics({ ...logiKey(), reason: rollbackReason.value.trim() });
+    ElMessage.success(t('gzOrdOrders.logiSuccess'));
+    rollbackDialogVisible.value = false;
+    load();
+  } catch (e) {
+    console.error('[gz-ord-logistics] rollback failed', e);
+  }
 }
 
 function bizTagType(b: string): 'primary' | 'success' | 'info' {

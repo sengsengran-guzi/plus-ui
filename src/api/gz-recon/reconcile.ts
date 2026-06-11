@@ -116,3 +116,15 @@ export function listReconSettle(): AxiosPromise<GzReconSettleVO[]> {
     method: 'get'
   });
 }
+
+/**
+ * POST /reconcile/rebuild — 立即重算对账（D16 #1，方案 A）。
+ * 不传则重算前一日 + 其月度；跑批幂等 UPSERT 重跑安全。消除「忘注册 cron → 首月分成 ¥0」风险。
+ */
+export function rebuildRecon(businessDay?: string, month?: string): AxiosPromise<void> {
+  return request({
+    url: '/system/gz/recon/reconcile/rebuild',
+    method: 'post',
+    params: { businessDay, month }
+  });
+}

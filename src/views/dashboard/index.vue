@@ -26,15 +26,23 @@
         </el-col>
       </el-row>
     </el-card>
+
+    <!-- GZ-ADMIN-106 V1.1 交易盘面（owner-only，按 perm v-if 整体切换；无权限角色只看 V1.0 老卡片） -->
+    <V11SummaryRow v-if="showV11" />
   </div>
 </template>
 
 <script setup lang="ts" name="GzDashboard">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, getCurrentInstance } from 'vue';
 import { Refresh } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { getDashboardLatest, refreshDashboard, type DashboardMetricItem } from '@/api/gz-common/dashboard';
+import V11SummaryRow from './components/V11SummaryRow.vue';
+
+// V1.1 区块权限门控（owner 授 gz:recon:dashboard:v11）
+const { proxy } = getCurrentInstance() as any;
+const showV11 = computed<boolean>(() => proxy?.$auth?.hasPermi('gz:recon:dashboard:v11') ?? false);
 
 const { t } = useI18n();
 

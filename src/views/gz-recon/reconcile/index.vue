@@ -34,6 +34,9 @@
           <el-button v-hasPermi="['gz:recon:reconcile:export']" :icon="Download" :disabled="!canExport" @click="handleExport">
             {{ t('gzRecon.export') }}
           </el-button>
+          <el-button v-hasPermi="['gz:recon:reconcile:export']" :icon="Refresh" @click="handleRebuild">
+            {{ t('gzRecon.rebuild') }}
+          </el-button>
         </el-form-item>
       </el-form>
 
@@ -109,10 +112,10 @@
 
 <script setup lang="ts" name="GzReconReconcile">
 import { ref, reactive, computed, getCurrentInstance, toRefs } from 'vue';
-import { Search, Download } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
+import { Search, Download, Refresh } from '@element-plus/icons-vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { useI18n } from 'vue-i18n';
-import { getReconSummary, listReconMonthly, type ReconSummaryVO, type GzReconMonthlyVO } from '@/api/gz-recon/reconcile';
+import { getReconSummary, listReconMonthly, rebuildRecon, type ReconSummaryVO, type GzReconMonthlyVO } from '@/api/gz-recon/reconcile';
 
 const { t } = useI18n();
 const { proxy } = getCurrentInstance() as any;
@@ -179,6 +182,26 @@ function handleExport() {
     { businessType: businessType.value, startMonth, endMonth },
     `对账明细_业务线${lineTag}_${startMonth}至${endMonth}.xlsx`
   );
+}
+
+/** D16 #1：立即重算（消除未配置定时任务时首月分成 ¥0 风险，跑批幂等重跑安全）。 */
+async function handleRebuild() {
+  try {
+    await ElMessageBox.confirm(t('gzRecon.rebuildConfirm'), { type: 'warning' });
+  } catch {
+    return; // 用户取消
+  }
+  loading.value = true;
+  try {
+    await rebuildRecon();
+    ElMessage.success(t('gzRecon.rebuildOk'));
+    await reload();
+  } catch (e) {
+    console.error('[gz-recon] rebuild failed', e);
+    ElMessage.error(t('gzRecon.loadFailed'));
+  } finally {
+    loading.value = false;
+  }
 }
 
 reload();
