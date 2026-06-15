@@ -164,7 +164,7 @@ async function loadList() {
   loading.value = true;
   try {
     const res = await listPayTransaction(query);
-    list.value = res.data ?? [];
+    list.value = res.rows ?? [];
     total.value = (res as any).total || 0;
   } catch (e) {
     (proxy as any)?.$modal?.msgError?.(t('gzPay.loadFailed'));

@@ -1,0 +1,38 @@
+/**
+ * admin 路由清单 —— 验收走查的单一真源。
+ * 路由路径取自后端 getRouters 拼接（含动态业务路由）。新增 admin 页时在此补一行即可。
+ * dialog:true 的页会额外尝试点开"新增"弹窗截图。
+ */
+export const ROUTES = [
+  { n: '00-home', p: '/index', t: '首页/工作台' },
+  { n: '01-dashboard', p: '/dashboard', t: '数据看板' },
+  { n: '10-bean-store', p: '/gz/gz-bean/store', t: '拼豆-门店管理', dialog: true },
+  { n: '11-bean-config', p: '/gz/gz-bean/config', t: '拼豆-座位与时段配置' },
+  { n: '12-bean-seattype', p: '/gz/gz-bean/seat-type-config', t: '拼豆-座位类型配额', dialog: true },
+  { n: '13-bean-booking', p: '/gz/gz-bean/booking', t: '拼豆-预约管理' },
+  { n: '20-news-article', p: '/gz/gz-news/article', t: '资讯-文章列表', dialog: true },
+  { n: '30-pay-channel', p: '/gz-pay/channel', t: '支付-通道配置' },
+  { n: '31-pay-transaction', p: '/gz-pay/transaction', t: '支付-交易流水' },
+  { n: '32-pay-refund', p: '/gz-pay/refund', t: '支付-退款管理' },
+  { n: '33-pay-payout', p: '/gz-pay/payout', t: '支付-反向打款单' },
+  { n: '34-pay-test', p: '/gz-pay/test', t: '支付-测试工具' },
+  { n: '40-ord-product', p: '/gz/gz-ord-product', t: '预购-商品管理', dialog: true },
+  { n: '41-ord-order', p: '/gz/gz-ord-order', t: '预购-订单管理' },
+  { n: '42-ord-orders', p: '/gz/gz-ord-orders', t: '订单聚合管理' },
+  { n: '50-gacha-machine', p: '/gz/gz-gacha/machine', t: '扭蛋-机器管理', dialog: true },
+  { n: '51-gacha-prize', p: '/gz/gz-gacha/prize', t: '扭蛋-奖品池管理' },
+  { n: '60-coupon-template', p: '/gz-coupon/template', t: '优惠券-券模板', dialog: true },
+  { n: '61-coupon-usercoupon', p: '/gz-coupon/user-coupon', t: '优惠券-发放记录' },
+  { n: '70-recycle-pricerule', p: '/gz-recycle/price-rule', t: '回收-价目表', dialog: true },
+  { n: '71-recycle-appointment', p: '/gz-recycle/appointment', t: '回收-预约单' },
+  { n: '80-recon-reconcile', p: '/gz/gz-recon-reconcile', t: '对账中心' },
+  { n: '81-recon-settle', p: '/gz/gz-recon-settle', t: '季度结算' },
+  { n: '90-admin-user', p: '/gz/gz-admin-user', t: '谷子管理员', dialog: true },
+  { n: '91-staff-binding', p: '/gz/gz-staff-binding', t: '店员绑定管理' },
+  { n: '92-c-user', p: '/gz/gz-c-user/list', t: 'C端用户管理' },
+  { n: '93-oper-log', p: '/gz/gz-oper-log', t: '谷子操作日志' },
+  { n: '94-recycle-bin', p: '/gz/gz-recycle-bin', t: '回收站' },
+  { n: '95-home-banner', p: '/gz/gz-home-banner', t: '首页Banner配置', dialog: true },
+  { n: '96-customer-service', p: '/gz/gz-customer-service', t: '客服配置' },
+  { n: '97-file', p: '/gz/gz-file', t: '业务文件管理' },
+]

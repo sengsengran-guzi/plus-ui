@@ -198,8 +198,8 @@
         </el-row>
       </el-form>
       <template #footer>
-        <el-button type="primary" @click="submitForm">{{ t('common.confirm') }}</el-button>
-        <el-button @click="cancel">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="submitForm">{{ t('gzAdminUser.confirm') }}</el-button>
+        <el-button @click="cancel">{{ t('gzAdminUser.cancel') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -287,8 +287,8 @@ const loadStoreOptions = async () => {
   try {
     const { getGzBeanStoreOptions } = await import('@/api/gz-bean/store');
     const resp = await getGzBeanStoreOptions();
-    // ruoyi request.ts 已对 AjaxResult 解包，调用方直接拿到 data 字段（即 VO 数组）
-    storeOptions.value = ((resp as any) || []).map((s: any) => ({ id: s.id, name: s.name }));
+    // 门店 options 是 R 信封端点（{code,msg,data:[...]}），VO 数组在 resp.data
+    storeOptions.value = ((resp as any)?.data || []).map((s: any) => ({ id: s.id, name: s.name }));
   } catch (e) {
     console.error('[GzAdminUser] load store options failed', e);
   }
@@ -420,8 +420,8 @@ const handleResetPwd = async (row: UserVO) => {
   }
   const [err, res] = await to(
     ElMessageBox.prompt(t('gzAdminUser.resetPwdPrompt', { userName: row.userName }), t('gzAdminUser.resetPwdDialogTitle'), {
-      confirmButtonText: t('common.confirm'),
-      cancelButtonText: t('common.cancel'),
+      confirmButtonText: t('gzAdminUser.confirm'),
+      cancelButtonText: t('gzAdminUser.cancel'),
       closeOnClickModal: false,
       inputPattern: /^.{5,20}$/,
       inputErrorMessage: t('gzAdminUser.rulePasswordLength'),

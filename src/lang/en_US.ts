@@ -323,7 +323,9 @@ export default {
     ruleEmailPattern: 'Invalid email',
     ruleRoleRequired: 'Role required',
     cannotEditAdmin: 'Builtin admin account cannot be edited/deleted',
-    forbidWrite: 'No write permission, view only'
+    forbidWrite: 'No write permission, view only',
+    confirm: 'Confirm',
+    cancel: 'Cancel'
   },
   // Pindou Store (D04 GZ-BEAN-001)
   gzBeanStore: {

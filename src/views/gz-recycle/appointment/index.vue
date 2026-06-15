@@ -214,7 +214,7 @@ async function loadList() {
   loading.value = true;
   try {
     const res = await listAppointment(query);
-    list.value = res.data ?? [];
+    list.value = res.rows ?? [];
     total.value = (res as any).total || 0;
   } catch {
     ElMessage.error(t('gzRecycleAppointment.loadFailed'));

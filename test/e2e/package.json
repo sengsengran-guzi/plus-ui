@@ -1,0 +1,13 @@
+{
+  "name": "gz-admin-e2e",
+  "private": true,
+  "type": "module",
+  "description": "Admin (plus-ui) E2E 截图走查 / 验收脚本（puppeteer-core 驱系统 Chrome）。独立 node_modules，与 plus-ui app 依赖树隔离——不进 plus-ui/package.json，不触发铁律 8。",
+  "scripts": {
+    "acceptance": "node acceptance.mjs",
+    "acceptance:headful": "node acceptance.mjs --headful"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^25.1.0"
+  }
+}

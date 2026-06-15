@@ -62,9 +62,7 @@ export interface GzRecycleEstimateVO {
 }
 
 /** GET 列表（分页） */
-export function listGzRecyclePriceRule(
-  query: GzRecyclePriceRuleQuery
-): AxiosPromise<{ total: number; rows: GzRecyclePriceRuleVO[] }> {
+export function listGzRecyclePriceRule(query: GzRecyclePriceRuleQuery): AxiosPromise<GzRecyclePriceRuleVO[]> {
   return request({ url: '/system/gz/recycle/price-rule/list', method: 'get', params: query });
 }
 

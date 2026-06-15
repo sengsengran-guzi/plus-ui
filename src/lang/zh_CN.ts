@@ -324,7 +324,9 @@ export default {
     ruleEmailPattern: '请输入正确的邮箱',
     ruleRoleRequired: '请选择角色',
     cannotEditAdmin: 'ruoyi 兜底账号 admin 不允许修改 / 删除',
-    forbidWrite: '本账号无管理员写权限，仅可查看'
+    forbidWrite: '本账号无管理员写权限，仅可查看',
+    confirm: '确定',
+    cancel: '取消'
   },
   // 拼豆门店管理（D04 GZ-BEAN-001）
   gzBeanStore: {

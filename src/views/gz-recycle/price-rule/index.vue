@@ -203,9 +203,9 @@ const rangeText = (row: GzRecyclePriceRuleVO) =>
 async function loadList() {
   listLoading.value = true;
   try {
-    const { data } = await listGzRecyclePriceRule(query);
-    list.value = data.rows;
-    total.value = data.total;
+    const res = await listGzRecyclePriceRule(query);
+    list.value = res.rows;
+    total.value = res.total;
   } finally {
     listLoading.value = false;
   }
