@@ -25,8 +25,9 @@ export interface GzCouponTemplateVO {
   /** 总配额（null=不限） */
   totalQuota: number | null;
   issuedCount: number;
-  /** manual / register_window / event（字典 gz_coupon_issue_strategy） */
+  /** manual / filtered / event（字典 gz_coupon_issue_strategy） */
   issueStrategy: string;
+  /** filtered 策略的条件配置 JSON：{"conditions":[...]}（ADR-0010） */
   issueConfigJson?: string | null;
   /** active / paused / archived（字典 gz_coupon_template_status） */
   status: string;
@@ -60,11 +61,27 @@ export interface GzCouponTemplateQuery {
   pageSize?: number;
 }
 
-/** 批量发放请求（manual 策略） */
+/** 批量发放请求（manual 传名单；filtered 仅传 templateId，audience 由后端按 issue_config_json 解析） */
 export interface GzCouponIssueForm {
   templateId: string;
   userIds?: Array<string>;
   userKeyword?: string;
+}
+
+/** 条件筛选单条件（ADR-0010；type=register_time/did_pindou/phone_bound） */
+export interface CouponAudienceCondition {
+  type: string;
+  /** register_time：注册时间下界 yyyy-MM-dd */
+  start?: string;
+  /** register_time：注册时间上界 yyyy-MM-dd */
+  end?: string;
+  /** did_pindou：true=仅已核销 */
+  completedOnly?: boolean;
+}
+
+/** 条件筛选配置 / 预览请求体（issue_config_json 结构 + preview-audience 请求） */
+export interface CouponAudienceConfig {
+  conditions: CouponAudienceCondition[];
 }
 
 /** 发放结果 VO */
@@ -119,7 +136,12 @@ export function archiveGzCouponTemplate(id: string) {
   return request({ url: `/system/gz/coupon/template/archive/${id}`, method: 'post' });
 }
 
-/** POST 批量发放（manual 策略，乐观锁防超发） */
+/** POST 批量发放（manual 选名单 / filtered 条件筛选，乐观锁防超发） */
 export function issueGzCoupon(data: GzCouponIssueForm): AxiosPromise<GzCouponIssueResultVO> {
   return request({ url: '/system/gz/coupon/template/issue', method: 'post', data });
+}
+
+/** POST 条件筛选「预览命中人数」（ADR-0010；配置/发放前校验，预览口径=实发口径） */
+export function previewGzCouponAudience(data: CouponAudienceConfig): AxiosPromise<number> {
+  return request({ url: '/system/gz/coupon/template/preview-audience', method: 'post', data });
 }

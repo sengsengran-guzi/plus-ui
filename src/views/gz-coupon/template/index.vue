@@ -75,7 +75,7 @@
     </el-card>
 
     <!-- 新增 / 编辑弹窗 -->
-    <el-dialog v-model="formVisible" :title="formTitle" width="560px" @close="resetForm">
+    <el-dialog v-model="formVisible" :title="formTitle" width="600px" @close="resetForm">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="110px">
         <el-form-item :label="t('gzCouponTemplate.fieldName')" prop="name">
           <el-input v-model="form.name" maxlength="64" show-word-limit :placeholder="t('gzCouponTemplate.namePlaceholder')" />
@@ -92,7 +92,7 @@
         </el-form-item>
         <el-form-item :label="t('gzCouponTemplate.fieldApplicable')" prop="applicableBusiness">
           <el-select v-model="form.applicableBusiness" style="width: 100%">
-            <el-option label="拼豆 / Pindou" value="pindou" />
+            <el-option :label="t('gzCouponTemplate.applicablePindou')" value="pindou" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('gzCouponTemplate.fieldValidDays')" prop="validDays">
@@ -104,11 +104,50 @@
           <span class="form-hint">{{ t('gzCouponTemplate.totalQuotaHint') }}</span>
         </el-form-item>
         <el-form-item :label="t('gzCouponTemplate.fieldStrategy')" prop="issueStrategy">
-          <el-select v-model="form.issueStrategy" style="width: 100%">
-            <el-option v-for="d in gz_coupon_issue_strategy" :key="d.value" :label="d.label" :value="d.value" :disabled="d.value !== 'manual'" />
+          <el-select v-model="form.issueStrategy" style="width: 100%" @change="onStrategyChange">
+            <!-- manual 手动指定 / filtered 条件筛选 可选；event 预留 disabled（ADR-0010） -->
+            <el-option v-for="d in gz_coupon_issue_strategy" :key="d.value" :label="d.label" :value="d.value" :disabled="d.value === 'event'" />
           </el-select>
-          <span class="form-hint">{{ t('gzCouponTemplate.onlyManualHint') }}</span>
+          <span class="form-hint">{{ t('gzCouponTemplate.strategyHint') }}</span>
         </el-form-item>
+
+        <!-- 条件筛选构建器（filtered，ADR-0010）：admin 自配 audience 条件，AND 组合 -->
+        <el-form-item v-if="form.issueStrategy === 'filtered'" :label="t('gzCouponTemplate.fieldConditions')">
+          <div class="cond-builder">
+            <div v-for="(c, idx) in form.conditions" :key="idx" class="cond-row">
+              <el-select v-model="c.type" style="width: 130px" @change="onConditionTypeChange(c)">
+                <el-option :label="t('gzCouponTemplate.condRegisterTime')" value="register_time" />
+                <el-option :label="t('gzCouponTemplate.condDidPindou')" value="did_pindou" />
+                <el-option :label="t('gzCouponTemplate.condPhoneBound')" value="phone_bound" />
+              </el-select>
+              <el-date-picker
+                v-if="c.type === 'register_time'"
+                v-model="c.range"
+                type="daterange"
+                value-format="YYYY-MM-DD"
+                :start-placeholder="t('gzCouponTemplate.condStart')"
+                :end-placeholder="t('gzCouponTemplate.condEnd')"
+                unlink-panels
+                style="width: 250px; margin-left: 8px"
+                @change="previewCount = null"
+              />
+              <el-checkbox v-else-if="c.type === 'did_pindou'" v-model="c.completedOnly" style="margin-left: 12px" @change="previewCount = null">
+                {{ t('gzCouponTemplate.condCompletedOnly') }}
+              </el-checkbox>
+              <span v-else class="form-hint" style="margin-left: 12px">{{ t('gzCouponTemplate.condNoParam') }}</span>
+              <el-button type="danger" link :icon="Delete" style="margin-left: 8px" @click="removeCondition(idx)" />
+            </div>
+            <div class="cond-actions">
+              <el-button type="primary" plain size="small" :icon="Plus" @click="addCondition">{{ t('gzCouponTemplate.condAdd') }}</el-button>
+              <el-button size="small" :icon="Search" :loading="previewing" :disabled="form.conditions.length === 0" @click="handlePreview">
+                {{ t('gzCouponTemplate.condPreview') }}
+              </el-button>
+              <span v-if="previewCount !== null" class="cond-preview-result">{{ t('gzCouponTemplate.condPreviewResult', { count: previewCount }) }}</span>
+            </div>
+            <div class="form-hint">{{ t('gzCouponTemplate.condHint') }}</div>
+          </div>
+        </el-form-item>
+
         <el-form-item :label="t('gzCouponTemplate.fieldRemark')">
           <el-input v-model="form.remark" type="textarea" :rows="2" maxlength="500" show-word-limit />
         </el-form-item>
@@ -124,55 +163,69 @@
       <el-descriptions :column="2" border size="small" class="mb-3">
         <el-descriptions-item :label="t('gzCouponTemplate.issueTemplate')">{{ issueTemplate?.name }}</el-descriptions-item>
         <el-descriptions-item :label="t('gzCouponTemplate.colAmount')">¥{{ formatYuan(issueTemplate?.amountCent || 0) }}</el-descriptions-item>
-        <el-descriptions-item :label="t('gzCouponTemplate.colStrategy')">manual</el-descriptions-item>
+        <el-descriptions-item :label="t('gzCouponTemplate.colStrategy')">
+          <dict-tag :options="gz_coupon_issue_strategy" :value="issueTemplate?.issueStrategy" />
+        </el-descriptions-item>
         <el-descriptions-item :label="t('gzCouponTemplate.colQuota')">
           {{ issueQuotaText }}
         </el-descriptions-item>
       </el-descriptions>
 
-      <!-- 用户检索 + 多选 -->
-      <el-form inline class="mb-2">
-        <el-form-item :label="t('gzCouponTemplate.issueUserSearch')">
-          <el-input v-model="userQuery.nickname" :placeholder="t('gzCouponTemplate.issueUserSearchPlaceholder')" clearable style="width: 240px" @keyup.enter="loadUsers" />
-        </el-form-item>
-        <el-form-item>
-          <el-button v-hasPermi="['gz:coupon:user:search']" type="primary" :icon="Search" @click="loadUsers">{{ t('gzCouponTemplate.search') }}</el-button>
-        </el-form-item>
-      </el-form>
+      <!-- filtered：按模板条件圈人，预览后直接发（不选名单） -->
+      <template v-if="isFilteredIssue">
+        <el-alert type="info" :closable="false" :title="t('gzCouponTemplate.issueFilteredHint')" class="mb-2" />
+        <div class="cond-summary">{{ issueConditionsText }}</div>
+        <div class="cond-actions">
+          <el-button size="small" :icon="Search" :loading="issuePreviewing" @click="handleIssuePreview">{{ t('gzCouponTemplate.condPreview') }}</el-button>
+          <span v-if="issuePreviewCount !== null" class="cond-preview-result">{{ t('gzCouponTemplate.condPreviewResult', { count: issuePreviewCount }) }}</span>
+        </div>
+      </template>
 
-      <el-table
-        ref="userTableRef"
-        v-loading="userLoading"
-        :data="userList"
-        border
-        stripe
-        size="small"
-        height="260"
-        row-key="id"
-        @selection-change="onUserSelectionChange"
-      >
-        <el-table-column type="selection" width="44" reserve-selection />
-        <el-table-column :label="t('gzCouponTemplate.colUserNo')" prop="userNo" width="150" />
-        <el-table-column :label="t('gzCouponTemplate.colNickname')" prop="nickname" min-width="140" show-overflow-tooltip />
-        <el-table-column :label="t('gzCouponTemplate.colMobile')" prop="mobile" width="140" />
-        <template #empty><el-empty :description="t('gzCouponTemplate.empty')" /></template>
-      </el-table>
-      <pagination
-        v-show="userTotal > 0"
-        v-model:page="userQuery.pageNum"
-        v-model:limit="userQuery.pageSize"
-        :total="userTotal"
-        @pagination="loadUsers"
-      />
+      <!-- manual：检索 + 多选名单，或按关键词发 -->
+      <template v-else>
+        <el-form inline class="mb-2">
+          <el-form-item :label="t('gzCouponTemplate.issueUserSearch')">
+            <el-input v-model="userQuery.nickname" :placeholder="t('gzCouponTemplate.issueUserSearchPlaceholder')" clearable style="width: 240px" @keyup.enter="loadUsers" />
+          </el-form-item>
+          <el-form-item>
+            <el-button v-hasPermi="['gz:coupon:user:search']" type="primary" :icon="Search" @click="loadUsers">{{ t('gzCouponTemplate.search') }}</el-button>
+          </el-form-item>
+        </el-form>
 
-      <div class="issue-selected">{{ t('gzCouponTemplate.issueSelectedUsers', { count: selectedUserIds.length }) }}</div>
+        <el-table
+          ref="userTableRef"
+          v-loading="userLoading"
+          :data="userList"
+          border
+          stripe
+          size="small"
+          height="260"
+          row-key="id"
+          @selection-change="onUserSelectionChange"
+        >
+          <el-table-column type="selection" width="44" reserve-selection />
+          <el-table-column :label="t('gzCouponTemplate.colUserNo')" prop="userNo" width="150" />
+          <el-table-column :label="t('gzCouponTemplate.colNickname')" prop="nickname" min-width="140" show-overflow-tooltip />
+          <el-table-column :label="t('gzCouponTemplate.colMobile')" prop="mobile" width="140" />
+          <template #empty><el-empty :description="t('gzCouponTemplate.empty')" /></template>
+        </el-table>
+        <pagination
+          v-show="userTotal > 0"
+          v-model:page="userQuery.pageNum"
+          v-model:limit="userQuery.pageSize"
+          :total="userTotal"
+          @pagination="loadUsers"
+        />
 
-      <el-divider />
-      <el-form label-width="160px">
-        <el-form-item :label="t('gzCouponTemplate.issueByKeyword')">
-          <el-input v-model="issueKeyword" :placeholder="t('gzCouponTemplate.issueKeywordPlaceholder')" clearable :disabled="selectedUserIds.length > 0" style="width: 320px" />
-        </el-form-item>
-      </el-form>
+        <div class="issue-selected">{{ t('gzCouponTemplate.issueSelectedUsers', { count: selectedUserIds.length }) }}</div>
+
+        <el-divider />
+        <el-form label-width="160px">
+          <el-form-item :label="t('gzCouponTemplate.issueByKeyword')">
+            <el-input v-model="issueKeyword" :placeholder="t('gzCouponTemplate.issueKeywordPlaceholder')" clearable :disabled="selectedUserIds.length > 0" style="width: 320px" />
+          </el-form-item>
+        </el-form>
+      </template>
 
       <template #footer>
         <el-button @click="issueVisible = false">{{ t('gzCouponTemplate.cancel') }}</el-button>
@@ -184,7 +237,7 @@
 
 <script setup lang="ts" name="GzCouponTemplate">
 import { ref, reactive, computed, getCurrentInstance, type ComponentInternalInstance, toRefs, onMounted } from 'vue';
-import { Plus, Refresh, Search } from '@element-plus/icons-vue';
+import { Delete, Plus, Refresh, Search } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import {
@@ -196,6 +249,8 @@ import {
   activateGzCouponTemplate,
   archiveGzCouponTemplate,
   issueGzCoupon,
+  previewGzCouponAudience,
+  type CouponAudienceCondition,
   type GzCouponTemplateVO,
   type GzCouponTemplateForm,
   type GzCouponTemplateQuery
@@ -220,6 +275,60 @@ const query = reactive<GzCouponTemplateQuery>({ name: '', status: '', issueStrat
 // ============ helpers ============
 function formatYuan(cent: number): string {
   return ((cent || 0) / 100).toFixed(2);
+}
+
+/** 构建器内的条件行（register_time 用 range 数组承接 daterange，提交时拆成 start/end）。 */
+interface ConditionRow {
+  type: string;
+  range?: [string, string] | null;
+  completedOnly?: boolean;
+}
+
+/** 条件行 → 提交 DTO。 */
+function toConditionDto(c: ConditionRow): CouponAudienceCondition {
+  if (c.type === 'register_time') {
+    return { type: 'register_time', start: c.range?.[0], end: c.range?.[1] };
+  }
+  if (c.type === 'did_pindou') {
+    return { type: 'did_pindou', completedOnly: !!c.completedOnly };
+  }
+  return { type: 'phone_bound' };
+}
+
+/** issue_config_json → 条件行（编辑回填）。 */
+function parseConditionRows(json?: string | null): ConditionRow[] {
+  if (!json) return [];
+  try {
+    const cfg = JSON.parse(json);
+    const conds: CouponAudienceCondition[] = cfg?.conditions || [];
+    return conds.map((d) => {
+      if (d.type === 'register_time') {
+        return { type: 'register_time', range: d.start || d.end ? [d.start || '', d.end || ''] : null };
+      }
+      if (d.type === 'did_pindou') {
+        return { type: 'did_pindou', completedOnly: !!d.completedOnly };
+      }
+      return { type: 'phone_bound' };
+    });
+  } catch {
+    return [];
+  }
+}
+
+/** 条件人话摘要（发放弹窗 + 概览用）。 */
+function conditionsToText(conds: CouponAudienceCondition[]): string {
+  if (!conds.length) return t('gzCouponTemplate.condEmpty');
+  return conds
+    .map((c) => {
+      if (c.type === 'register_time') {
+        return t('gzCouponTemplate.condRegisterTime') + `（${c.start || '*'} ~ ${c.end || '*'}）`;
+      }
+      if (c.type === 'did_pindou') {
+        return t('gzCouponTemplate.condDidPindou') + (c.completedOnly ? `（${t('gzCouponTemplate.condCompletedOnly')}）` : '');
+      }
+      return t('gzCouponTemplate.condPhoneBound');
+    })
+    .join('  且  ');
 }
 
 // ============ 列表 ============
@@ -256,6 +365,7 @@ interface FormState {
   validDays: number;
   totalQuota: number | null;
   issueStrategy: string;
+  conditions: ConditionRow[];
   remark: string;
 }
 const formVisible = ref(false);
@@ -270,6 +380,7 @@ const form = reactive<FormState>({
   validDays: 30,
   totalQuota: null,
   issueStrategy: 'manual',
+  conditions: [],
   remark: ''
 });
 const formTitle = computed(() => (formMode.value === 'add' ? t('gzCouponTemplate.addTitle') : t('gzCouponTemplate.editTitle')));
@@ -282,6 +393,59 @@ const rules = {
   issueStrategy: [{ required: true, message: t('gzCouponTemplate.ruleStrategyRequired'), trigger: 'change' }]
 };
 
+// 条件预览（表单构建器内）
+const previewing = ref(false);
+const previewCount = ref<number | null>(null);
+
+function onStrategyChange() {
+  previewCount.value = null;
+  if (form.issueStrategy === 'filtered' && form.conditions.length === 0) {
+    addCondition();
+  }
+}
+function addCondition() {
+  form.conditions.push({ type: 'register_time', range: null });
+  previewCount.value = null;
+}
+function removeCondition(idx: number) {
+  form.conditions.splice(idx, 1);
+  previewCount.value = null;
+}
+function onConditionTypeChange(c: ConditionRow) {
+  c.range = null;
+  c.completedOnly = false;
+  previewCount.value = null;
+}
+
+/** 表单内条件校验（filtered：≥1 + register_time 至少一侧日期）。 */
+function validateConditions(): boolean {
+  if (form.conditions.length === 0) {
+    ElMessage.warning(t('gzCouponTemplate.condRequired'));
+    return false;
+  }
+  for (const c of form.conditions) {
+    if (c.type === 'register_time' && !c.range?.[0] && !c.range?.[1]) {
+      ElMessage.warning(t('gzCouponTemplate.condRegisterTimeRequired'));
+      return false;
+    }
+  }
+  return true;
+}
+
+async function handlePreview() {
+  if (form.issueStrategy !== 'filtered' || !validateConditions()) return;
+  previewing.value = true;
+  try {
+    const resp = await previewGzCouponAudience({ conditions: form.conditions.map(toConditionDto) });
+    const r = resp as any;
+    previewCount.value = (r.data ?? r) as number;
+  } catch (e) {
+    console.error('[gz-coupon-template] preview failed', e);
+  } finally {
+    previewing.value = false;
+  }
+}
+
 function handleAdd() {
   formMode.value = 'add';
   Object.assign(form, {
@@ -293,8 +457,10 @@ function handleAdd() {
     validDays: 30,
     totalQuota: null,
     issueStrategy: 'manual',
+    conditions: [],
     remark: ''
   });
+  previewCount.value = null;
   formVisible.value = true;
 }
 
@@ -309,8 +475,10 @@ function handleEdit(row: GzCouponTemplateVO) {
     validDays: row.validDays,
     totalQuota: row.totalQuota,
     issueStrategy: row.issueStrategy,
+    conditions: parseConditionRows(row.issueConfigJson),
     remark: row.remark || ''
   });
+  previewCount.value = null;
   formVisible.value = true;
 }
 
@@ -321,6 +489,12 @@ function resetForm() {
 async function handleSubmit() {
   if (!formRef.value) return;
   await formRef.value.validate();
+  // filtered：构建器条件校验 + 序列化 issue_config_json；其余策略 config 置空
+  let issueConfigJson: string | null = null;
+  if (form.issueStrategy === 'filtered') {
+    if (!validateConditions()) return;
+    issueConfigJson = JSON.stringify({ conditions: form.conditions.map(toConditionDto) });
+  }
   submitting.value = true;
   try {
     const payload: GzCouponTemplateForm = {
@@ -332,6 +506,7 @@ async function handleSubmit() {
       validDays: form.validDays,
       totalQuota: form.totalQuota,
       issueStrategy: form.issueStrategy,
+      issueConfigJson,
       remark: form.remark
     };
     if (formMode.value === 'add') {
@@ -386,6 +561,12 @@ const userList = ref<GzCouponUserOptionVO[]>([]);
 const userTotal = ref(0);
 const userLoading = ref(false);
 const userQuery = reactive<GzCouponUserOptionQuery>({ nickname: '', pageNum: 1, pageSize: 10 });
+// filtered 发放预览
+const issuePreviewing = ref(false);
+const issuePreviewCount = ref<number | null>(null);
+
+const isFilteredIssue = computed(() => issueTemplate.value?.issueStrategy === 'filtered');
+const issueConditionsText = computed(() => conditionsToText(parseConditionRows(issueTemplate.value?.issueConfigJson).map(toConditionDto)));
 
 const issueQuotaText = computed(() => {
   const tpl = issueTemplate.value;
@@ -404,6 +585,7 @@ function openIssue(row: GzCouponTemplateVO) {
   userTotal.value = 0;
   userQuery.nickname = '';
   userQuery.pageNum = 1;
+  issuePreviewCount.value = null;
   userTableRef.value?.clearSelection?.();
   issueVisible.value = true;
 }
@@ -432,8 +614,43 @@ function onUserSelectionChange(rows: GzCouponUserOptionVO[]) {
   selectedUserIds.value = rows.map((r) => r.id);
 }
 
+async function handleIssuePreview() {
+  if (!issueTemplate.value) return;
+  const conds = parseConditionRows(issueTemplate.value.issueConfigJson).map(toConditionDto);
+  issuePreviewing.value = true;
+  try {
+    const resp = await previewGzCouponAudience({ conditions: conds });
+    const r = resp as any;
+    issuePreviewCount.value = (r.data ?? r) as number;
+  } catch (e) {
+    console.error('[gz-coupon-template] issue preview failed', e);
+  } finally {
+    issuePreviewing.value = false;
+  }
+}
+
 async function handleIssue() {
   if (!issueTemplate.value) return;
+
+  if (isFilteredIssue.value) {
+    // 条件筛选：服务端按模板 issue_config_json 解析 audience，仅传 templateId
+    issuing.value = true;
+    try {
+      const resp = await issueGzCoupon({ templateId: issueTemplate.value.id });
+      const r = resp as any;
+      const issued = (r.data?.issuedCount ?? r.issuedCount) || 0;
+      ElMessage.success(t('gzCouponTemplate.issueSuccess', { count: issued }));
+      issueVisible.value = false;
+      await loadList();
+    } catch (e) {
+      console.error('[gz-coupon-template] filtered issue failed', e);
+    } finally {
+      issuing.value = false;
+    }
+    return;
+  }
+
+  // manual：名单 / 关键词二选一
   if (selectedUserIds.value.length === 0 && !issueKeyword.value.trim()) {
     ElMessage.warning(t('gzCouponTemplate.issueNoTarget'));
     return;
@@ -479,6 +696,33 @@ onMounted(() => {
 .issue-selected {
   margin-top: 8px;
   color: #409eff;
+  font-size: 13px;
+}
+.cond-builder {
+  width: 100%;
+}
+.cond-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.cond-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+.cond-preview-result {
+  color: #409eff;
+  font-size: 13px;
+  font-weight: 600;
+}
+.cond-summary {
+  margin: 8px 0;
+  padding: 8px 12px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  color: #303133;
   font-size: 13px;
 }
 </style>
