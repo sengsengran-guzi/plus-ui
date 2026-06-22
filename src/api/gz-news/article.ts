@@ -146,3 +146,11 @@ export function offlineGzNewsArticle(id: string | number) {
     method: 'post'
   });
 }
+
+/** POST /cancel-schedule/{id} — 取消定时（scheduled → draft，回草稿可重新改期，不必删重建） */
+export function cancelScheduleGzNewsArticle(id: string | number) {
+  return request({
+    url: `/system/gz/news/article/cancel-schedule/${id}`,
+    method: 'post'
+  });
+}

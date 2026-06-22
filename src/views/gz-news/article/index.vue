@@ -65,6 +65,7 @@
               {{ t('gzNewsArticle.publish') }}
             </el-button>
             <el-button v-if="row.status === 'draft'" v-hasPermi="['gz:news:article:publish']" type="warning" link size="small" @click="handleSchedule(row)">{{ t('gzNewsArticle.schedule') }}</el-button>
+            <el-button v-if="row.status === 'scheduled'" v-hasPermi="['gz:news:article:publish']" type="warning" link size="small" @click="handleCancelSchedule(row)">{{ t('gzNewsArticle.cancelSchedule') }}</el-button>
             <el-button v-if="row.status === 'published'" v-hasPermi="['gz:news:article:offline']" type="info" link size="small" @click="handleOffline(row)">{{ t('gzNewsArticle.offline') }}</el-button>
             <el-button v-hasPermi="['gz:news:article:delete']" type="danger" link size="small" @click="handleDel(row)">{{ t('gzNewsArticle.del') }}</el-button>
           </template>
@@ -153,6 +154,7 @@ import {
   delGzNewsArticle,
   publishGzNewsArticle,
   scheduleGzNewsArticle,
+  cancelScheduleGzNewsArticle,
   offlineGzNewsArticle,
   type GzNewsArticleVO,
   type GzNewsArticleForm,
@@ -317,6 +319,12 @@ async function handleOffline(row: GzNewsArticleVO) {
   await ElMessageBox.confirm(t('gzNewsArticle.offlineConfirm', { title: row.title }), t('gzNewsArticle.confirmTitle'), { type: 'warning' });
   await offlineGzNewsArticle(row.id);
   ElMessage.success(t('gzNewsArticle.offlineSuccess'));
+  loadList();
+}
+async function handleCancelSchedule(row: GzNewsArticleVO) {
+  await ElMessageBox.confirm(t('gzNewsArticle.cancelScheduleConfirm', { title: row.title }), t('gzNewsArticle.confirmTitle'), { type: 'warning' });
+  await cancelScheduleGzNewsArticle(row.id);
+  ElMessage.success(t('gzNewsArticle.cancelScheduleSuccess'));
   loadList();
 }
 async function handleDel(row: GzNewsArticleVO) {
