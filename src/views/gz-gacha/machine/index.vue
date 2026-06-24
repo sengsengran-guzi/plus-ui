@@ -387,7 +387,7 @@ async function handleDel(row: GzGachaMachineVO) {
 }
 // 跳奖品池页（带 machineId + machineName query，AC 6）
 function handleManagePrize(row: GzGachaMachineVO) {
-  router.push({ path: '/gz/gz-gacha/prize', query: { machineId: row.id, machineName: row.name } });
+  router.push({ path: '/gz-gacha/prize', query: { machineId: row.id, machineName: row.name } });
 }
 
 loadList();

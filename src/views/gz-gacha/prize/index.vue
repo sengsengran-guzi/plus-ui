@@ -25,7 +25,7 @@
         <el-form-item>
           <el-button :icon="Back" @click="backToMachine">{{ t('gzGachaPrize.backToMachine') }}</el-button>
         </el-form-item>
-        <el-form-item :label="t('gzGachaPrize.colName')">
+        <el-form-item :label="t('gzGachaPrize.productCol')">
           <el-input v-model="query.name" :placeholder="t('gzGachaPrize.namePlaceholder')" clearable style="width: 180px" @keyup.enter="handleQuery" />
         </el-form-item>
         <el-form-item :label="t('gzGachaPrize.rarity')">
@@ -55,32 +55,22 @@
       <!-- 列表 -->
       <el-table :data="rows" border>
         <el-table-column :label="t('gzGachaPrize.colPrizeNo')" prop="prizeNo" width="160" show-overflow-tooltip />
-        <el-table-column :label="t('gzGachaPrize.colName')" prop="name" min-width="160" show-overflow-tooltip />
+        <el-table-column :label="t('gzGachaPrize.colImage')" width="90" align="center">
+          <template #default="{ row }">
+            <GzImageThumb :file-id="row.imageId" :size="48" />
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('gzGachaPrize.productCol')" prop="productName" min-width="160" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.productName || '-' }}</template>
+        </el-table-column>
         <el-table-column :label="t('gzGachaPrize.rarity')" prop="rarity" width="90" align="center">
           <template #default="{ row }">
             <el-tag :type="rarityTagType(row.rarity)" size="small" effect="dark">{{ row.rarity }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column :label="t('gzGachaPrize.colWeight')" prop="weight" width="80" align="center" />
-        <el-table-column :label="t('gzGachaPrize.colNormalizedPct')" width="130" align="center">
-          <template #header>
-            {{ t('gzGachaPrize.colNormalizedPct') }}
-            <el-tooltip :content="t('gzGachaPrize.normalizedPctTip')" placement="top">
-              <el-icon class="ml-1" style="vertical-align: middle"><QuestionFilled /></el-icon>
-            </el-tooltip>
-          </template>
-          <template #default="{ row }">
-            <span v-if="normalizedPercentOf(row) != null" class="normalized-pct">{{ normalizedPercentOf(row)!.toFixed(2) }}%</span>
-            <el-tooltip v-else :content="t('gzGachaPrize.normalizedExcludedTip')" placement="top">
-              <span class="normalized-dash">—</span>
-            </el-tooltip>
-          </template>
-        </el-table-column>
         <el-table-column :label="t('gzGachaPrize.colStockInitial')" prop="stockInitial" width="90" align="center" />
         <el-table-column :label="t('gzGachaPrize.colStockRemain')" prop="stockRemain" width="90" align="center" />
-        <el-table-column :label="t('gzGachaPrize.colRefValue')" width="110" align="center">
-          <template #default="{ row }">{{ row.referenceValueCent != null ? centToYuan(row.referenceValueCent) : '-' }}</template>
-        </el-table-column>
         <el-table-column :label="t('gzGachaPrize.enabled')" width="90" align="center">
           <template #default="{ row }">
             <el-tag :type="row.enabled === 1 ? 'success' : 'info'" size="small">{{
@@ -101,19 +91,27 @@
         <template #empty><el-empty :description="t('gzGachaPrize.empty')" /></template>
       </el-table>
 
-      <!-- 归一化基数行（AC 7）：仅统计可参与抽奖奖品（enabled=1 且 有库存） -->
-      <div v-if="rows.length > 0" class="normalize-basis">
-        {{ t('gzGachaPrize.normalizeBasis', { weightSum: normalizeSummary.weightSum, count: normalizeSummary.participatingCount }) }}
-      </div>
-
       <pagination v-show="total > 0" v-model:limit="query.pageSize" v-model:page="query.pageNum" :total="total" @pagination="loadList" />
     </el-card>
 
     <!-- 新建 / 编辑弹窗 -->
     <el-dialog v-model="formVisible" :title="formTitle" width="680px" top="6vh" @close="resetForm">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="120px">
-        <el-form-item :label="t('gzGachaPrize.colName')" prop="name">
-          <el-input v-model="form.name" maxlength="128" show-word-limit />
+        <!-- 从产品库选产品（投放线核心：productId）。新增可选，编辑只读展示。 -->
+        <el-form-item :label="t('gzGachaPrize.pickProduct')" prop="productId">
+          <el-select
+            v-if="formMode === 'add'"
+            v-model="form.productId"
+            filterable
+            clearable
+            :loading="productLoading"
+            :placeholder="t('gzGachaPrize.pickProductPlaceholder')"
+            style="width: 100%"
+          >
+            <el-option v-for="p in productOptions" :key="p.id" :label="p.name" :value="p.id" />
+          </el-select>
+          <el-input v-else :model-value="form.productName ?? ''" disabled />
+          <div v-if="formMode === 'add'" class="hint">{{ t('gzGachaPrize.pickProductHint') }}</div>
         </el-form-item>
         <el-row :gutter="16">
           <el-col :span="12">
@@ -149,26 +147,6 @@
             </el-form-item>
           </el-col>
         </el-row>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item :label="t('gzGachaPrize.refValueYuan')">
-              <el-input-number
-                v-model="form.refValueYuan"
-                :min="0"
-                :precision="2"
-                :step="1"
-                controls-position="right"
-                style="width: 100%"
-                :placeholder="t('gzGachaPrize.refValuePlaceholder')"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item :label="t('gzGachaPrize.image')">
-              <GzImageUpload v-model="form.imageId" :usage-type="GZ_FILE_USAGE_TYPE.GACHA_PRIZE_IMAGE" />
-            </el-form-item>
-          </el-col>
-        </el-row>
         <el-form-item :label="t('gzGachaPrize.enabled')">
           <el-switch :model-value="form.enabled === 1" @update:model-value="(v: boolean) => (form.enabled = v ? 1 : 0)" />
           <span class="hint ml-2">{{ t('gzGachaPrize.enabledSwitchHint') }}</span>
@@ -188,7 +166,7 @@
 <script setup lang="ts" name="GzGachaPrize">
 import { ref, reactive, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Search, Refresh, Plus, Back, QuestionFilled } from '@element-plus/icons-vue';
+import { Search, Refresh, Plus, Back } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import {
@@ -200,9 +178,8 @@ import {
   type GzGachaPrizeVO,
   type GzGachaPrizeQuery
 } from '@/api/gz-gacha/prize';
-import { GZ_FILE_USAGE_TYPE } from '@/api/gz-common/file';
-import GzImageUpload from '@/components/GzImageUpload/index.vue';
-import { useNormalizedProbability } from '@/composables/useNormalizedProbability';
+import { optionsGzGachaProduct, type GzGachaProductVO } from '@/api/gz-gacha/product';
+import GzImageThumb from '@/components/GzImageThumb/index.vue';
 
 const { t } = useI18n();
 const route = useRoute();
@@ -219,11 +196,6 @@ const machineName = ref<string>((route.query.machineName as string) || '');
 
 const query = reactive<GzGachaPrizeQuery>({ pageNum: 1, pageSize: 10, machineId: machineId.value || undefined });
 
-// 归一化预览（AC 6/7）：reactive 计算每行「归一化后概率%」+ 底部基数；
-// 基数仅统计 enabled=1 且 stock_remain>0 的奖品（口径锚定 doc/11 §7.2 + doc/10 §8.N3）。
-// weight / stock / enabled 改动 → loadList 刷新 rows → 全表归一化%即时重算（无需后端往返）。
-const { summary: normalizeSummary, normalizedPercentOf } = useNormalizedProbability(rows);
-
 // 稀有度 SSR/SR/R/N 四档（doc/11 §7.2 + 附录 A.10；与 gz_gacha_rarity 字典一致）
 const rarityOptions = [
   { value: 'SSR', label: 'SSR' },
@@ -234,10 +206,6 @@ const rarityOptions = [
 function rarityTagType(r: string): 'danger' | 'warning' | 'primary' | 'info' {
   const map: Record<string, 'danger' | 'warning' | 'primary' | 'info'> = { SSR: 'danger', SR: 'warning', R: 'primary', N: 'info' };
   return map[r] || 'info';
-}
-function centToYuan(cent?: number | null) {
-  if (cent == null) return '-';
-  return '¥' + (cent / 100).toFixed(2);
 }
 
 // route query 变化（从机器页带不同 machineId 进来）→ 重载
@@ -278,7 +246,24 @@ function handleReset() {
   loadList();
 }
 function backToMachine() {
-  router.push({ path: '/gz/gz-gacha/machine' });
+  router.push({ path: '/gz-gacha/machine' });
+}
+
+// ---------------- 产品库下拉（选产品投放，ADR-0013）----------------
+const productOptions = ref<GzGachaProductVO[]>([]);
+const productLoading = ref(false);
+async function loadProductOptions() {
+  productLoading.value = true;
+  try {
+    // 按机器 IP 标签过滤可在 machine 维度做；此处取全部 enabled=1 产品供选
+    const resp = await optionsGzGachaProduct();
+    productOptions.value = (resp as any).data || [];
+  } catch (e) {
+    console.error('[gz-gacha-prize] load product options failed', e);
+    ElMessage.error(t('gzGachaPrize.productOptionsFailed'));
+  } finally {
+    productLoading.value = false;
+  }
 }
 
 // ---------------- 新建 / 编辑 ----------------
@@ -288,23 +273,23 @@ const formRef = ref<FormInstance>();
 
 const form = reactive<{
   id?: string | null;
-  name: string;
-  imageId?: string | null;
+  /** 投放产品 id（新增必选，编辑不可改） */
+  productId?: string | null;
+  /** 产品名（编辑态只读展示用，join 回填） */
+  productName?: string | null;
   rarity: string;
   weight: number;
   stockInitial: number;
   stockRemain?: number | null;
-  /** 显示用：元（提交时 *100 转分，null = 不显示参考价） */
-  refValueYuan?: number | null;
   enabled: number;
   remark?: string | null;
 }>({
-  name: '',
+  productId: null,
+  productName: null,
   rarity: 'N',
   weight: 1,
   stockInitial: 1,
   stockRemain: undefined,
-  refValueYuan: undefined,
   enabled: 1,
   remark: ''
 });
@@ -312,7 +297,7 @@ const form = reactive<{
 const formTitle = computed(() => (formMode.value === 'add' ? t('gzGachaPrize.addDialogTitle') : t('gzGachaPrize.editDialogTitle')));
 
 const rules = {
-  name: [{ required: true, message: t('gzGachaPrize.ruleNameRequired'), trigger: 'blur' }],
+  productId: [{ required: true, message: t('gzGachaPrize.ruleProductRequired'), trigger: 'change' }],
   rarity: [{ required: true, message: t('gzGachaPrize.ruleRarityRequired'), trigger: 'change' }],
   weight: [{ required: true, message: t('gzGachaPrize.ruleWeightRequired'), trigger: 'change' }],
   stockInitial: [{ required: true, message: t('gzGachaPrize.ruleStockInitialRequired'), trigger: 'change' }]
@@ -325,6 +310,7 @@ function handleAdd() {
   }
   formMode.value = 'add';
   resetForm();
+  loadProductOptions();
   formVisible.value = true;
 }
 async function handleEdit(row: GzGachaPrizeVO) {
@@ -333,13 +319,12 @@ async function handleEdit(row: GzGachaPrizeVO) {
     const resp = await getGzGachaPrize(row.id);
     const d = (resp as any).data as GzGachaPrizeVO;
     form.id = d.id;
-    form.name = d.name;
-    form.imageId = d.imageId ?? null;
+    form.productId = d.productId ?? null;
+    form.productName = d.productName ?? null;
     form.rarity = d.rarity;
     form.weight = d.weight ?? 0;
     form.stockInitial = d.stockInitial ?? 0;
     form.stockRemain = d.stockRemain ?? undefined;
-    form.refValueYuan = d.referenceValueCent != null ? d.referenceValueCent / 100 : undefined;
     form.enabled = d.enabled ?? 1;
     form.remark = d.remark ?? '';
     formVisible.value = true;
@@ -351,13 +336,12 @@ async function handleEdit(row: GzGachaPrizeVO) {
 function resetForm() {
   formRef.value?.resetFields();
   form.id = null;
-  form.name = '';
-  form.imageId = null;
+  form.productId = null;
+  form.productName = null;
   form.rarity = 'N';
   form.weight = 1;
   form.stockInitial = 1;
   form.stockRemain = undefined;
-  form.refValueYuan = undefined;
   form.enabled = 1;
   form.remark = '';
 }
@@ -373,17 +357,14 @@ function validateBeforeSubmit(): string | null {
 function buildPayload() {
   return {
     id: form.id ?? null,
-    // 新增必传归属机器；编辑后端忽略
+    // 新增必传归属机器 + 选定产品；编辑后端忽略 machineId/productId
     machineId: formMode.value === 'add' ? machineId.value : undefined,
-    name: form.name,
-    imageId: form.imageId,
+    productId: formMode.value === 'add' ? form.productId : undefined,
     rarity: form.rarity,
     weight: form.weight,
     stockInitial: form.stockInitial,
     // 新增空 → 后端默认 = stockInitial；编辑空 → 不动
     stockRemain: form.stockRemain === undefined || form.stockRemain === null ? null : form.stockRemain,
-    // 元 → 分（四舍五入）；空 → null（不显示参考价）
-    referenceValueCent: form.refValueYuan === undefined || form.refValueYuan === null ? null : Math.round(form.refValueYuan * 100),
     enabled: form.enabled,
     remark: form.remark
   };
@@ -419,7 +400,7 @@ async function handleSubmit() {
 
 // ---------------- 删除 ----------------
 async function handleDel(row: GzGachaPrizeVO) {
-  await ElMessageBox.confirm(t('gzGachaPrize.delConfirm', { name: row.name }), t('gzGachaPrize.confirmTitle'), { type: 'warning' });
+  await ElMessageBox.confirm(t('gzGachaPrize.delConfirm', { name: row.productName ?? row.prizeNo }), t('gzGachaPrize.confirmTitle'), { type: 'warning' });
   await delGzGachaPrize(row.id);
   ElMessage.success(t('gzGachaPrize.delSuccess'));
   loadList();
@@ -436,20 +417,5 @@ loadList();
 .hint {
   font-size: 12px;
   color: #909399;
-}
-.normalized-pct {
-  font-weight: 600;
-  color: var(--el-color-primary);
-}
-.normalized-dash {
-  color: #c0c4cc;
-}
-.normalize-basis {
-  margin-top: 10px;
-  padding: 8px 12px;
-  font-size: 13px;
-  color: #606266;
-  background: var(--el-fill-color-light);
-  border-radius: 4px;
 }
 </style>
