@@ -25,6 +25,8 @@ export const ROUTES = [
   { n: '61-coupon-usercoupon', p: '/gz-coupon/user-coupon', t: '优惠券-发放记录' },
   { n: '70-recycle-pricerule', p: '/gz-recycle/price-rule', t: '回收-价目表', dialog: true },
   { n: '71-recycle-appointment', p: '/gz-recycle/appointment', t: '回收-预约单' },
+  { n: '72-recycle-ip', p: '/gz-recycle/ip', t: '回收-IP管理', dialog: true },
+  { n: '73-recycle-qtyrange', p: '/gz-recycle/qty-range', t: '回收-数量桶时长', dialog: true },
   { n: '80-recon-reconcile', p: '/gz/gz-recon-reconcile', t: '对账中心' },
   { n: '81-recon-settle', p: '/gz/gz-recon-settle', t: '季度结算' },
   { n: '90-admin-user', p: '/gz/gz-admin-user', t: '谷子管理员', dialog: true },

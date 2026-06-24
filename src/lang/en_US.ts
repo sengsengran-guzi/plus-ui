@@ -109,7 +109,8 @@ export default {
   gzCustomerService: {
     title: 'Customer Service Entry Config',
     alertTitle: 'Note',
-    alertDesc: 'If WeCom KF ID is set, the miniapp floating button opens WeCom KF session directly. Otherwise it shows a fallback dialog with phone & wechat ID.',
+    alertDesc:
+      'If WeCom KF ID is set, the miniapp floating button opens WeCom KF session directly. Otherwise it shows a fallback dialog with phone & wechat ID.',
     refresh: 'Refresh',
     save: 'Save',
     reset: 'Reset',
@@ -130,7 +131,8 @@ export default {
   gzHomeBanner: {
     title: 'Home Banner Config',
     alertTitle: 'Note',
-    alertDesc: 'Configure the miniapp home top carousel banner (the home hero slot). Images upload to OSS; link is an in-app route (e.g. /pages/bean/index), leave blank to make it non-clickable; reorder with up/down, toggle off to take offline without deleting. When empty, the home shows a "Go to bean booking" placeholder.',
+    alertDesc:
+      'Configure the miniapp home top carousel banner (the home hero slot). Images upload to OSS; link is an in-app route (e.g. /pages/bean/index), leave blank to make it non-clickable; reorder with up/down, toggle off to take offline without deleting. When empty, the home shows a "Go to bean booking" placeholder.',
     refresh: 'Refresh',
     save: 'Save',
     reset: 'Reset',
@@ -146,6 +148,14 @@ export default {
     loadFailed: 'Load failed, please retry later',
     saveSuccess: 'Saved successfully',
     saveFailed: 'Save failed, please retry later'
+  },
+  // Business image upload component (gz_file_object)
+  gzImageUpload: {
+    upload: 'Upload',
+    remove: 'Remove',
+    mimeNotAllowed: 'Only jpg / png / webp / gif allowed',
+    sizeExceed: 'Image must be ≤ {n} MB',
+    uploadFailed: 'Upload failed, please retry'
   },
   // Business file upload test page (D02 GZ-SYS-005)
   gzFile: {
@@ -398,7 +408,8 @@ export default {
     title: 'Data Dashboard',
     refresh: 'Refresh',
     alertTitle: 'Note',
-    alertDesc: 'V1.0 shows non-transactional metrics only (users / bookings / news reads). Data is snapshotted by a backend job every 5 minutes; the UI reads the latest snapshot. Transactional metrics (GMV / orders / draws) ship in V1.1.',
+    alertDesc:
+      'V1.0 shows non-transactional metrics only (users / bookings / news reads). Data is snapshotted by a backend job every 5 minutes; the UI reads the latest snapshot. Transactional metrics (GMV / orders / draws) ship in V1.1.',
     updatedAt: 'Updated at {time}',
     neverUpdated: 'No snapshot yet (awaiting first scheduled run)',
     refreshOk: 'Refreshed',
@@ -413,7 +424,8 @@ export default {
   gzNewsArticle: {
     title: 'News Article CMS',
     alertTitle: 'Note',
-    alertDesc: 'Backend news CMS. Rich-text body is sanitized (anti-XSS / external link) before persistence; images auto-uploaded to object storage. Status: draft → publish now / scheduled; published can go offline, offline can re-publish.',
+    alertDesc:
+      'Backend news CMS. Rich-text body is sanitized (anti-XSS / external link) before persistence; images auto-uploaded to object storage. Status: draft → publish now / scheduled; published can go offline, offline can re-publish.',
     colTitle: 'Title',
     titlePlaceholder: 'Search title',
     category: 'Category',
@@ -483,7 +495,10 @@ export default {
     title: 'Seats & Time Slots',
     alertTitle: 'Note',
     alertDesc:
-      'Store-level config. Seats tab: physical seats (e.g. A1-A6 / B1-B6) with batch generate. Slots tab: open time slots (e.g. weekday 14-16) with per-week batch config. Disabling does not affect existing bookings.',
+      'Store-level config. Seats tab: physical seats (e.g. A1-A6 / B1-B6) with batch generate. Slots tab: business windows (the system splits each into 1h slots on whole hours for booking) with per-week batch config. Disabling does not affect existing bookings.',
+    windowAlertTitle: 'Business windows must be on whole hours',
+    windowAlertDesc:
+      'Configure "business windows" here; the system auto-splits each into 1h slots on whole hours for booking. Start/end must be whole hours (e.g. 10:00 / 22:00); express a lunch break with multiple windows, e.g. 10:00-13:00 + 14:00-22:00.',
     store: 'Store',
     tabSeat: 'Seats',
     tabSlot: 'Time Slots',
@@ -529,6 +544,8 @@ export default {
     ruleStartIndexRequired: 'Start index required',
     ruleCountRequired: 'Count required',
     ruleBatchSlotIncomplete: 'Each slot must have start + end time',
+    ruleWindowNotWholeHour: 'Business window start/end must be on whole hours (e.g. 10:00 / 22:00)',
+    ruleWindowStartBeforeEnd: 'Start time must be earlier than end time',
     slotNamePlaceholder: 'e.g. Morning / Afternoon (optional)',
     startTimePlaceholder: 'Start',
     endTimePlaceholder: 'End',
@@ -682,7 +699,8 @@ export default {
     cbBody: 'Raw Body',
     cbEmpty: 'No callback logs',
     testTitle: 'Payment Test Tool',
-    testTip: 'Create a 0.01 CNY (1 cent) test order. Mock channel before merchant ID is ready: click Create then Simulate Callback to drive the order to paid (equivalent to a real WeChat callback).',
+    testTip:
+      'Create a 0.01 CNY (1 cent) test order. Mock channel before merchant ID is ready: click Create then Simulate Callback to drive the order to paid (equivalent to a real WeChat callback).',
     testAmount: 'Amount (cents)',
     testOpenid: 'openid (optional)',
     testCreate: 'Create Test Order',
@@ -763,7 +781,8 @@ export default {
   gzOrdOrder: {
     title: 'Preorder Orders',
     alertTitle: 'Note',
-    alertDesc: 'Read-only preorder order query (ops / support). Logistics progress and tracking are handled in the staff client; refunds in refund management. View only here.',
+    alertDesc:
+      'Read-only preorder order query (ops / support). Logistics progress and tracking are handled in the staff client; refunds in refund management. View only here.',
     detailTitle: 'Order Detail',
     colOrderNo: 'Order No.',
     orderNoPlaceholder: 'Search by order no.',
@@ -808,7 +827,8 @@ export default {
   gzOrdOrders: {
     title: 'Order Management',
     alertTitle: 'Note',
-    alertDesc: 'Aggregated orders (preorder / gacha / test) keyed by payment transactions and back-queried by business type. Full refund only, triggered by owner in detail; logistics handled in the staff client.',
+    alertDesc:
+      'Aggregated orders (preorder / gacha / test) keyed by payment transactions and back-queried by business type. Full refund only, triggered by owner in detail; logistics handled in the staff client.',
     detailTitle: 'Order Detail',
     tabAll: 'All',
     tabPreorder: 'Preorder',
@@ -896,7 +916,8 @@ export default {
   gzRecon: {
     title: 'Reconciliation',
     alertTitle: 'Note',
-    alertDesc: 'The single authoritative source for the 4% commission (contract §4.1). A daily SnailJob batch computes GMV / refund / channel fee / net settlement per business line (A preorder / B gacha), accounted independently with no cross-offset; settlement = GMV − refund − fee, negative monthly flow counts as 0. Excel export gives per-transaction granularity for cross-checking against the WeChat merchant ledger.',
+    alertDesc:
+      'The single authoritative source for the 4% commission (contract §4.1). A daily SnailJob batch computes GMV / refund / channel fee / net settlement per business line (A preorder / B gacha), accounted independently with no cross-offset; settlement = GMV − refund − fee, negative monthly flow counts as 0. Excel export gives per-transaction granularity for cross-checking against the WeChat merchant ledger.',
     tabA: 'Line A (Preorder)',
     tabB: 'Line B (Gacha)',
     period: 'Period',
@@ -922,7 +943,8 @@ export default {
   gzReconSettle: {
     title: 'Quarterly Settlement',
     alertTitle: 'Note',
-    alertDesc: 'Quarterly combined payment (anchored at Mar/Jun/Sep/Dec): total commission (A+B) + monthly maintenance ¥3000×3 = quarterly payable (contract §4.6).',
+    alertDesc:
+      'Quarterly combined payment (anchored at Mar/Jun/Sep/Dec): total commission (A+B) + monthly maintenance ¥3000×3 = quarterly payable (contract §4.6).',
     colQuarter: 'Quarter',
     colCommission: 'Total Commission',
     colMaintenance: 'Maintenance',
@@ -940,7 +962,8 @@ export default {
   recycleBin: {
     title: 'Recycle Bin',
     alertTitle: 'Note',
-    alertDesc: 'Recover accidentally deleted business master data (article / preorder product / SKU / gacha prize / gacha machine / store). "Restore" undoes the deletion; "Archive" marks the record for physical cleanup after 30 days. Owner only.',
+    alertDesc:
+      'Recover accidentally deleted business master data (article / preorder product / SKU / gacha prize / gacha machine / store). "Restore" undoes the deletion; "Archive" marks the record for physical cleanup after 30 days. Owner only.',
     allTypes: 'All types',
     colEntityType: 'Type',
     colEntityName: 'Name',
@@ -988,7 +1011,8 @@ export default {
   gzOrdProduct: {
     title: 'Preorder Products',
     alertTitle: 'Note',
-    alertDesc: 'Preorder product + multi-spec SKU config. The auto_off status is written by the deadline cron; admin only toggles on/off shelf manually. Leave stock blank for unlimited.',
+    alertDesc:
+      'Preorder product + multi-spec SKU config. The auto_off status is written by the deadline cron; admin only toggles on/off shelf manually. Leave stock blank for unlimited.',
     colName: 'Name',
     namePlaceholder: 'Search by name',
     ipTag: 'IP Tag',
@@ -1075,7 +1099,8 @@ export default {
   gzGachaMachine: {
     title: 'Gacha Machines',
     alertTitle: 'Note',
-    alertDesc: 'Gacha machine config. The auto_off status is written by the draw transaction / cron when sold out or past offline time; admin only toggles on/off shelf manually. Single/ten-pack price entered in Yuan, stored in cents; leave ten-pack blank to disable it. Click "Manage Pool" to set prizes and weights.',
+    alertDesc:
+      'Gacha machine config. The auto_off status is written by the draw transaction / cron when sold out or past offline time; admin only toggles on/off shelf manually. Single/ten-pack price entered in Yuan, stored in cents; leave ten-pack blank to disable it. Click "Manage Pool" to set prizes and weights.',
     colMachineNo: 'Machine No.',
     colName: 'Name',
     namePlaceholder: 'Search by name',
@@ -1129,7 +1154,8 @@ export default {
   gzGachaPrize: {
     title: 'Prize Pool',
     alertTitle: 'Note',
-    alertDesc: 'Prize config for a gacha machine. Weight is a non-negative integer; it need not sum to 100. The displayed appearance probability is normalized in real time over in-pool, in-stock prizes. Remaining stock can be adjusted for restock but cannot exceed initial stock. Disabling a prize removes it from the pool temporarily.',
+    alertDesc:
+      'Prize config for a gacha machine. Weight is a non-negative integer; it need not sum to 100. The displayed appearance probability is normalized in real time over in-pool, in-stock prizes. Remaining stock can be adjusted for restock but cannot exceed initial stock. Disabling a prize removes it from the pool temporarily.',
     colPrizeNo: 'Prize No.',
     colName: 'Name',
     namePlaceholder: 'Search by name',
@@ -1178,14 +1204,16 @@ export default {
     loadFailed: 'Load failed, please retry',
     detailFailed: 'Load detail failed, please retry',
     colNormalizedPct: 'Normalized %',
-    normalizedPctTip: 'Displayed appearance probability = this prize weight / sum of weights of in-pool participating prizes x 100%, computed live from the current list (2 decimals). The gacha transaction is authoritative.',
+    normalizedPctTip:
+      'Displayed appearance probability = this prize weight / sum of weights of in-pool participating prizes x 100%, computed live from the current list (2 decimals). The gacha transaction is authoritative.',
     normalizedExcludedTip: 'This prize does not participate (disabled or 0 stock remaining) and is excluded from the normalization basis.',
     normalizeBasis: 'Normalization basis: sum(weight)={weightSum}, participating prizes={count} (counts only participating=yes with stock remaining)'
   },
   // Coupon template (D12 GZ-COUPON-001)
   gzCouponTemplate: {
     title: 'Coupon Templates',
-    alertDesc: 'Cash voucher (V1.2 pindou only). Configure amount / valid days / quota / issuance strategy. Only "manual" strategy is supported in V1.2; register_window / event are reserved. Coupon face value is excluded from GMV.',
+    alertDesc:
+      'Cash voucher (V1.2 pindou only). Configure amount / valid days / quota / issuance strategy. Only "manual" strategy is supported in V1.2; register_window / event are reserved. Coupon face value is excluded from GMV.',
     search: 'Search',
     reset: 'Reset',
     add: 'New Template',
@@ -1302,7 +1330,8 @@ export default {
   },
   gzRecyclePriceRule: {
     title: 'Recycle Price Rules',
-    alertDesc: 'Configure unit price and duration by category × quantity range; ranges within a category must not overlap (validated on save). Estimation hits a unique range.',
+    alertDesc:
+      'Configure unit price and duration by category × quantity range; ranges within a category must not overlap (validated on save). Estimation hits a unique range.',
     colCategory: 'Category',
     categoryPlaceholder: 'Select category',
     colEnabled: 'Status',
@@ -1358,7 +1387,8 @@ export default {
   // Recycle appointment management (GZ-RECYCLE-003)
   gzRecycleAppointment: {
     title: 'Recycle Appointments',
-    alertDesc: 'Staff verifies on-site + photos + adjusts final amount → triggers reverse payout (merchant transfer). The verify/trigger entry is on the mini-program staff side; owner views here + retries failed payouts. Reverse payout is settled separately, not counted in GMV.',
+    alertDesc:
+      'Staff verifies on-site + photos + adjusts final amount → triggers reverse payout (merchant transfer). The verify/trigger entry is on the mini-program staff side; owner views here + retries failed payouts. Reverse payout is settled separately, not counted in GMV.',
     store: 'Store',
     storePlaceholder: 'Store',
     status: 'Status',
@@ -1374,9 +1404,9 @@ export default {
     retryPayout: 'Retry Payout',
     colAppointmentNo: 'Appt No.',
     colStore: 'Store',
-    colTotalQty: 'Qty',
-    colEstimated: 'Estimated',
-    colFinal: 'Final',
+    colQtyBucket: 'Qty Range',
+    colFinal: 'Verified Amt',
+    colPayoutStatus: 'Payout',
     colStatus: 'Status',
     colApptDate: 'Visit Date',
     colCreateTime: 'Submitted',
@@ -1386,21 +1416,28 @@ export default {
     detailTitle: 'Appointment Detail',
     secBase: 'Basic',
     secProduct: 'Items',
-    secEstimate: 'Estimate / Final',
     secVerify: 'Verify Record',
+    secTransfer: 'Transfer Record',
     secContact: 'Contact',
     secImages: 'Photos',
     fieldUserId: 'User id',
-    fieldStore: 'Store id',
+    fieldStore: 'Store',
     fieldApptDate: 'Visit Date',
+    fieldArrivalSlot: 'Arrival Slot',
     fieldSlot: 'Time Slot',
-    fieldDuration: 'Duration',
+    fieldDuration: 'Est. Duration',
     minutes: 'min',
-    fieldEstimated: 'Estimated',
-    fieldFinal: 'Final Amount',
+    slotMorning: 'Morning 10:00–13:00',
+    slotAfternoon: 'Afternoon 13:00–17:00',
+    fieldFinal: 'Verified Amount',
     notVerified: 'Not verified',
     fieldVerifiedBy: 'Verified By',
     fieldVerifyTime: 'Verify Time',
+    fieldPayoutStatus: 'Payout Status',
+    fieldPayoutAmount: 'Paid Amount',
+    fieldTransferredTime: 'Transferred At',
+    fieldFailReason: 'Fail Reason',
+    noPayout: 'No payout yet',
     fieldMobile: 'Mobile',
     fieldWechatId: 'WeChat ID',
     fieldOutPayoutNo: 'Payout No.',
@@ -1408,11 +1445,98 @@ export default {
     verifyImages: 'Staff Photos',
     noImage: 'None',
     productCategory: 'Category',
-    productQty: 'Qty',
+    productIps: 'IP',
+    productQtyBucket: 'Qty Range',
     productRemark: 'Remark',
     retryConfirm: 'Retry reverse payout for this appointment? (Only failed payouts)',
     retryOk: 'Retry initiated',
     opFailed: 'Operation failed, please retry',
+    tip: 'Tip'
+  },
+  // Recycle IP master data management (GZ-RECYCLE-004)
+  gzRecycleIp: {
+    title: 'Recycle IP',
+    alertDesc:
+      'Maintain selectable recycle IPs / series; enabled items appear in the mini-program recycle form IP multi-select, others entered as custom text.',
+    colIpName: 'IP Name',
+    ipNamePlaceholder: 'IP / series name',
+    colEnabled: 'Status',
+    enabledPlaceholder: 'Status',
+    enabledOn: 'Enabled',
+    enabledOff: 'Disabled',
+    colSortNo: 'Sort',
+    colRemark: 'Remark',
+    colCreateTime: 'Created',
+    colAction: 'Action',
+    search: 'Search',
+    reset: 'Reset',
+    add: 'Add',
+    edit: 'Edit',
+    disable: 'Disable',
+    enable: 'Enable',
+    del: 'Delete',
+    empty: 'No recycle IPs',
+    addTitle: 'Add Recycle IP',
+    editTitle: 'Edit Recycle IP',
+    fieldIpName: 'IP Name',
+    fieldSortNo: 'Sort',
+    fieldEnabled: 'Enabled',
+    fieldRemark: 'Remark',
+    cancel: 'Cancel',
+    confirm: 'Confirm',
+    ruleIpName: 'IP name required',
+    addOk: 'Created',
+    editOk: 'Saved',
+    toggleOk: 'Status updated',
+    delOk: 'Deleted',
+    delConfirm: 'Delete recycle IP "{name}"?',
+    tip: 'Tip'
+  },
+  // Recycle quantity bucket + estimated duration (GZ-RECYCLE-004, business table not dict)
+  gzRecycleQtyRange: {
+    title: 'Qty Range & Duration',
+    alertDesc:
+      'Configure recycle quantity buckets (1-25 items...) and the estimated recycle duration per bucket; enabled buckets appear in the mini-program recycle form single-select. Users pick a bucket, no exact count.',
+    colCode: 'Code',
+    codePlaceholder: 'Machine code, e.g. 25-50',
+    colLabel: 'Label',
+    labelPlaceholder: 'e.g. 25-50 items',
+    colDuration: 'Est. Duration',
+    minutes: 'min',
+    colEnabled: 'Status',
+    enabledPlaceholder: 'Status',
+    enabledOn: 'Enabled',
+    enabledOff: 'Disabled',
+    colSortNo: 'Sort',
+    colRemark: 'Remark',
+    colAction: 'Action',
+    search: 'Search',
+    reset: 'Reset',
+    add: 'Add',
+    edit: 'Edit',
+    disable: 'Disable',
+    enable: 'Enable',
+    del: 'Delete',
+    empty: 'No quantity buckets',
+    addTitle: 'Add Quantity Bucket',
+    editTitle: 'Edit Quantity Bucket',
+    fieldCode: 'Code',
+    codeHint: 'Machine code persisted by mp submit, immutable after creation',
+    fieldLabel: 'Label',
+    fieldDuration: 'Est. Recycle Duration',
+    fieldSortNo: 'Sort',
+    fieldEnabled: 'Enabled',
+    fieldRemark: 'Remark',
+    cancel: 'Cancel',
+    confirm: 'Confirm',
+    ruleCode: 'Code required',
+    ruleLabel: 'Label required',
+    ruleDuration: 'Duration required',
+    addOk: 'Created',
+    editOk: 'Saved',
+    toggleOk: 'Status updated',
+    delOk: 'Deleted',
+    delConfirm: 'Delete quantity bucket "{code}"?',
     tip: 'Tip'
   }
 };

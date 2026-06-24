@@ -42,13 +42,18 @@
 
       <el-table :data="list" border :empty-text="t('gzRecycleAppointment.empty')">
         <el-table-column :label="t('gzRecycleAppointment.colAppointmentNo')" prop="appointmentNo" min-width="180" show-overflow-tooltip />
-        <el-table-column :label="t('gzRecycleAppointment.colTotalQty')" prop="totalQty" width="80" align="center" />
-        <el-table-column :label="t('gzRecycleAppointment.colEstimated')" width="100" align="right">
-          <template #default="{ row }">¥{{ (row.estimatedAmountCent / 100).toFixed(2) }}</template>
+        <el-table-column :label="t('gzRecycleAppointment.colQtyBucket')" min-width="120">
+          <template #default="{ row }">{{ row.product?.qtyBucketLabel || '-' }}</template>
         </el-table-column>
         <el-table-column :label="t('gzRecycleAppointment.colFinal')" width="100" align="right">
           <template #default="{ row }">
-            <span v-if="row.finalAmountCent != null">¥{{ (row.finalAmountCent / 100).toFixed(2) }}</span>
+            <span v-if="row.finalAmountCent != null">¥{{ fmtYuan(row.finalAmountCent) }}</span>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('gzRecycleAppointment.colPayoutStatus')" width="110" align="center">
+          <template #default="{ row }">
+            <dict-tag v-if="row.payoutStatus" :options="gz_payout_status" :value="row.payoutStatus" />
             <span v-else>-</span>
           </template>
         </el-table-column>
@@ -85,33 +90,52 @@
           <el-descriptions-item :label="t('gzRecycleAppointment.colStatus')">
             <dict-tag :options="gz_recycle_status" :value="detail.status" />
           </el-descriptions-item>
-          <el-descriptions-item :label="t('gzRecycleAppointment.fieldStore')">{{ detail.storeId }}</el-descriptions-item>
+          <el-descriptions-item :label="t('gzRecycleAppointment.fieldStore')">{{ detail.storeName || detail.storeId }}</el-descriptions-item>
           <el-descriptions-item :label="t('gzRecycleAppointment.fieldApptDate')">{{ detail.apptDate }}</el-descriptions-item>
+          <el-descriptions-item :label="t('gzRecycleAppointment.fieldArrivalSlot')">{{ arrivalSlotText(detail.arrivalSlot) }}</el-descriptions-item>
           <el-descriptions-item :label="t('gzRecycleAppointment.fieldSlot')">{{ shortTime(detail.slotStart) }} - {{ shortTime(detail.slotEnd) }}</el-descriptions-item>
-          <el-descriptions-item :label="t('gzRecycleAppointment.fieldDuration')" :span="2">{{ detail.matchedDurationMinutes }} {{ t('gzRecycleAppointment.minutes') }}</el-descriptions-item>
+          <el-descriptions-item :label="t('gzRecycleAppointment.fieldDuration')">
+            <span v-if="detail.matchedDurationMinutes != null">{{ detail.matchedDurationMinutes }} {{ t('gzRecycleAppointment.minutes') }}</span>
+            <span v-else>-</span>
+          </el-descriptions-item>
         </el-descriptions>
 
         <el-divider content-position="left">{{ t('gzRecycleAppointment.secProduct') }}</el-divider>
-        <el-table :data="detail.products" border size="small">
-          <el-table-column :label="t('gzRecycleAppointment.productCategory')" prop="category" />
-          <el-table-column :label="t('gzRecycleAppointment.productQty')" prop="qty" width="80" align="center" />
-          <el-table-column :label="t('gzRecycleAppointment.productRemark')" prop="remark" show-overflow-tooltip />
-        </el-table>
-
-        <el-divider content-position="left">{{ t('gzRecycleAppointment.secEstimate') }}</el-divider>
-        <el-descriptions :column="2" border size="small">
-          <el-descriptions-item :label="t('gzRecycleAppointment.fieldEstimated')">¥{{ (detail.estimatedAmountCent / 100).toFixed(2) }}</el-descriptions-item>
-          <el-descriptions-item :label="t('gzRecycleAppointment.fieldFinal')">
-            <span v-if="detail.finalAmountCent != null">¥{{ (detail.finalAmountCent / 100).toFixed(2) }}</span>
-            <span v-else>{{ t('gzRecycleAppointment.notVerified') }}</span>
+        <el-descriptions :column="1" border size="small">
+          <el-descriptions-item :label="t('gzRecycleAppointment.productCategory')">
+            <template v-if="detail.product?.categories?.length">
+              <dict-tag v-for="c in detail.product.categories" :key="c" :options="gz_recycle_category" :value="c" class="mr-1" />
+            </template>
+            <span v-else>-</span>
           </el-descriptions-item>
-          <el-descriptions-item :label="t('gzRecycleAppointment.fieldOutPayoutNo')" :span="2">{{ detail.outPayoutNo || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('gzRecycleAppointment.productIps')">{{ ipText(detail.product) }}</el-descriptions-item>
+          <el-descriptions-item :label="t('gzRecycleAppointment.productQtyBucket')">{{ detail.product?.qtyBucketLabel || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('gzRecycleAppointment.productRemark')">{{ detail.remark || '-' }}</el-descriptions-item>
         </el-descriptions>
 
         <el-divider content-position="left">{{ t('gzRecycleAppointment.secVerify') }}</el-divider>
         <el-descriptions :column="2" border size="small">
+          <el-descriptions-item :label="t('gzRecycleAppointment.fieldFinal')">
+            <span v-if="detail.finalAmountCent != null">¥{{ fmtYuan(detail.finalAmountCent) }}</span>
+            <span v-else>{{ t('gzRecycleAppointment.notVerified') }}</span>
+          </el-descriptions-item>
           <el-descriptions-item :label="t('gzRecycleAppointment.fieldVerifiedBy')">{{ detail.verifiedBy || t('gzRecycleAppointment.notVerified') }}</el-descriptions-item>
-          <el-descriptions-item :label="t('gzRecycleAppointment.fieldVerifyTime')">{{ detail.verifyTime || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('gzRecycleAppointment.fieldVerifyTime')" :span="2">{{ detail.verifyTime || '-' }}</el-descriptions-item>
+        </el-descriptions>
+
+        <el-divider content-position="left">{{ t('gzRecycleAppointment.secTransfer') }}</el-divider>
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item :label="t('gzRecycleAppointment.fieldPayoutStatus')">
+            <dict-tag v-if="detail.payoutStatus" :options="gz_payout_status" :value="detail.payoutStatus" />
+            <span v-else>{{ t('gzRecycleAppointment.noPayout') }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item :label="t('gzRecycleAppointment.fieldPayoutAmount')">
+            <span v-if="detail.payoutAmountCent != null">¥{{ fmtYuan(detail.payoutAmountCent) }}</span>
+            <span v-else>-</span>
+          </el-descriptions-item>
+          <el-descriptions-item :label="t('gzRecycleAppointment.fieldTransferredTime')">{{ detail.transferredTime || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('gzRecycleAppointment.fieldOutPayoutNo')">{{ detail.outPayoutNo || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('gzRecycleAppointment.fieldFailReason')" :span="2">{{ detail.failReason || '-' }}</el-descriptions-item>
         </el-descriptions>
 
         <el-divider content-position="left">{{ t('gzRecycleAppointment.secContact') }}</el-divider>
@@ -161,13 +185,15 @@
 import { ref, reactive, toRefs, watch, getCurrentInstance, type ComponentInternalInstance } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { listAppointment, getAppointment, retryAppointmentPayout, type GzRecycleAppointmentVO, type GzRecycleAppointmentQuery } from '@/api/gz-recycle/appointment';
+import { listAppointment, getAppointment, retryAppointmentPayout, type GzRecycleAppointmentVO, type GzRecycleAppointmentQuery, type RecycleProductVO } from '@/api/gz-recycle/appointment';
 import { getGzBeanStoreOptions, type GzBeanStoreVO } from '@/api/gz-bean/store';
 import { getGzFileUrl } from '@/api/gz-common/file';
 
 const { t } = useI18n();
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
-const { gz_recycle_status } = toRefs<any>((proxy as any)?.useDict('gz_recycle_status'));
+const { gz_recycle_status, gz_recycle_category, gz_payout_status } = toRefs<any>(
+  (proxy as any)?.useDict('gz_recycle_status', 'gz_recycle_category', 'gz_payout_status')
+);
 
 const loading = ref(false);
 const list = ref<GzRecycleAppointmentVO[]>([]);
@@ -199,6 +225,25 @@ watch(dateRange, (v) => {
 function shortTime(s?: string): string {
   if (!s) return '';
   return s.length >= 5 ? s.slice(0, 5) : s;
+}
+
+/** 金额（分）→ 元字符串 */
+function fmtYuan(cent?: number | null): string {
+  return ((cent ?? 0) / 100).toFixed(2);
+}
+
+/** 到店档 morning / afternoon → 文案（旧单可能 null） */
+function arrivalSlotText(slot?: string | null): string {
+  if (slot === 'morning') return t('gzRecycleAppointment.slotMorning');
+  if (slot === 'afternoon') return t('gzRecycleAppointment.slotAfternoon');
+  return '-';
+}
+
+/** IP 展示：主数据 IP 名 + 自定义 IP 合并；都为空显 '-'（兼容旧数组投影后的 customIps） */
+function ipText(product?: RecycleProductVO | null): string {
+  if (!product) return '-';
+  const names = [...(product.ipNames ?? []), ...(product.customIps ?? [])].filter((s) => !!s);
+  return names.length ? names.join('、') : '-';
 }
 
 async function loadStores() {
@@ -261,7 +306,7 @@ async function openDetail(row: GzRecycleAppointmentVO) {
   try {
     const res = await getAppointment(row.id);
     detail.value = res.data;
-    submitUrls.value = await resolveUrls(detail.value?.submitImageIds ?? []);
+    submitUrls.value = await resolveUrls(detail.value?.imageIds ?? []);
     verifyUrls.value = await resolveUrls(detail.value?.verifyImageIds ?? []);
   } catch {
     ElMessage.error(t('gzRecycleAppointment.loadFailed'));

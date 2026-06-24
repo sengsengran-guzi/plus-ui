@@ -11,7 +11,14 @@
         </div>
       </template>
 
-      <el-alert :title="t('gzGachaPrize.alertTitle')" type="info" :description="t('gzGachaPrize.alertDesc')" show-icon :closable="false" class="mb-3" />
+      <el-alert
+        :title="t('gzGachaPrize.alertTitle')"
+        type="info"
+        :description="t('gzGachaPrize.alertDesc')"
+        show-icon
+        :closable="false"
+        class="mb-3"
+      />
 
       <!-- 工具栏：返回机器列表 + 查询 + 新增 -->
       <el-form :model="query" inline @submit.prevent="handleQuery">
@@ -39,7 +46,9 @@
       </el-form>
 
       <div class="mb-3">
-        <el-button v-hasPermi="['gz:gacha:prize:add']" type="primary" :icon="Plus" :disabled="!machineId" @click="handleAdd">{{ t('gzGachaPrize.add') }}</el-button>
+        <el-button v-hasPermi="['gz:gacha:prize:add']" type="primary" :icon="Plus" :disabled="!machineId" @click="handleAdd">{{
+          t('gzGachaPrize.add')
+        }}</el-button>
         <span v-if="!machineId" class="hint ml-2">{{ t('gzGachaPrize.noMachineHint') }}</span>
       </div>
 
@@ -74,13 +83,19 @@
         </el-table-column>
         <el-table-column :label="t('gzGachaPrize.enabled')" width="90" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.enabled === 1 ? 'success' : 'info'" size="small">{{ row.enabled === 1 ? t('gzGachaPrize.enabledYes') : t('gzGachaPrize.enabledNo') }}</el-tag>
+            <el-tag :type="row.enabled === 1 ? 'success' : 'info'" size="small">{{
+              row.enabled === 1 ? t('gzGachaPrize.enabledYes') : t('gzGachaPrize.enabledNo')
+            }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column :label="t('gzGachaPrize.colAction')" fixed="right" width="160" align="center">
           <template #default="{ row }">
-            <el-button v-hasPermi="['gz:gacha:prize:edit']" type="primary" link size="small" @click="handleEdit(row)">{{ t('gzGachaPrize.edit') }}</el-button>
-            <el-button v-hasPermi="['gz:gacha:prize:remove']" type="danger" link size="small" @click="handleDel(row)">{{ t('gzGachaPrize.del') }}</el-button>
+            <el-button v-hasPermi="['gz:gacha:prize:edit']" type="primary" link size="small" @click="handleEdit(row)">{{
+              t('gzGachaPrize.edit')
+            }}</el-button>
+            <el-button v-hasPermi="['gz:gacha:prize:remove']" type="danger" link size="small" @click="handleDel(row)">{{
+              t('gzGachaPrize.del')
+            }}</el-button>
           </template>
         </el-table-column>
         <template #empty><el-empty :description="t('gzGachaPrize.empty')" /></template>
@@ -123,7 +138,13 @@
           </el-col>
           <el-col :span="12">
             <el-form-item :label="t('gzGachaPrize.colStockRemain')">
-              <el-input-number v-model="form.stockRemain" :min="0" controls-position="right" style="width: 100%" :placeholder="t('gzGachaPrize.stockRemainPlaceholder')" />
+              <el-input-number
+                v-model="form.stockRemain"
+                :min="0"
+                controls-position="right"
+                style="width: 100%"
+                :placeholder="t('gzGachaPrize.stockRemainPlaceholder')"
+              />
               <div class="hint">{{ t('gzGachaPrize.stockRemainHint') }}</div>
             </el-form-item>
           </el-col>
@@ -131,12 +152,20 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item :label="t('gzGachaPrize.refValueYuan')">
-              <el-input-number v-model="form.refValueYuan" :min="0" :precision="2" :step="1" controls-position="right" style="width: 100%" :placeholder="t('gzGachaPrize.refValuePlaceholder')" />
+              <el-input-number
+                v-model="form.refValueYuan"
+                :min="0"
+                :precision="2"
+                :step="1"
+                controls-position="right"
+                style="width: 100%"
+                :placeholder="t('gzGachaPrize.refValuePlaceholder')"
+              />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item :label="t('gzGachaPrize.image')">
-              <el-input v-model="imageIdStr" :placeholder="t('gzGachaPrize.imagePlaceholder')" />
+              <GzImageUpload v-model="form.imageId" :usage-type="GZ_FILE_USAGE_TYPE.GACHA_PRIZE_IMAGE" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -171,6 +200,8 @@ import {
   type GzGachaPrizeVO,
   type GzGachaPrizeQuery
 } from '@/api/gz-gacha/prize';
+import { GZ_FILE_USAGE_TYPE } from '@/api/gz-common/file';
+import GzImageUpload from '@/components/GzImageUpload/index.vue';
 import { useNormalizedProbability } from '@/composables/useNormalizedProbability';
 
 const { t } = useI18n();
@@ -276,11 +307,6 @@ const form = reactive<{
   refValueYuan: undefined,
   enabled: 1,
   remark: ''
-});
-
-const imageIdStr = computed({
-  get: () => form.imageId ?? '',
-  set: (v: string) => (form.imageId = v.trim() === '' ? null : v.trim())
 });
 
 const formTitle = computed(() => (formMode.value === 'add' ? t('gzGachaPrize.addDialogTitle') : t('gzGachaPrize.editDialogTitle')));

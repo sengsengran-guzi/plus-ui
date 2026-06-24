@@ -8,15 +8,34 @@
         </div>
       </template>
 
-      <el-alert :title="t('gzGachaMachine.alertTitle')" type="info" :description="t('gzGachaMachine.alertDesc')" show-icon :closable="false" class="mb-3" />
+      <el-alert
+        :title="t('gzGachaMachine.alertTitle')"
+        type="info"
+        :description="t('gzGachaMachine.alertDesc')"
+        show-icon
+        :closable="false"
+        class="mb-3"
+      />
 
       <!-- 查询表单 -->
       <el-form :model="query" inline @submit.prevent="handleQuery">
         <el-form-item :label="t('gzGachaMachine.colName')">
-          <el-input v-model="query.name" :placeholder="t('gzGachaMachine.namePlaceholder')" clearable style="width: 200px" @keyup.enter="handleQuery" />
+          <el-input
+            v-model="query.name"
+            :placeholder="t('gzGachaMachine.namePlaceholder')"
+            clearable
+            style="width: 200px"
+            @keyup.enter="handleQuery"
+          />
         </el-form-item>
         <el-form-item :label="t('gzGachaMachine.ipTag')">
-          <el-input v-model="query.ipTag" :placeholder="t('gzGachaMachine.ipTagPlaceholder')" clearable style="width: 160px" @keyup.enter="handleQuery" />
+          <el-input
+            v-model="query.ipTag"
+            :placeholder="t('gzGachaMachine.ipTagPlaceholder')"
+            clearable
+            style="width: 160px"
+            @keyup.enter="handleQuery"
+          />
         </el-form-item>
         <el-form-item :label="t('gzGachaMachine.status')">
           <el-select v-model="query.status" :placeholder="t('gzGachaMachine.statusPlaceholder')" clearable style="width: 160px">
@@ -59,7 +78,9 @@
         </el-table-column>
         <el-table-column :label="t('gzGachaMachine.colAction')" fixed="right" width="320" align="center">
           <template #default="{ row }">
-            <el-button v-hasPermi="['gz:gacha:machine:edit']" type="primary" link size="small" @click="handleEdit(row)">{{ t('gzGachaMachine.edit') }}</el-button>
+            <el-button v-hasPermi="['gz:gacha:machine:edit']" type="primary" link size="small" @click="handleEdit(row)">{{
+              t('gzGachaMachine.edit')
+            }}</el-button>
             <el-button
               v-if="row.status === 'off_shelf' || row.status === 'auto_off'"
               v-hasPermi="['gz:gacha:machine:edit']"
@@ -70,11 +91,22 @@
             >
               {{ t('gzGachaMachine.onShelf') }}
             </el-button>
-            <el-button v-if="row.status === 'on_shelf'" v-hasPermi="['gz:gacha:machine:edit']" type="warning" link size="small" @click="handleChangeStatus(row, 'off_shelf')">
+            <el-button
+              v-if="row.status === 'on_shelf'"
+              v-hasPermi="['gz:gacha:machine:edit']"
+              type="warning"
+              link
+              size="small"
+              @click="handleChangeStatus(row, 'off_shelf')"
+            >
               {{ t('gzGachaMachine.offShelf') }}
             </el-button>
-            <el-button v-hasPermi="['gz:gacha:prize:list']" type="info" link size="small" @click="handleManagePrize(row)">{{ t('gzGachaMachine.managePrize') }}</el-button>
-            <el-button v-hasPermi="['gz:gacha:machine:remove']" type="danger" link size="small" @click="handleDel(row)">{{ t('gzGachaMachine.del') }}</el-button>
+            <el-button v-hasPermi="['gz:gacha:prize:list']" type="info" link size="small" @click="handleManagePrize(row)">{{
+              t('gzGachaMachine.managePrize')
+            }}</el-button>
+            <el-button v-hasPermi="['gz:gacha:machine:remove']" type="danger" link size="small" @click="handleDel(row)">{{
+              t('gzGachaMachine.del')
+            }}</el-button>
           </template>
         </el-table-column>
         <template #empty><el-empty :description="t('gzGachaMachine.empty')" /></template>
@@ -97,7 +129,15 @@
           </el-col>
           <el-col :span="12">
             <el-form-item :label="t('gzGachaMachine.colTenPackPrice')">
-              <el-input-number v-model="form.tenPackPriceYuan" :min="0" :precision="2" :step="1" controls-position="right" style="width: 100%" :placeholder="t('gzGachaMachine.tenPackPlaceholder')" />
+              <el-input-number
+                v-model="form.tenPackPriceYuan"
+                :min="0"
+                :precision="2"
+                :step="1"
+                controls-position="right"
+                style="width: 100%"
+                :placeholder="t('gzGachaMachine.tenPackPlaceholder')"
+              />
               <div class="hint">{{ t('gzGachaMachine.tenPackHint') }}</div>
             </el-form-item>
           </el-col>
@@ -110,19 +150,31 @@
           </el-col>
           <el-col :span="12">
             <el-form-item :label="t('gzGachaMachine.coverImage')">
-              <el-input v-model="coverImageIdStr" :placeholder="t('gzGachaMachine.coverImagePlaceholder')" />
+              <GzImageUpload v-model="form.coverImageId" :usage-type="GZ_FILE_USAGE_TYPE.GACHA_PRIZE_IMAGE" />
             </el-form-item>
           </el-col>
         </el-row>
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item :label="t('gzGachaMachine.onlineTime')">
-              <el-date-picker v-model="form.onlineTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" :placeholder="t('gzGachaMachine.onlineTimePlaceholder')" style="width: 100%" />
+              <el-date-picker
+                v-model="form.onlineTime"
+                type="datetime"
+                value-format="YYYY-MM-DD HH:mm:ss"
+                :placeholder="t('gzGachaMachine.onlineTimePlaceholder')"
+                style="width: 100%"
+              />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item :label="t('gzGachaMachine.offlineTime')">
-              <el-date-picker v-model="form.offlineTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" :placeholder="t('gzGachaMachine.offlineTimePlaceholder')" style="width: 100%" />
+              <el-date-picker
+                v-model="form.offlineTime"
+                type="datetime"
+                value-format="YYYY-MM-DD HH:mm:ss"
+                :placeholder="t('gzGachaMachine.offlineTimePlaceholder')"
+                style="width: 100%"
+              />
             </el-form-item>
           </el-col>
         </el-row>
@@ -154,6 +206,8 @@ import {
   type GzGachaMachineVO,
   type GzGachaMachineQuery
 } from '@/api/gz-gacha/machine';
+import { GZ_FILE_USAGE_TYPE } from '@/api/gz-common/file';
+import GzImageUpload from '@/components/GzImageUpload/index.vue';
 
 const { t } = useI18n();
 const router = useRouter();
@@ -231,11 +285,6 @@ const form = reactive<{
   singlePriceYuan: 0,
   tenPackPriceYuan: undefined,
   remark: ''
-});
-
-const coverImageIdStr = computed({
-  get: () => form.coverImageId ?? '',
-  set: (v: string) => (form.coverImageId = v.trim() === '' ? null : v.trim())
 });
 
 const formTitle = computed(() => (formMode.value === 'add' ? t('gzGachaMachine.addDialogTitle') : t('gzGachaMachine.editDialogTitle')));

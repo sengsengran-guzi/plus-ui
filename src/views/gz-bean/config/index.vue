@@ -17,6 +17,15 @@
         class="mb-3"
       />
 
+      <el-alert
+        :title="t('gzBeanConfig.windowAlertTitle')"
+        type="warning"
+        :description="t('gzBeanConfig.windowAlertDesc')"
+        show-icon
+        :closable="false"
+        class="mb-3"
+      />
+
       <!-- 门店选择 -->
       <el-form inline class="mb-2">
         <el-form-item :label="t('gzBeanConfig.store')">
@@ -241,7 +250,9 @@
               <el-time-picker
                 v-model="slotForm.startTime"
                 value-format="HH:mm:ss"
-                format="HH:mm"
+                format="HH:00"
+                :disabled-minutes="disabledNonZero"
+                :disabled-seconds="disabledNonZero"
                 :placeholder="t('gzBeanConfig.startTimePlaceholder')"
                 style="width: 100%"
               />
@@ -252,7 +263,9 @@
               <el-time-picker
                 v-model="slotForm.endTime"
                 value-format="HH:mm:ss"
-                format="HH:mm"
+                format="HH:00"
+                :disabled-minutes="disabledNonZero"
+                :disabled-seconds="disabledNonZero"
                 :placeholder="t('gzBeanConfig.endTimePlaceholder')"
                 style="width: 100%"
               />
@@ -340,10 +353,10 @@
               <el-input v-model="slot.slotName" :placeholder="t('gzBeanConfig.slotNamePlaceholder')" maxlength="32" />
             </el-col>
             <el-col :span="6">
-              <el-time-picker v-model="slot.startTime" value-format="HH:mm:ss" format="HH:mm" :placeholder="t('gzBeanConfig.startTimePlaceholder')" style="width: 100%" />
+              <el-time-picker v-model="slot.startTime" value-format="HH:mm:ss" format="HH:00" :disabled-minutes="disabledNonZero" :disabled-seconds="disabledNonZero" :placeholder="t('gzBeanConfig.startTimePlaceholder')" style="width: 100%" />
             </el-col>
             <el-col :span="6">
-              <el-time-picker v-model="slot.endTime" value-format="HH:mm:ss" format="HH:mm" :placeholder="t('gzBeanConfig.endTimePlaceholder')" style="width: 100%" />
+              <el-time-picker v-model="slot.endTime" value-format="HH:mm:ss" format="HH:00" :disabled-minutes="disabledNonZero" :disabled-seconds="disabledNonZero" :placeholder="t('gzBeanConfig.endTimePlaceholder')" style="width: 100%" />
             </el-col>
             <el-col :span="6">
               <el-button type="danger" link :icon="Delete" :disabled="slotBatchForm.slots.length <= 1" @click="removeBatchSlot(idx)">
@@ -489,6 +502,37 @@ const slotBatchRules = {
 };
 
 // ============ helpers ============
+/**
+ * 营业窗口必须整点（ADR-0011 / 契约 §A）：admin 配的 start/end 边界 minute/second 必须为 0，
+ * 系统才能按 1h 切格。el-time-picker 用 disabled-minutes/disabled-seconds 限制只能选整点，
+ * 提交前再用 isWholeHour 兜底校验（防 value-format 绕过）。
+ */
+function disabledNonZero(): number[] {
+  // 1..59 全禁，只放 0
+  return Array.from({ length: 59 }, (_, i) => i + 1);
+}
+
+/** "HH:mm:ss" 是否整点（mm==00 && ss==00） */
+function isWholeHour(time?: string | null): boolean {
+  if (!time) return false;
+  const parts = time.split(':');
+  if (parts.length < 2) return false;
+  const mm = parts[1];
+  const ss = parts[2] ?? '00';
+  return mm === '00' && ss === '00';
+}
+
+/** start < end 且都整点；不满足返回 i18n 错误文案，满足返回 null */
+function validateWindow(startTime?: string | null, endTime?: string | null): string | null {
+  if (!isWholeHour(startTime) || !isWholeHour(endTime)) {
+    return t('gzBeanConfig.ruleWindowNotWholeHour');
+  }
+  if (startTime! >= endTime!) {
+    return t('gzBeanConfig.ruleWindowStartBeforeEnd');
+  }
+  return null;
+}
+
 function weekdayList(weekdays: string): string[] {
   return weekdays ? weekdays.split(',').sort() : [];
 }
@@ -721,6 +765,12 @@ function resetSlotForm() {
 async function handleSlotSubmit() {
   if (!slotFormRef.value) return;
   await slotFormRef.value.validate();
+  // 营业窗口整点 + start<end 兜底校验
+  const winErr = validateWindow(slotForm.startTime, slotForm.endTime);
+  if (winErr) {
+    ElMessage.error(winErr);
+    return;
+  }
   submitting.value = true;
   try {
     const payload: GzBeanTimeSlotTemplateForm = {
@@ -809,10 +859,15 @@ function removeBatchSlot(idx: number) {
 async function handleSlotBatchSubmit() {
   if (!slotBatchRef.value) return;
   await slotBatchRef.value.validate();
-  // 校验每条 slot 都填了 start / end
+  // 校验每条 slot 都填了 start / end，且为整点营业窗口（start<end）
   for (const s of slotBatchForm.slots) {
     if (!s.startTime || !s.endTime) {
       ElMessage.error(t('gzBeanConfig.ruleBatchSlotIncomplete'));
+      return;
+    }
+    const winErr = validateWindow(s.startTime, s.endTime);
+    if (winErr) {
+      ElMessage.error(winErr);
       return;
     }
   }
