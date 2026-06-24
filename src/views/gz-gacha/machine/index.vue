@@ -76,7 +76,7 @@
             <el-tag :type="statusTagType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column :label="t('gzGachaMachine.colAction')" fixed="right" width="320" align="center">
+        <el-table-column :label="t('gzGachaMachine.colAction')" fixed="right" width="260" align="center">
           <template #default="{ row }">
             <el-button v-hasPermi="['gz:gacha:machine:edit']" type="primary" link size="small" @click="handleEdit(row)">{{
               t('gzGachaMachine.edit')
@@ -101,9 +101,6 @@
             >
               {{ t('gzGachaMachine.offShelf') }}
             </el-button>
-            <el-button v-hasPermi="['gz:gacha:prize:list']" type="info" link size="small" @click="handleManagePrize(row)">{{
-              t('gzGachaMachine.managePrize')
-            }}</el-button>
             <el-button v-hasPermi="['gz:gacha:machine:remove']" type="danger" link size="small" @click="handleDel(row)">{{
               t('gzGachaMachine.del')
             }}</el-button>
@@ -115,8 +112,8 @@
       <pagination v-show="total > 0" v-model:limit="query.pageSize" v-model:page="query.pageNum" :total="total" @pagination="loadList" />
     </el-card>
 
-    <!-- 新建 / 编辑弹窗 -->
-    <el-dialog v-model="formVisible" :title="formTitle" width="720px" top="6vh" @close="resetForm">
+    <!-- 新建 / 编辑弹窗（编辑态内嵌「挂载产品」区） -->
+    <el-dialog v-model="formVisible" :title="formTitle" width="760px" top="5vh" @close="resetForm">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="120px">
         <el-form-item :label="t('gzGachaMachine.colName')" prop="name">
           <el-input v-model="form.name" maxlength="128" show-word-limit />
@@ -182,9 +179,113 @@
           <el-input v-model="form.remark" type="textarea" :rows="2" maxlength="500" show-word-limit />
         </el-form-item>
       </el-form>
+
+      <!-- ===== 挂载产品（决定抽奖出哪些产品）：编辑态内嵌，即时保存 ===== -->
+      <el-divider content-position="left">{{ t('gzGachaMachine.prizeSection') }}</el-divider>
+      <div v-if="formMode === 'add'" class="hint mb-2">{{ t('gzGachaMachine.prizeAfterSaveHint') }}</div>
+      <template v-else>
+        <div class="mb-2 flex items-center">
+          <el-button v-hasPermi="['gz:gacha:prize:add']" type="primary" plain :icon="Plus" size="small" @click="openPrizeAdd">
+            {{ t('gzGachaMachine.addPrize') }}
+          </el-button>
+          <span class="hint" style="margin-left: 8px">{{ t('gzGachaMachine.prizeLiveHint') }}</span>
+        </div>
+        <el-table v-loading="prizeLoading" :data="prizeRows" border size="small">
+          <el-table-column :label="t('gzGachaPrize.colImage')" width="64" align="center">
+            <template #default="{ row }"><GzImageThumb :file-id="row.imageId" :size="40" /></template>
+          </el-table-column>
+          <el-table-column :label="t('gzGachaPrize.productCol')" prop="productName" min-width="120" show-overflow-tooltip />
+          <el-table-column :label="t('gzGachaPrize.rarity')" width="80" align="center">
+            <template #default="{ row }"><el-tag :type="rarityTagType(row.rarity)" size="small" effect="dark">{{ row.rarity }}</el-tag></template>
+          </el-table-column>
+          <el-table-column :label="t('gzGachaPrize.colWeight')" prop="weight" width="70" align="center" />
+          <el-table-column :label="t('gzGachaPrize.colStockRemain')" width="100" align="center">
+            <template #default="{ row }">{{ row.stockRemain }} / {{ row.stockInitial }}</template>
+          </el-table-column>
+          <el-table-column :label="t('gzGachaPrize.enabled')" width="80" align="center">
+            <template #default="{ row }">
+              <el-tag :type="row.enabled === 1 ? 'success' : 'info'" size="small">
+                {{ row.enabled === 1 ? t('gzGachaPrize.enabledYes') : t('gzGachaPrize.enabledNo') }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('gzGachaPrize.colAction')" width="120" align="center">
+            <template #default="{ row }">
+              <el-button v-hasPermi="['gz:gacha:prize:edit']" type="primary" link size="small" @click="openPrizeEdit(row)">{{
+                t('gzGachaPrize.edit')
+              }}</el-button>
+              <el-button v-hasPermi="['gz:gacha:prize:remove']" type="danger" link size="small" @click="delPrize(row)">{{
+                t('gzGachaPrize.del')
+              }}</el-button>
+            </template>
+          </el-table-column>
+          <template #empty><el-empty :description="t('gzGachaMachine.prizeEmpty')" :image-size="56" /></template>
+        </el-table>
+      </template>
+
       <template #footer>
         <el-button @click="formVisible = false">{{ t('gzGachaMachine.cancel') }}</el-button>
         <el-button type="primary" :loading="submitting" @click="handleSubmit">{{ t('gzGachaMachine.confirm') }}</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- ===== 挂载产品 子弹窗（add：选产品；edit：产品只读，改概率/库存） ===== -->
+    <el-dialog v-model="prizeFormVisible" :title="prizeFormTitle" width="520px" append-to-body @close="resetPrizeForm">
+      <el-form ref="prizeFormRef" :model="prizeForm" :rules="prizeRules" label-width="100px">
+        <el-form-item :label="t('gzGachaPrize.pickProduct')" prop="productId">
+          <el-select
+            v-if="prizeFormMode === 'add'"
+            v-model="prizeForm.productId"
+            filterable
+            :placeholder="t('gzGachaPrize.pickProductPlaceholder')"
+            style="width: 100%"
+          >
+            <el-option v-for="p in productOptions" :key="p.id" :label="p.name" :value="p.id" />
+          </el-select>
+          <el-input v-else :model-value="prizeForm.productName || ''" disabled />
+          <div class="hint">{{ t('gzGachaPrize.pickProductHint') }}</div>
+        </el-form-item>
+        <el-form-item :label="t('gzGachaPrize.rarity')" prop="rarity">
+          <el-select v-model="prizeForm.rarity" style="width: 100%">
+            <el-option v-for="r in rarityOptions" :key="r.value" :label="r.label" :value="r.value" />
+          </el-select>
+        </el-form-item>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item :label="t('gzGachaPrize.colWeight')" prop="weight">
+              <el-input-number v-model="prizeForm.weight" :min="0" controls-position="right" style="width: 100%" />
+              <div class="hint">{{ t('gzGachaPrize.weightHint') }}</div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item :label="t('gzGachaPrize.colStockInitial')" prop="stockInitial">
+              <el-input-number v-model="prizeForm.stockInitial" :min="0" controls-position="right" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item :label="t('gzGachaPrize.colStockRemain')">
+          <el-input-number
+            v-model="prizeForm.stockRemain"
+            :min="0"
+            controls-position="right"
+            style="width: 100%"
+            :placeholder="t('gzGachaPrize.stockRemainPlaceholder')"
+          />
+          <div class="hint">{{ t('gzGachaPrize.stockRemainHint') }}</div>
+        </el-form-item>
+        <el-form-item :label="t('gzGachaPrize.enabled')">
+          <el-switch
+            :model-value="prizeForm.enabled === 1"
+            :active-value="true"
+            :inactive-value="false"
+            @update:model-value="(v: boolean) => (prizeForm.enabled = v ? 1 : 0)"
+          />
+          <div class="hint">{{ t('gzGachaPrize.enabledSwitchHint') }}</div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="prizeFormVisible = false">{{ t('gzGachaPrize.cancel') }}</el-button>
+        <el-button type="primary" :loading="prizeSubmitting" @click="submitPrize">{{ t('gzGachaPrize.confirm') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -192,7 +293,6 @@
 
 <script setup lang="ts" name="GzGachaMachine">
 import { ref, reactive, computed } from 'vue';
-import { useRouter } from 'vue-router';
 import { Search, Refresh, Plus } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus';
 import { useI18n } from 'vue-i18n';
@@ -206,11 +306,20 @@ import {
   type GzGachaMachineVO,
   type GzGachaMachineQuery
 } from '@/api/gz-gacha/machine';
+import {
+  listGzGachaPrize,
+  addGzGachaPrize,
+  updateGzGachaPrize,
+  delGzGachaPrize,
+  type GzGachaPrizeVO,
+  type GzGachaPrizeForm
+} from '@/api/gz-gacha/prize';
+import { optionsGzGachaProduct, type GzGachaProductVO } from '@/api/gz-gacha/product';
 import { GZ_FILE_USAGE_TYPE } from '@/api/gz-common/file';
 import GzImageUpload from '@/components/GzImageUpload/index.vue';
+import GzImageThumb from '@/components/GzImageThumb/index.vue';
 
 const { t } = useI18n();
-const router = useRouter();
 
 const loading = ref(false);
 const submitting = ref(false);
@@ -235,6 +344,18 @@ function statusTagType(s: string): 'success' | 'info' | 'warning' {
 function centToYuan(cent?: number | null) {
   if (cent == null) return '-';
   return '¥' + (cent / 100).toFixed(2);
+}
+
+// 稀有度 SSR/SR/R/N（doc/11 §7.2 + 附录 A.10；与 gz_gacha_rarity 字典一致）
+const rarityOptions = [
+  { value: 'SSR', label: 'SSR' },
+  { value: 'SR', label: 'SR' },
+  { value: 'R', label: 'R' },
+  { value: 'N', label: 'N' }
+];
+function rarityTagType(r: string): 'danger' | 'warning' | 'primary' | 'info' {
+  const map: Record<string, 'danger' | 'warning' | 'primary' | 'info'> = { SSR: 'danger', SR: 'warning', R: 'primary', N: 'info' };
+  return map[r] || 'info';
 }
 
 // ---------------- 列表 ----------------
@@ -263,7 +384,7 @@ function handleReset() {
   loadList();
 }
 
-// ---------------- 新建 / 编辑 ----------------
+// ---------------- 机器 新建 / 编辑 ----------------
 const formVisible = ref(false);
 const formMode = ref<'add' | 'edit'>('add');
 const formRef = ref<FormInstance>();
@@ -297,6 +418,7 @@ const rules = {
 function handleAdd() {
   formMode.value = 'add';
   resetForm();
+  prizeRows.value = [];
   formVisible.value = true;
 }
 async function handleEdit(row: GzGachaMachineVO) {
@@ -314,6 +436,8 @@ async function handleEdit(row: GzGachaMachineVO) {
     form.offlineTime = d.offlineTime ?? null;
     form.remark = d.remark ?? '';
     formVisible.value = true;
+    // 内嵌「挂载产品」区：拉本机已挂产品 + 产品库下拉
+    await Promise.all([loadPrizes(d.id), loadProductOptions()]);
   } catch (e) {
     console.error('[gz-gacha-machine] detail failed', e);
     ElMessage.error(t('gzGachaMachine.detailFailed'));
@@ -371,7 +495,7 @@ async function handleSubmit() {
   });
 }
 
-// ---------------- 上下架 / 删除 / 管理奖品池 ----------------
+// ---------------- 上下架 / 删除 ----------------
 async function handleChangeStatus(row: GzGachaMachineVO, target: string) {
   const confirmKey = target === 'on_shelf' ? 'onShelfConfirm' : 'offShelfConfirm';
   await ElMessageBox.confirm(t(`gzGachaMachine.${confirmKey}`, { name: row.name }), t('gzGachaMachine.confirmTitle'), { type: 'warning' });
@@ -385,9 +509,144 @@ async function handleDel(row: GzGachaMachineVO) {
   ElMessage.success(t('gzGachaMachine.delSuccess'));
   loadList();
 }
-// 跳奖品池页（带 machineId + machineName query，AC 6）
-function handleManagePrize(row: GzGachaMachineVO) {
-  router.push({ path: '/gz-gacha/prize', query: { machineId: row.id, machineName: row.name } });
+
+// ---------------- 挂载产品（机器编辑弹框内嵌；即时保存，复用 prize API） ----------------
+const prizeLoading = ref(false);
+const prizeRows = ref<GzGachaPrizeVO[]>([]);
+const productOptions = ref<GzGachaProductVO[]>([]);
+
+const prizeFormVisible = ref(false);
+const prizeFormMode = ref<'add' | 'edit'>('add');
+const prizeFormRef = ref<FormInstance>();
+const prizeSubmitting = ref(false);
+const prizeForm = reactive<{
+  id?: string | null;
+  productId?: string | null;
+  productName?: string | null;
+  rarity: string;
+  weight: number;
+  stockInitial: number;
+  stockRemain?: number | null;
+  enabled: number;
+}>({
+  productId: null,
+  productName: null,
+  rarity: 'N',
+  weight: 1,
+  stockInitial: 1,
+  stockRemain: undefined,
+  enabled: 1
+});
+const prizeFormTitle = computed(() =>
+  prizeFormMode.value === 'add' ? t('gzGachaMachine.prizeAddTitle') : t('gzGachaMachine.prizeEditTitle')
+);
+const prizeRules = {
+  productId: [{ required: true, message: t('gzGachaPrize.ruleProductRequired'), trigger: 'change' }],
+  rarity: [{ required: true, message: t('gzGachaPrize.ruleRarityRequired'), trigger: 'change' }],
+  weight: [{ required: true, message: t('gzGachaPrize.ruleWeightRequired'), trigger: 'change' }],
+  stockInitial: [{ required: true, message: t('gzGachaPrize.ruleStockInitialRequired'), trigger: 'change' }]
+};
+
+async function loadPrizes(machineId: string) {
+  prizeLoading.value = true;
+  try {
+    const resp = await listGzGachaPrize({ machineId, pageNum: 1, pageSize: 100 });
+    prizeRows.value = (resp as any).rows || [];
+  } catch (e) {
+    console.error('[gz-gacha-machine] load prizes failed', e);
+    ElMessage.error(t('gzGachaPrize.loadFailed'));
+  } finally {
+    prizeLoading.value = false;
+  }
+}
+async function loadProductOptions() {
+  try {
+    const resp = await optionsGzGachaProduct();
+    productOptions.value = ((resp as any).data || []) as GzGachaProductVO[];
+  } catch (e) {
+    console.error('[gz-gacha-machine] load product options failed', e);
+    ElMessage.error(t('gzGachaPrize.productOptionsFailed'));
+  }
+}
+
+function resetPrizeForm() {
+  prizeFormRef.value?.resetFields();
+  prizeForm.id = null;
+  prizeForm.productId = null;
+  prizeForm.productName = null;
+  prizeForm.rarity = 'N';
+  prizeForm.weight = 1;
+  prizeForm.stockInitial = 1;
+  prizeForm.stockRemain = undefined;
+  prizeForm.enabled = 1;
+}
+function openPrizeAdd() {
+  prizeFormMode.value = 'add';
+  resetPrizeForm();
+  prizeFormVisible.value = true;
+}
+function openPrizeEdit(row: GzGachaPrizeVO) {
+  prizeFormMode.value = 'edit';
+  prizeForm.id = row.id;
+  prizeForm.productId = row.productId;
+  prizeForm.productName = row.productName ?? null;
+  prizeForm.rarity = row.rarity;
+  prizeForm.weight = row.weight ?? 0;
+  prizeForm.stockInitial = row.stockInitial ?? 0;
+  prizeForm.stockRemain = row.stockRemain ?? undefined;
+  prizeForm.enabled = row.enabled ?? 1;
+  prizeFormVisible.value = true;
+}
+
+async function submitPrize() {
+  await prizeFormRef.value?.validate(async (valid) => {
+    if (!valid) return;
+    if (prizeForm.stockRemain != null && prizeForm.stockRemain > prizeForm.stockInitial) {
+      ElMessage.warning(t('gzGachaPrize.ruleRemainExceedsInitial'));
+      return;
+    }
+    if (!form.id) return;
+    prizeSubmitting.value = true;
+    try {
+      const payload: GzGachaPrizeForm = {
+        id: prizeForm.id ?? null,
+        // 新增必传归属机器 + 产品；编辑后端忽略
+        machineId: prizeFormMode.value === 'add' ? form.id : undefined,
+        productId: prizeFormMode.value === 'add' ? prizeForm.productId : undefined,
+        rarity: prizeForm.rarity,
+        weight: prizeForm.weight,
+        stockInitial: prizeForm.stockInitial,
+        stockRemain: prizeForm.stockRemain === undefined || prizeForm.stockRemain === null ? null : prizeForm.stockRemain,
+        enabled: prizeForm.enabled
+      };
+      if (prizeFormMode.value === 'add') {
+        await addGzGachaPrize(payload);
+        ElMessage.success(t('gzGachaPrize.addSuccess'));
+      } else {
+        await updateGzGachaPrize(payload);
+        ElMessage.success(t('gzGachaPrize.editSuccess'));
+      }
+      prizeFormVisible.value = false;
+      await loadPrizes(form.id);
+      loadList(); // 刷新列表 prizeCount
+    } catch (e) {
+      console.error('[gz-gacha-machine] prize submit failed', e);
+    } finally {
+      prizeSubmitting.value = false;
+    }
+  });
+}
+
+async function delPrize(row: GzGachaPrizeVO) {
+  try {
+    await ElMessageBox.confirm(t('gzGachaPrize.delConfirm', { name: row.productName }), t('gzGachaPrize.confirmTitle'), { type: 'warning' });
+    await delGzGachaPrize(row.id);
+    ElMessage.success(t('gzGachaPrize.delSuccess'));
+    if (form.id) await loadPrizes(form.id);
+    loadList();
+  } catch (e: any) {
+    if (e !== 'cancel') console.error('[gz-gacha-machine] prize del failed', e);
+  }
 }
 
 loadList();
