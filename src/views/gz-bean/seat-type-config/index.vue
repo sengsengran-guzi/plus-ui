@@ -4,7 +4,7 @@
       <template #header>
         <div class="flex items-center justify-between">
           <span class="text-base font-medium">{{ t('gzBeanSeatTypeConfig.title') }}</span>
-          <span class="ticket-tag">GZ-BEAN-013</span>
+          <span class="ticket-tag">GZ-BEAN-020</span>
         </div>
       </template>
 
@@ -21,12 +21,7 @@
       <el-form inline class="mb-2">
         <el-form-item :label="t('gzBeanSeatTypeConfig.store')">
           <el-select v-model="currentStoreId" style="width: 240px" @change="onStoreChange">
-            <el-option
-              v-for="s in storeOptions"
-              :key="s.id"
-              :label="`${s.storeNo} · ${s.name}`"
-              :value="s.id"
-            />
+            <el-option v-for="s in storeOptions" :key="s.id" :label="`${s.storeNo} · ${s.name}`" :value="s.id" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -43,17 +38,21 @@
       </el-form>
 
       <el-table v-loading="listLoading" :data="list" border stripe size="small">
-        <el-table-column :label="t('gzBeanSeatTypeConfig.colId')" prop="id" width="80" align="center" />
-        <el-table-column :label="t('gzBeanSeatTypeConfig.colSeatType')" width="140">
+        <el-table-column :label="t('gzBeanSeatTypeConfig.colId')" prop="id" width="70" align="center" />
+        <el-table-column :label="t('gzBeanSeatTypeConfig.colName')" prop="name" min-width="140" show-overflow-tooltip />
+        <el-table-column :label="t('gzBeanSeatTypeConfig.colBookMode')" width="130" align="center">
           <template #default="{ row }">
-            <dict-tag :options="gz_bean_seat_type" :value="row.seatType" />
+            <el-tag :type="row.bookMode === 'seat' ? 'warning' : 'success'" size="small">
+              {{ row.bookMode === 'seat' ? t('gzBeanSeatTypeConfig.bookModeSeat') : t('gzBeanSeatTypeConfig.bookModeWhole') }}
+            </el-tag>
           </template>
         </el-table-column>
-        <el-table-column :label="t('gzBeanSeatTypeConfig.colQuantity')" prop="quantity" width="120" align="center" />
+        <el-table-column :label="t('gzBeanSeatTypeConfig.colCapacity')" prop="capacity" width="100" align="center" />
+        <el-table-column :label="t('gzBeanSeatTypeConfig.colQuantity')" prop="quantity" width="90" align="center" />
         <el-table-column :label="t('gzBeanSeatTypeConfig.colPriceYuan')" width="120" align="right">
           <template #default="{ row }">¥{{ formatYuan(row.priceCent) }}</template>
         </el-table-column>
-        <el-table-column :label="t('gzBeanSeatTypeConfig.colEnabled')" width="100" align="center">
+        <el-table-column :label="t('gzBeanSeatTypeConfig.colEnabled')" width="80" align="center">
           <template #default="{ row }">
             <el-switch
               v-hasPermi="['gz:bean:seatTypeConfig:edit']"
@@ -64,10 +63,12 @@
             />
           </template>
         </el-table-column>
-        <el-table-column :label="t('gzBeanSeatTypeConfig.colSortNo')" prop="sortNo" width="80" align="center" />
-        <el-table-column :label="t('gzBeanSeatTypeConfig.colCreateTime')" prop="createTime" width="170" />
-        <el-table-column :label="t('gzBeanSeatTypeConfig.colAction')" fixed="right" width="150" align="center">
+        <el-table-column :label="t('gzBeanSeatTypeConfig.colSortNo')" prop="sortNo" width="70" align="center" />
+        <el-table-column :label="t('gzBeanSeatTypeConfig.colAction')" fixed="right" width="200" align="center">
           <template #default="{ row }">
+            <el-button v-hasPermi="['gz:bean:seatTypeConfig:edit']" type="primary" link size="small" @click="handleWeekdayPrice(row)">
+              {{ t('gzBeanSeatTypeConfig.weekdayPrice') }}
+            </el-button>
             <el-button v-hasPermi="['gz:bean:seatTypeConfig:edit']" type="success" link size="small" @click="handleEdit(row)">
               {{ t('gzBeanSeatTypeConfig.edit') }}
             </el-button>
@@ -84,16 +85,20 @@
 
     <!-- 新增 / 编辑弹窗 -->
     <el-dialog v-model="formVisible" :title="formTitle" width="520px" @close="resetForm">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="110px">
-        <el-form-item :label="t('gzBeanSeatTypeConfig.colSeatType')" prop="seatType">
-          <el-select
-            v-model="form.seatType"
-            :disabled="formMode === 'edit'"
-            :placeholder="t('gzBeanSeatTypeConfig.seatTypePlaceholder')"
-            style="width: 100%"
-          >
-            <el-option v-for="d in gz_bean_seat_type" :key="d.value" :label="d.label" :value="d.value" />
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="120px">
+        <el-form-item :label="t('gzBeanSeatTypeConfig.colName')" prop="name">
+          <el-input v-model="form.name" maxlength="32" :placeholder="t('gzBeanSeatTypeConfig.namePlaceholder')" />
+          <span class="form-hint">{{ t('gzBeanSeatTypeConfig.nameHint') }}</span>
+        </el-form-item>
+        <el-form-item :label="t('gzBeanSeatTypeConfig.colBookMode')" prop="bookMode">
+          <el-select v-model="form.bookMode" :placeholder="t('gzBeanSeatTypeConfig.bookModePlaceholder')" style="width: 100%">
+            <el-option :label="t('gzBeanSeatTypeConfig.bookModeWhole')" value="whole" />
+            <el-option :label="t('gzBeanSeatTypeConfig.bookModeSeat')" value="seat" />
           </el-select>
+        </el-form-item>
+        <el-form-item :label="t('gzBeanSeatTypeConfig.colCapacity')" prop="capacity">
+          <el-input-number v-model="form.capacity" :min="1" :max="99" />
+          <span class="form-hint">{{ t('gzBeanSeatTypeConfig.capacityHint') }}</span>
         </el-form-item>
         <el-form-item :label="t('gzBeanSeatTypeConfig.colQuantity')" prop="quantity">
           <el-input-number v-model="form.quantity" :min="0" :max="9999" />
@@ -123,11 +128,39 @@
         <el-button type="primary" :loading="submitting" @click="handleSubmit">{{ t('gzBeanSeatTypeConfig.confirm') }}</el-button>
       </template>
     </el-dialog>
+
+    <!-- 按星期价格弹窗 -->
+    <el-dialog v-model="wpVisible" :title="t('gzBeanSeatTypeConfig.weekdayPriceTitle', { name: wpName })" width="460px">
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        class="mb-3"
+        :description="t('gzBeanSeatTypeConfig.weekdayPriceDesc', { base: formatYuan(wpBaseCent) })"
+      />
+      <el-form label-width="80px">
+        <el-form-item v-for="d in weekdays" :key="d" :label="t('gzBeanSeatTypeConfig.week' + d)">
+          <el-input-number
+            v-model="wpPrices[d]"
+            :min="0"
+            :precision="2"
+            :step="1"
+            :placeholder="t('gzBeanSeatTypeConfig.weekdayBase') + ' ¥' + formatYuan(wpBaseCent)"
+            controls-position="right"
+            style="width: 180px"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="wpVisible = false">{{ t('gzBeanSeatTypeConfig.cancel') }}</el-button>
+        <el-button type="primary" :loading="wpSubmitting" @click="handleWeekdayPriceSave">{{ t('gzBeanSeatTypeConfig.confirm') }}</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts" name="GzBeanSeatTypeConfig">
-import { ref, reactive, computed, getCurrentInstance, type ComponentInternalInstance, toRefs, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
 import { Plus, Refresh } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus';
 import { useI18n } from 'vue-i18n';
@@ -138,14 +171,13 @@ import {
   updateGzBeanSeatTypeConfig,
   toggleGzBeanSeatTypeConfigEnabled,
   delGzBeanSeatTypeConfig,
+  getGzBeanWeekdayPrices,
+  saveGzBeanWeekdayPrices,
   type GzBeanSeatTypeConfigVO,
   type GzBeanSeatTypeConfigForm
 } from '@/api/gz-bean/seatTypeConfig';
 
 const { t } = useI18n();
-const { proxy } = getCurrentInstance() as ComponentInternalInstance;
-// 座位类型字典（single/double/quad），GZ-BEAN-013 seed
-const { gz_bean_seat_type } = toRefs<any>(proxy?.useDict('gz_bean_seat_type'));
 
 const pageLoading = ref(false);
 const listLoading = ref(false);
@@ -159,7 +191,9 @@ const list = ref<GzBeanSeatTypeConfigVO[]>([]);
 interface FormState {
   id: number | null;
   storeId: number | null;
-  seatType: string;
+  name: string;
+  bookMode: string;
+  capacity: number;
   quantity: number;
   priceYuan: number;
   enabled: number;
@@ -172,7 +206,9 @@ const formRef = ref<FormInstance>();
 const form = reactive<FormState>({
   id: null,
   storeId: null,
-  seatType: '',
+  name: '',
+  bookMode: 'whole',
+  capacity: 1,
   quantity: 0,
   priceYuan: 0,
   enabled: 1,
@@ -183,21 +219,26 @@ const formTitle = computed(() =>
   formMode.value === 'add' ? t('gzBeanSeatTypeConfig.addTitle') : t('gzBeanSeatTypeConfig.editTitle')
 );
 const rules = {
-  seatType: [{ required: true, message: t('gzBeanSeatTypeConfig.ruleSeatTypeRequired'), trigger: 'change' }],
+  name: [{ required: true, message: t('gzBeanSeatTypeConfig.ruleNameRequired'), trigger: 'blur' }],
+  bookMode: [{ required: true, message: t('gzBeanSeatTypeConfig.ruleBookModeRequired'), trigger: 'change' }],
+  capacity: [{ required: true, message: t('gzBeanSeatTypeConfig.ruleCapacityRequired'), trigger: 'change' }],
   quantity: [{ required: true, message: t('gzBeanSeatTypeConfig.ruleQuantityRequired'), trigger: 'change' }],
   priceYuan: [{ required: true, message: t('gzBeanSeatTypeConfig.rulePriceRequired'), trigger: 'change' }]
 };
 
+// ============ 按星期价格弹窗 ============
+const weekdays = [1, 2, 3, 4, 5, 6, 7];
+const wpVisible = ref(false);
+const wpSubmitting = ref(false);
+const wpConfigId = ref<number | null>(null);
+const wpName = ref('');
+const wpBaseCent = ref(0);
+// weekday(1-7) → 元价（undefined = 用基础价）
+const wpPrices = reactive<Record<number, number | undefined>>({});
+
 // ============ helpers ============
 function formatYuan(priceCent: number): string {
   return ((priceCent || 0) / 100).toFixed(2);
-}
-
-// 座位类型 value → 中文 label（前端字典翻译，后端不回填 seatTypeName）
-function seatTypeLabel(value: string): string {
-  const opts: any[] = (gz_bean_seat_type.value as any) || [];
-  const hit = opts.find((d) => d.value === value);
-  return hit ? hit.label : value;
 }
 
 // ============ 门店选项 ============
@@ -246,7 +287,9 @@ function handleAdd() {
   Object.assign(form, {
     id: null,
     storeId: currentStoreId.value,
-    seatType: '',
+    name: '',
+    bookMode: 'whole',
+    capacity: 1,
     quantity: 0,
     priceYuan: 0,
     enabled: 1,
@@ -261,7 +304,9 @@ function handleEdit(row: GzBeanSeatTypeConfigVO) {
   Object.assign(form, {
     id: row.id,
     storeId: row.storeId,
-    seatType: row.seatType,
+    name: row.name,
+    bookMode: row.bookMode,
+    capacity: row.capacity,
     quantity: row.quantity,
     priceYuan: (row.priceCent || 0) / 100,
     enabled: row.enabled,
@@ -283,7 +328,9 @@ async function handleSubmit() {
     const payload: GzBeanSeatTypeConfigForm = {
       id: form.id,
       storeId: form.storeId,
-      seatType: form.seatType,
+      name: form.name,
+      bookMode: form.bookMode,
+      capacity: form.capacity,
       quantity: form.quantity,
       priceCent: Math.round((form.priceYuan || 0) * 100),
       enabled: form.enabled,
@@ -320,7 +367,7 @@ async function handleToggleEnabled(row: GzBeanSeatTypeConfigVO, enabled: number)
 async function handleDel(row: GzBeanSeatTypeConfigVO) {
   try {
     await ElMessageBox.confirm(
-      t('gzBeanSeatTypeConfig.delConfirm', { type: seatTypeLabel(row.seatType) }),
+      t('gzBeanSeatTypeConfig.delConfirm', { type: row.name }),
       t('gzBeanSeatTypeConfig.confirmTitle'),
       { type: 'warning' }
     );
@@ -329,6 +376,41 @@ async function handleDel(row: GzBeanSeatTypeConfigVO) {
     await loadList();
   } catch (e: any) {
     if (e !== 'cancel') console.error('[gz-bean-seat-type-config] del failed', e);
+  }
+}
+
+// ============ 按星期价格 ============
+async function handleWeekdayPrice(row: GzBeanSeatTypeConfigVO) {
+  wpConfigId.value = row.id;
+  wpName.value = row.name;
+  wpBaseCent.value = row.priceCent || 0;
+  weekdays.forEach((d) => (wpPrices[d] = undefined));
+  wpVisible.value = true;
+  try {
+    const resp = await getGzBeanWeekdayPrices(row.id);
+    const r = resp as any;
+    const rows = (r.data || r || []) as Array<{ weekday: number; priceCent: number }>;
+    rows.forEach((p) => (wpPrices[p.weekday] = (p.priceCent || 0) / 100));
+  } catch (e) {
+    console.error('[gz-bean-seat-type-config] load weekday prices failed', e);
+    ElMessage.error(t('gzBeanSeatTypeConfig.loadFailed'));
+  }
+}
+
+async function handleWeekdayPriceSave() {
+  if (!wpConfigId.value) return;
+  wpSubmitting.value = true;
+  try {
+    const items = weekdays
+      .filter((d) => wpPrices[d] !== undefined && wpPrices[d] !== null)
+      .map((d) => ({ weekday: d, priceCent: Math.round((wpPrices[d] as number) * 100) }));
+    await saveGzBeanWeekdayPrices(wpConfigId.value, { items });
+    ElMessage.success(t('gzBeanSeatTypeConfig.weekdayPriceSaveSuccess'));
+    wpVisible.value = false;
+  } catch (e) {
+    console.error('[gz-bean-seat-type-config] save weekday prices failed', e);
+  } finally {
+    wpSubmitting.value = false;
   }
 }
 

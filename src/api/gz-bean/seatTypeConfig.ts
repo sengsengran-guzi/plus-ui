@@ -9,15 +9,21 @@
 import request from '@/utils/request';
 import { AxiosPromise } from 'axios';
 
-/** 座位类型配额 VO（与 GzBeanSeatTypeConfigVO.java 对齐） */
+/** 座位类型配额 VO（与 GzBeanSeatTypeConfigVO.java 对齐；ADR-0014 去字典 + 双模式） */
 export interface GzBeanSeatTypeConfigVO {
   /** 主键 */
   id: number;
   /** 门店 id */
   storeId: number;
-  /** 座位类型字典值（single / double / quad；中文名前端 dict-tag(gz_bean_seat_type) 翻译，后端不回填） */
+  /** 门店内稳定 code（去字典后仅展示；admin 不编辑，新行后端自动生成 st<id>） */
   seatType: string;
-  /** 数量（配额上限 = 余量基础） */
+  /** 自定义显示名（取代字典 label） */
+  name: string;
+  /** 订法 whole=整桌 / seat=按座 */
+  bookMode: string;
+  /** 每桌座位数 */
+  capacity: number;
+  /** 数量（每格物理单位数 = 桌/单位数） */
   quantity: number;
   /** 单价（分） */
   priceCent: number;
@@ -33,16 +39,33 @@ export interface GzBeanSeatTypeConfigVO {
   remark?: string | null;
 }
 
-/** 新增 / 编辑 BO（与 GzBeanSeatTypeConfigBo.java 对齐） */
+/** 新增 / 编辑 BO（与 GzBeanSeatTypeConfigBo.java 对齐；seatType code 由后端生成不传） */
 export interface GzBeanSeatTypeConfigForm {
   id?: number | null;
   storeId?: number | null;
-  seatType?: string;
+  name?: string;
+  bookMode?: string;
+  capacity?: number | null;
   quantity?: number | null;
   priceCent?: number | null;
   enabled?: number;
   sortNo?: number;
   remark?: string | null;
+}
+
+/** 按星期价格覆盖 VO（与 GzBeanSeatTypePriceVO.java 对齐） */
+export interface GzBeanSeatTypePriceVO {
+  /** ISO 8601 星期 1=Mon..7=Sun */
+  weekday: number;
+  /** 覆盖单价（分） */
+  priceCent: number;
+  /** 覆盖单价（元） */
+  priceYuan: number | string;
+}
+
+/** 按星期价格覆盖保存 BO（与 GzBeanSeatTypePriceBo.java 对齐；覆盖式：未传 weekday 删除回退基础价） */
+export interface GzBeanSeatTypePriceForm {
+  items: Array<{ weekday: number; priceCent: number }>;
 }
 
 /** 查询参数（与 GzBeanSeatTypeConfigQueryBo.java 对齐） */
@@ -113,5 +136,22 @@ export function delGzBeanSeatTypeConfig(ids: Array<number | string> | number | s
   return request({
     url: `/system/gz/bean/seatTypeConfig/${idStr}`,
     method: 'delete'
+  });
+}
+
+/** GET /system/gz/bean/seatTypeConfig/{id}/weekday-prices — 读某类型按星期覆盖价（未覆盖星期不返回，回退基础价） */
+export function getGzBeanWeekdayPrices(id: number | string): AxiosPromise<GzBeanSeatTypePriceVO[]> {
+  return request({
+    url: `/system/gz/bean/seatTypeConfig/${id}/weekday-prices`,
+    method: 'get'
+  });
+}
+
+/** PUT /system/gz/bean/seatTypeConfig/{id}/weekday-prices — 覆盖式保存按星期价格（未传 weekday 删除回退基础价） */
+export function saveGzBeanWeekdayPrices(id: number | string, data: GzBeanSeatTypePriceForm) {
+  return request({
+    url: `/system/gz/bean/seatTypeConfig/${id}/weekday-prices`,
+    method: 'put',
+    data
   });
 }
