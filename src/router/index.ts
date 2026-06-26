@@ -68,10 +68,12 @@ export const constantRoutes: RouteRecordRaw[] = [
     redirect: '/index',
     children: [
       {
+        // 数据看板作为后台首页（Kevin 走查）：/index 直挂看板页，去掉空白「首页」。
+        // 对应 sys_menu「数据看板」(300) 已隐藏，避免侧边栏重复。
         path: '/index',
-        component: () => import('@/views/index.vue'),
+        component: () => import('@/views/dashboard/index.vue'),
         name: 'Index',
-        meta: { title: '首页', icon: 'dashboard', affix: true }
+        meta: { title: '数据看板', icon: 'dashboard', affix: true }
       }
     ]
   },

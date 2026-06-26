@@ -21,19 +21,19 @@ const isWhiteList = (path: string) => {
  * GZ-ADMIN-004 AC 6：按角色不同默认跳转
  *
  * 触发条件：用户首次登录 / 直接访问 `/` 或 `/index`（无 query redirect）。
- * 规则（任务卡 AC 6）：
- *   - owner（甲方负责人）→ 管理员账号管理（/system/user）
- *   - staff（门店运营） → C 端用户列表（/gz-c-user/list）
- *   - superadmin（ruoyi 兜底）→ /index（不动）
- *   - 其他无识别角色 → /index（保留 ruoyi 默认）
+ * 规则（任务卡 AC 6 + Kevin 走查：数据看板作为后台首页）：
+ *   - owner（甲方负责人）→ 数据看板（/index，已直挂 dashboard/index）
+ *   - staff（门店运营） → C 端用户列表（/gz-common-config/gz-c-user，扁平化后新路径）
+ *   - superadmin（ruoyi 兜底）→ /index（数据看板）
+ *   - 其他无识别角色 → /index（数据看板）
  *
  * 注：跳转目标必须是用户实际有权限的路径 — staff 没有 /system/user 权限，跳过去会
- *   401；owner 已批量授权 5000-5999 + ruoyi 系统菜单（继承 superadmin 风格），可以
- *   去 /system/user。
+ *   401；owner 已批量授权 5000-5999 + ruoyi 系统菜单（继承 superadmin 风格）+ 看板
+ *   gz:dashboard:view，可以落数据看板首页。
  */
 const DEFAULT_PATHS: Record<string, string> = {
-  owner: '/system/user',
-  staff: '/gz-c-user/list'
+  owner: '/index',
+  staff: '/gz-common-config/gz-c-user'
 };
 
 const resolveDefaultPath = (roles: string[]): string | null => {
