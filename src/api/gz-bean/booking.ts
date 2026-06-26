@@ -34,6 +34,8 @@ export interface GzBeanBookingVO {
   mobileSnapshot?: string;
   /** 状态 pending / used / cancelled / no_show */
   status: string;
+  /** 支付状态 unpaid / paying / paid / pay_closed / refunded（dict gz_bean_pay_status） */
+  payStatus?: string;
   /** 核销时间 */
   verifyTime?: string | null;
   /** 核销操作人 */
@@ -62,6 +64,8 @@ export interface GzBeanBookingQuery {
   sessDateTo?: string;
   /** 状态多选 */
   statusList?: string[];
+  /** 支付状态多选 */
+  payStatusList?: string[];
   /** 业务码模糊 */
   bookingNo?: string;
   /** 手机号模糊 */
