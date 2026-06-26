@@ -32,33 +32,15 @@
             style="width: 260px"
           />
         </el-form-item>
-        <el-form-item :label="t('gzBeanBooking.payStatus')">
-          <el-select
-            v-model="query.payStatusList"
-            multiple
-            collapse-tags
-            collapse-tags-tooltip
-            :placeholder="t('gzBeanBooking.payStatusPlaceholder')"
-            clearable
-            style="width: 220px"
-          >
-            <el-option
-              v-for="d in gz_bean_pay_status"
-              :key="d.value"
-              :label="d.label"
-              :value="d.value"
-            />
-          </el-select>
-        </el-form-item>
         <el-form-item :label="t('gzBeanBooking.status')">
           <el-select
-            v-model="query.statusList"
+            v-model="query.bizStatusList"
             multiple
             collapse-tags
             collapse-tags-tooltip
             :placeholder="t('gzBeanBooking.statusPlaceholder')"
             clearable
-            style="width: 220px"
+            style="width: 240px"
           >
             <el-option
               v-for="d in gz_bean_booking_status"
@@ -115,14 +97,9 @@
           </template>
         </el-table-column>
         <el-table-column :label="t('gzBeanBooking.colSeat')" prop="seatNoSnapshot" width="90" align="center" />
-        <el-table-column :label="t('gzBeanBooking.colPayStatus')" prop="payStatus" width="100" align="center">
+        <el-table-column :label="t('gzBeanBooking.colStatus')" prop="bizStatus" width="100" align="center">
           <template #default="{ row }">
-            <dict-tag :options="gz_bean_pay_status" :value="row.payStatus" />
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('gzBeanBooking.colStatus')" prop="status" width="100" align="center">
-          <template #default="{ row }">
-            <dict-tag :options="gz_bean_booking_status" :value="row.status" />
+            <dict-tag :options="gz_bean_booking_status" :value="row.bizStatus" />
           </template>
         </el-table-column>
         <el-table-column :label="t('gzBeanBooking.colCreateTime')" prop="createTime" width="170" />
@@ -133,7 +110,7 @@
               type="success"
               link
               size="small"
-              :disabled="row.status !== 'pending'"
+              :disabled="row.bizStatus !== 'paid'"
               @click="handleManualVerify(row)"
             >
               {{ t('gzBeanBooking.verify') }}
@@ -207,11 +184,8 @@
         <el-descriptions-item :label="t('gzBeanBooking.colSession')" :span="2">
           {{ detail.sessDate }} {{ shortTime(detail.slotStart) }}-{{ shortTime(detail.slotEnd) }}
         </el-descriptions-item>
-        <el-descriptions-item :label="t('gzBeanBooking.colPayStatus')">
-          <dict-tag :options="gz_bean_pay_status" :value="detail.payStatus" />
-        </el-descriptions-item>
         <el-descriptions-item :label="t('gzBeanBooking.colStatus')">
-          <dict-tag :options="gz_bean_booking_status" :value="detail.status" />
+          <dict-tag :options="gz_bean_booking_status" :value="detail.bizStatus" />
         </el-descriptions-item>
         <el-descriptions-item :label="t('gzBeanBooking.verifyTime')">{{ detail.verifyTime || '-' }}</el-descriptions-item>
         <el-descriptions-item :label="t('gzBeanBooking.verifiedBy')">{{ detail.verifiedBy || '-' }}</el-descriptions-item>
@@ -241,7 +215,7 @@ import { getGzBeanStoreOptions, type GzBeanStoreVO } from '@/api/gz-bean/store';
 
 const { t } = useI18n();
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
-const { gz_bean_booking_status, gz_bean_pay_status } = toRefs<any>(proxy?.useDict('gz_bean_booking_status', 'gz_bean_pay_status'));
+const { gz_bean_booking_status } = toRefs<any>(proxy?.useDict('gz_bean_booking_status'));
 
 const loading = ref<boolean>(false);
 const rows = ref<GzBeanBookingVO[]>([]);
@@ -258,8 +232,7 @@ const dateRange = ref<[string, string] | null>(null);
 const query = reactive<GzBeanBookingQuery>({
   pageNum: 1,
   pageSize: 10,
-  statusList: [],
-  payStatusList: []
+  bizStatusList: []
 });
 
 const detailVisible = ref<boolean>(false);
@@ -313,8 +286,7 @@ function handleQuery() {
 
 function handleReset() {
   query.storeId = undefined;
-  query.statusList = [];
-  query.payStatusList = [];
+  query.bizStatusList = [];
   query.mobile = undefined;
   query.bookingNo = undefined;
   dateRange.value = null;

@@ -32,10 +32,12 @@ export interface GzBeanBookingVO {
   slotEnd: string;
   /** 手机号 snapshot */
   mobileSnapshot?: string;
-  /** 状态 pending / used / cancelled / no_show */
+  /** 业务状态 pending / used / cancelled / no_show（内部，核销/取消逻辑用） */
   status: string;
-  /** 支付状态 unpaid / paying / paid / pay_closed / refunded（dict gz_bean_pay_status） */
+  /** 支付状态 unpaid / paying / paid / pay_closed / refunded（内部） */
   payStatus?: string;
+  /** 单一综合状态（后端派生，dict gz_bean_booking_status 翻译）：paid/used/cancelled/refunded/no_show/unpaid/closed */
+  bizStatus?: string;
   /** 核销时间 */
   verifyTime?: string | null;
   /** 核销操作人 */
@@ -62,10 +64,8 @@ export interface GzBeanBookingQuery {
   sessDateFrom?: string;
   /** 预约日期止 yyyy-MM-dd */
   sessDateTo?: string;
-  /** 状态多选 */
-  statusList?: string[];
-  /** 支付状态多选 */
-  payStatusList?: string[];
+  /** 综合状态多选（bizStatus：paid/used/cancelled/refunded/no_show/unpaid/closed；空=默认只看真实订单） */
+  bizStatusList?: string[];
   /** 业务码模糊 */
   bookingNo?: string;
   /** 手机号模糊 */
