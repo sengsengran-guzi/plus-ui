@@ -29,6 +29,8 @@ export interface GzBeanStoreVO {
   phone?: string | null;
   /** 营业时间字符串 */
   businessHours?: string | null;
+  /** 门店图片 file id（gz_file_object.id，可空；GzImageThumb / 回显用） */
+  imageId?: number | string | null;
   /** 状态 open / closed / maintenance */
   status: string;
   /** 可预约最大提前天数 */
@@ -50,6 +52,8 @@ export interface GzBeanStoreForm {
   latitude?: number | string | null;
   phone?: string | null;
   businessHours?: string | null;
+  /** 门店图片 file id（GzImageUpload v-model，字符串；后端 BO Long，Jackson 兼容数字串） */
+  imageId?: string | null;
   status?: string;
   maxAdvanceDays?: number | null;
   remark?: string | null;

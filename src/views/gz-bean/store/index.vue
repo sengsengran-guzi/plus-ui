@@ -101,6 +101,11 @@
         <el-table-column type="selection" width="50" align="center" />
         <el-table-column :label="t('gzBeanStore.colId')" prop="id" width="80" align="center" />
         <el-table-column :label="t('gzBeanStore.colStoreNo')" prop="storeNo" width="130" />
+        <el-table-column :label="t('gzBeanStore.colImage')" width="80" align="center">
+          <template #default="{ row }">
+            <GzImageThumb :file-id="row.imageId" :size="44" />
+          </template>
+        </el-table-column>
         <el-table-column :label="t('gzBeanStore.colName')" prop="name" min-width="160" show-overflow-tooltip />
         <el-table-column :label="t('gzBeanStore.colType')" prop="type" width="100" align="center">
           <template #default="{ row }">
@@ -211,6 +216,10 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-form-item :label="t('gzBeanStore.image')">
+          <GzImageUpload v-model="form.imageId" :usage-type="GZ_FILE_USAGE_TYPE.STORE_IMAGE" />
+          <div class="form-tip">{{ t('gzBeanStore.imageHint') }}</div>
+        </el-form-item>
         <el-form-item :label="t('gzBeanStore.remark')">
           <el-input v-model="form.remark" type="textarea" :rows="2" maxlength="500" show-word-limit />
         </el-form-item>
@@ -242,6 +251,10 @@
         <el-descriptions-item :label="t('gzBeanStore.colCreateTime')">{{ detail.createTime }}</el-descriptions-item>
         <el-descriptions-item :label="t('gzBeanStore.longitude')">{{ detail.longitude ?? '-' }}</el-descriptions-item>
         <el-descriptions-item :label="t('gzBeanStore.latitude')">{{ detail.latitude ?? '-' }}</el-descriptions-item>
+        <el-descriptions-item :label="t('gzBeanStore.colImage')" :span="2">
+          <GzImageThumb v-if="detail.imageId" :file-id="detail.imageId" :size="96" />
+          <span v-else>-</span>
+        </el-descriptions-item>
         <el-descriptions-item :label="t('gzBeanStore.remark')" :span="2">{{ detail.remark || '-' }}</el-descriptions-item>
       </el-descriptions>
     </el-drawer>
@@ -263,6 +276,9 @@ import {
   type GzBeanStoreForm,
   type GzBeanStoreQuery
 } from '@/api/gz-bean/store';
+import { GZ_FILE_USAGE_TYPE } from '@/api/gz-common/file';
+import GzImageUpload from '@/components/GzImageUpload/index.vue';
+import GzImageThumb from '@/components/GzImageThumb/index.vue';
 
 const { t } = useI18n();
 
@@ -343,8 +359,8 @@ function handleSelectionChange(selected: GzBeanStoreVO[]) {
 async function handleDetail(row: GzBeanStoreVO) {
   try {
     const resp = await getGzBeanStore(row.id);
-    // 同 loadList：ruoyi request.ts 已解包，无需 .data
-    detail.value = resp as any;
+    // 单对象 GET 返回 R<VO>：request.ts 解包到 body {code,msg,data}，门店在 .data（列表是 TableDataInfo 的 rows 在顶层，故不同）
+    detail.value = (resp as any).data;
     detailVisible.value = true;
   } catch (e) {
     console.error('[gz-bean-store] detail failed', e);
@@ -363,6 +379,7 @@ function resetForm() {
     latitude: null,
     phone: '',
     businessHours: '',
+    imageId: null,
     status: 'open',
     maxAdvanceDays: 14,
     remark: ''
@@ -383,8 +400,8 @@ async function handleEdit(row: GzBeanStoreVO) {
   formMode.value = 'edit';
   try {
     const resp = await getGzBeanStore(row.id);
-    // 同 loadList：ruoyi request.ts 已解包，无需 .data
-    const d = resp as any;
+    // 单对象 GET 返回 R<VO>：request.ts 解包到 body {code,msg,data}，门店在 .data（列表是 TableDataInfo 的 rows 在顶层，故不同）
+    const d = (resp as any).data;
     Object.assign(form, {
       id: d.id,
       storeNo: d.storeNo,
@@ -393,6 +410,8 @@ async function handleEdit(row: GzBeanStoreVO) {
       address: d.address,
       phone: d.phone,
       businessHours: d.businessHours,
+      // GzImageUpload v-model 是字符串 fileId；VO imageId 为数字 → String() 归一（空保持 null）
+      imageId: d.imageId !== null && d.imageId !== undefined ? String(d.imageId) : null,
       status: d.status,
       maxAdvanceDays: d.maxAdvanceDays,
       remark: d.remark
@@ -514,5 +533,11 @@ loadList();
   color: var(--el-color-primary);
   border-radius: 4px;
   font-size: 12px;
+}
+.form-tip {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--el-text-color-secondary);
 }
 </style>
