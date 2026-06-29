@@ -129,31 +129,77 @@
       </template>
     </el-dialog>
 
-    <!-- 按星期价格弹窗 -->
-    <el-dialog v-model="wpVisible" :title="t('gzBeanSeatTypeConfig.weekdayPriceTitle', { name: wpName })" width="460px">
-      <el-alert
-        type="info"
-        :closable="false"
-        show-icon
-        class="mb-3"
-        :description="t('gzBeanSeatTypeConfig.weekdayPriceDesc', { base: formatYuan(wpBaseCent) })"
-      />
-      <el-form label-width="80px">
-        <el-form-item v-for="d in weekdays" :key="d" :label="t('gzBeanSeatTypeConfig.week' + d)">
-          <el-input-number
-            v-model="wpPrices[d]"
-            :min="0"
-            :precision="2"
-            :step="1"
-            :placeholder="t('gzBeanSeatTypeConfig.weekdayBase') + ' ¥' + formatYuan(wpBaseCent)"
-            controls-position="right"
-            style="width: 180px"
+    <!-- 星期 × 1h 格价格网格弹窗 -->
+    <el-dialog
+      v-model="wpVisible"
+      :title="t('gzBeanSeatTypeConfig.weekdayPriceTitle', { name: wpName })"
+      width="80%"
+      top="6vh"
+    >
+      <el-alert type="info" :closable="false" show-icon class="mb-3">
+        <template #default>
+          <div>{{ t('gzBeanSeatTypeConfig.gridDescBase', { base: formatYuan(wpBaseCent) }) }}</div>
+          <div class="grid-rule-hint">{{ t('gzBeanSeatTypeConfig.gridDescRule') }}</div>
+        </template>
+      </el-alert>
+
+      <div v-loading="wpLoading">
+        <el-empty v-if="hourSlots.length === 0" :description="t('gzBeanSeatTypeConfig.gridNoSlot')" />
+        <el-table v-else :data="gridRows" border size="small" class="wp-grid">
+          <el-table-column
+            :label="t('gzBeanSeatTypeConfig.gridColWeekday')"
+            prop="weekdayLabel"
+            width="84"
+            align="center"
+            fixed="left"
           />
-        </el-form-item>
-      </el-form>
+          <!-- 整天默认列（slotStart = null） -->
+          <el-table-column :label="t('gzBeanSeatTypeConfig.gridColAllDay')" width="130" align="center">
+            <template #default="{ row }">
+              <el-input-number
+                v-model="row.allDay"
+                :min="0"
+                :precision="2"
+                :step="1"
+                :controls="false"
+                size="small"
+                :placeholder="formatYuan(wpBaseCent)"
+                class="wp-cell"
+              />
+            </template>
+          </el-table-column>
+          <!-- 各 1h 格列（slotStart = HH:00:00） -->
+          <el-table-column
+            v-for="h in hourSlots"
+            :key="h"
+            :label="hourLabel(h)"
+            width="106"
+            align="center"
+          >
+            <template #default="{ row }">
+              <el-input-number
+                v-model="row.hours[h]"
+                :min="0"
+                :precision="2"
+                :step="1"
+                :controls="false"
+                size="small"
+                :placeholder="placeholderForCell(row)"
+                class="wp-cell"
+              />
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+
       <template #footer>
         <el-button @click="wpVisible = false">{{ t('gzBeanSeatTypeConfig.cancel') }}</el-button>
-        <el-button type="primary" :loading="wpSubmitting" @click="handleWeekdayPriceSave">{{ t('gzBeanSeatTypeConfig.confirm') }}</el-button>
+        <el-button
+          type="primary"
+          :loading="wpSubmitting"
+          :disabled="hourSlots.length === 0"
+          @click="handleWeekdayPriceSave"
+        >{{ t('gzBeanSeatTypeConfig.confirm') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -174,8 +220,11 @@ import {
   getGzBeanWeekdayPrices,
   saveGzBeanWeekdayPrices,
   type GzBeanSeatTypeConfigVO,
-  type GzBeanSeatTypeConfigForm
+  type GzBeanSeatTypeConfigForm,
+  type GzBeanSeatTypePriceVO,
+  type GzBeanSeatTypePriceForm
 } from '@/api/gz-bean/seatTypeConfig';
+import { listGzBeanSlotByStore, type GzBeanTimeSlotTemplateVO } from '@/api/gz-bean/slot';
 
 const { t } = useI18n();
 
@@ -226,19 +275,76 @@ const rules = {
   priceYuan: [{ required: true, message: t('gzBeanSeatTypeConfig.rulePriceRequired'), trigger: 'change' }]
 };
 
-// ============ 按星期价格弹窗 ============
+// ============ 星期 × 1h 格价格网格弹窗 ============
 const weekdays = [1, 2, 3, 4, 5, 6, 7];
 const wpVisible = ref(false);
+const wpLoading = ref(false);
 const wpSubmitting = ref(false);
 const wpConfigId = ref<number | null>(null);
 const wpName = ref('');
 const wpBaseCent = ref(0);
-// weekday(1-7) → 元价（undefined = 用基础价）
-const wpPrices = reactive<Record<number, number | undefined>>({});
+
+/** 该门店营业 1h 格的起整点小时集合（0-23），从启用时段模板按 1h 切推导 */
+const hourSlots = ref<number[]>([]);
+
+/** 网格一行 = 一个星期：allDay = 整天默认价（元，slotStart=null）；hours[h] = 该 1h 格覆盖价（元） */
+interface GridRow {
+  weekday: number;
+  weekdayLabel: string;
+  /** 整天默认价（元）；undefined/null = 未配（回退基础价） */
+  allDay: number | undefined;
+  /** 小时(0-23) → 该 1h 格覆盖价（元）；undefined/null = 未配（回退整天默认 → 基础价） */
+  hours: Record<number, number | undefined>;
+}
+const gridRows = ref<GridRow[]>([]);
 
 // ============ helpers ============
 function formatYuan(priceCent: number): string {
   return ((priceCent || 0) / 100).toFixed(2);
+}
+
+/** "HH:mm:ss" / "HH:mm" → 小时整数（0-23）；非法返回 null */
+function parseHour(time: string | null | undefined): number | null {
+  if (!time) return null;
+  const m = /^(\d{1,2}):/.exec(time);
+  if (!m) return null;
+  const h = Number(m[1]);
+  return Number.isInteger(h) && h >= 0 && h <= 23 ? h : null;
+}
+
+/** 列头：小时格标签，如 10 → "10:00" */
+function hourLabel(h: number): string {
+  return `${String(h).padStart(2, '0')}:00`;
+}
+
+/**
+ * 从门店启用时段模板推导营业 1h 格起整点小时集合。
+ * 对每个启用模板 [startTime, endTime) 按 1h 切：起整点 floor(start) .. 末格起整点 ceil(end)-1。
+ * 多模板取并集、去重、升序。无模板时返回空集合（弹窗提示先配时段）。
+ */
+function deriveHourSlots(slots: GzBeanTimeSlotTemplateVO[]): number[] {
+  const set = new Set<number>();
+  slots.forEach((s) => {
+    if (s.enabled !== 1) return;
+    const start = parseHour(s.startTime);
+    const endH = parseHour(s.endTime);
+    if (start === null || endH === null) return;
+    // endTime 含分钟（如 22:30）则末格起点为 22；整点（22:00）则末格起点为 21
+    const endMin = /^\d{1,2}:(\d{2})/.exec(s.endTime || '')?.[1] ?? '00';
+    const lastSlotStart = Number(endMin) > 0 ? endH : endH - 1;
+    for (let h = start; h <= lastSlotStart; h++) {
+      if (h >= 0 && h <= 23) set.add(h);
+    }
+  });
+  return Array.from(set).sort((a, b) => a - b);
+}
+
+/** 单元格 placeholder：该行已配整天默认 → 显「默认 ¥X」；否则显「基础 ¥X」 */
+function placeholderForCell(row: GridRow): string {
+  if (row.allDay !== undefined && row.allDay !== null) {
+    return t('gzBeanSeatTypeConfig.gridPhDefault', { v: row.allDay.toFixed(2) });
+  }
+  return t('gzBeanSeatTypeConfig.gridPhBase', { v: formatYuan(wpBaseCent.value) });
 }
 
 // ============ 门店选项 ============
@@ -379,21 +485,63 @@ async function handleDel(row: GzBeanSeatTypeConfigVO) {
   }
 }
 
-// ============ 按星期价格 ============
+// ============ 星期 × 1h 格价格网格 ============
+/** 按当前 hourSlots + 已配覆盖价构建 7 行网格 */
+function buildGridRows(priceRows: GzBeanSeatTypePriceVO[]): GridRow[] {
+  // 索引：weekday → { allDay, hours }
+  const byWeekday = new Map<number, { allDay?: number; hours: Record<number, number | undefined> }>();
+  weekdays.forEach((d) => byWeekday.set(d, { allDay: undefined, hours: {} }));
+  priceRows.forEach((p) => {
+    const bucket = byWeekday.get(p.weekday);
+    if (!bucket) return;
+    const yuan = (p.priceCent || 0) / 100;
+    const h = parseHour(p.slotStart);
+    if (h === null) {
+      bucket.allDay = yuan; // slotStart=null → 整天默认价
+    } else {
+      bucket.hours[h] = yuan; // slotStart=HH:00:00 → 该 1h 格覆盖价
+    }
+  });
+  return weekdays.map((d) => {
+    const bucket = byWeekday.get(d)!;
+    const hours: Record<number, number | undefined> = {};
+    hourSlots.value.forEach((h) => (hours[h] = bucket.hours[h]));
+    return {
+      weekday: d,
+      weekdayLabel: t('gzBeanSeatTypeConfig.week' + d),
+      allDay: bucket.allDay,
+      hours
+    };
+  });
+}
+
 async function handleWeekdayPrice(row: GzBeanSeatTypeConfigVO) {
   wpConfigId.value = row.id;
   wpName.value = row.name;
   wpBaseCent.value = row.priceCent || 0;
-  weekdays.forEach((d) => (wpPrices[d] = undefined));
+  hourSlots.value = [];
+  gridRows.value = [];
   wpVisible.value = true;
+  wpLoading.value = true;
   try {
-    const resp = await getGzBeanWeekdayPrices(row.id);
-    const r = resp as any;
-    const rows = (r.data || r || []) as Array<{ weekday: number; priceCent: number }>;
-    rows.forEach((p) => (wpPrices[p.weekday] = (p.priceCent || 0) / 100));
+    // 并行取门店营业时段（推 1h 格列）+ 已配覆盖价
+    const storeId = row.storeId ?? currentStoreId.value;
+    const [slotResp, priceResp] = await Promise.all([
+      storeId ? listGzBeanSlotByStore(storeId) : Promise.resolve(null),
+      getGzBeanWeekdayPrices(row.id)
+    ]);
+    const slotR = slotResp as any;
+    const slots = (slotR?.data || slotR || []) as GzBeanTimeSlotTemplateVO[];
+    hourSlots.value = deriveHourSlots(slots);
+
+    const priceR = priceResp as any;
+    const priceRows = (priceR.data || priceR || []) as GzBeanSeatTypePriceVO[];
+    gridRows.value = buildGridRows(priceRows);
   } catch (e) {
-    console.error('[gz-bean-seat-type-config] load weekday prices failed', e);
+    console.error('[gz-bean-seat-type-config] load weekday/hour prices failed', e);
     ElMessage.error(t('gzBeanSeatTypeConfig.loadFailed'));
+  } finally {
+    wpLoading.value = false;
   }
 }
 
@@ -401,14 +549,25 @@ async function handleWeekdayPriceSave() {
   if (!wpConfigId.value) return;
   wpSubmitting.value = true;
   try {
-    const items = weekdays
-      .filter((d) => wpPrices[d] !== undefined && wpPrices[d] !== null)
-      .map((d) => ({ weekday: d, priceCent: Math.round((wpPrices[d] as number) * 100) }));
+    const items: GzBeanSeatTypePriceForm['items'] = [];
+    gridRows.value.forEach((row) => {
+      // 整天默认价行（slotStart=null）
+      if (row.allDay !== undefined && row.allDay !== null) {
+        items.push({ weekday: row.weekday, slotStart: null, priceCent: Math.round(row.allDay * 100) });
+      }
+      // 各 1h 格覆盖价行（slotStart=HH:00:00）
+      hourSlots.value.forEach((h) => {
+        const v = row.hours[h];
+        if (v !== undefined && v !== null) {
+          items.push({ weekday: row.weekday, slotStart: `${String(h).padStart(2, '0')}:00:00`, priceCent: Math.round(v * 100) });
+        }
+      });
+    });
     await saveGzBeanWeekdayPrices(wpConfigId.value, { items });
     ElMessage.success(t('gzBeanSeatTypeConfig.weekdayPriceSaveSuccess'));
     wpVisible.value = false;
   } catch (e) {
-    console.error('[gz-bean-seat-type-config] save weekday prices failed', e);
+    console.error('[gz-bean-seat-type-config] save weekday/hour prices failed', e);
   } finally {
     wpSubmitting.value = false;
   }
@@ -431,5 +590,20 @@ onMounted(() => {
   margin-left: 8px;
   color: #909399;
   font-size: 12px;
+}
+.grid-rule-hint {
+  margin-top: 4px;
+  color: #909399;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.wp-grid {
+  width: 100%;
+}
+.wp-cell {
+  width: 100%;
+}
+.wp-cell :deep(.el-input__inner) {
+  text-align: right;
 }
 </style>

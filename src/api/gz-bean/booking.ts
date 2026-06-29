@@ -22,8 +22,10 @@ export interface GzBeanBookingVO {
   storeId: string;
   /** 座位 id（string 化） */
   seatId: string;
-  /** 座位号 snapshot */
+  /** 具体座位号 snapshot（ADR-0015 影院选座，下单时锁定的座位编号） */
   seatNoSnapshot: string;
+  /** 桌型名 snapshot（config.name；列表/详情与座位号并列展示） */
+  seatTypeSnapshot?: string | null;
   /** 预约日期 yyyy-MM-dd */
   sessDate: string;
   /** 时段开始 HH:mm:ss */

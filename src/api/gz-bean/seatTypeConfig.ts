@@ -53,19 +53,28 @@ export interface GzBeanSeatTypeConfigForm {
   remark?: string | null;
 }
 
-/** 按星期价格覆盖 VO（与 GzBeanSeatTypePriceVO.java 对齐） */
+/**
+ * 按星期 × 1h 格价格覆盖 VO（与 GzBeanSeatTypePriceVO.java 对齐；ADR-0015 §3.1）。
+ * slotStart=null → 该星期整天默认价；slotStart="HH:00:00" → 该星期该 1h 格覆盖价。
+ */
 export interface GzBeanSeatTypePriceVO {
   /** ISO 8601 星期 1=Mon..7=Sun */
   weekday: number;
+  /** 该 1h 格起整点 "HH:mm:ss"；null = 该星期整天默认价 */
+  slotStart: string | null;
   /** 覆盖单价（分） */
   priceCent: number;
   /** 覆盖单价（元） */
   priceYuan: number | string;
 }
 
-/** 按星期价格覆盖保存 BO（与 GzBeanSeatTypePriceBo.java 对齐；覆盖式：未传 weekday 删除回退基础价） */
+/**
+ * 按星期 × 1h 格价格覆盖保存 BO（与 GzBeanSeatTypePriceBo.java 对齐；ADR-0015 §3.1）。
+ * 覆盖式：未传的「星期 × 格」删除回退默认 / 基础价。
+ * slotStart=null → 整天默认价行；slotStart="HH:00:00" → 该 1h 格覆盖价行。
+ */
 export interface GzBeanSeatTypePriceForm {
-  items: Array<{ weekday: number; priceCent: number }>;
+  items: Array<{ weekday: number; slotStart: string | null; priceCent: number }>;
 }
 
 /** 查询参数（与 GzBeanSeatTypeConfigQueryBo.java 对齐） */
@@ -139,7 +148,11 @@ export function delGzBeanSeatTypeConfig(ids: Array<number | string> | number | s
   });
 }
 
-/** GET /system/gz/bean/seatTypeConfig/{id}/weekday-prices — 读某类型按星期覆盖价（未覆盖星期不返回，回退基础价） */
+/**
+ * GET /system/gz/bean/seatTypeConfig/{id}/weekday-prices — 读某桌型「星期 × 1h 格」覆盖价。
+ * 返回行 {weekday, slotStart, priceCent, priceYuan}：slotStart=null 表整天默认价，"HH:00:00" 表该 1h 格覆盖价。
+ * 未覆盖的「星期 × 格」不返回（下单 3 级回退：格价 → 整天默认 → 基础价）。
+ */
 export function getGzBeanWeekdayPrices(id: number | string): AxiosPromise<GzBeanSeatTypePriceVO[]> {
   return request({
     url: `/system/gz/bean/seatTypeConfig/${id}/weekday-prices`,
@@ -147,7 +160,7 @@ export function getGzBeanWeekdayPrices(id: number | string): AxiosPromise<GzBean
   });
 }
 
-/** PUT /system/gz/bean/seatTypeConfig/{id}/weekday-prices — 覆盖式保存按星期价格（未传 weekday 删除回退基础价） */
+/** PUT /system/gz/bean/seatTypeConfig/{id}/weekday-prices — 覆盖式保存「星期 × 1h 格」价格（未传的删除回退默认 / 基础价） */
 export function saveGzBeanWeekdayPrices(id: number | string, data: GzBeanSeatTypePriceForm) {
   return request({
     url: `/system/gz/bean/seatTypeConfig/${id}/weekday-prices`,

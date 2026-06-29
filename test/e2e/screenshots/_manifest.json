@@ -1,1 +1,14 @@
-[]
+[
+  {
+    "n": "13-bean-booking",
+    "p": "/gz-bean/booking",
+    "t": "拼豆-预约管理",
+    "ok": false,
+    "url": "http://localhost:8090/gz-bean/booking",
+    "isLogin": false,
+    "rows": 0,
+    "shot": "13-bean-booking.png",
+    "dialogShot": "",
+    "err": ""
+  }
+]

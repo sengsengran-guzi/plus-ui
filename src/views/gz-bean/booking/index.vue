@@ -11,13 +11,7 @@
       <!-- 查询表单 -->
       <el-form :model="query" inline @submit.prevent="handleQuery">
         <el-form-item :label="t('gzBeanBooking.store')">
-          <el-select
-            v-model="query.storeId"
-            :placeholder="t('gzBeanBooking.storePlaceholder')"
-            clearable
-            filterable
-            style="width: 200px"
-          >
+          <el-select v-model="query.storeId" :placeholder="t('gzBeanBooking.storePlaceholder')" clearable filterable style="width: 200px">
             <el-option v-for="s in storeOptions" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
         </el-form-item>
@@ -42,12 +36,7 @@
             clearable
             style="width: 240px"
           >
-            <el-option
-              v-for="d in gz_bean_booking_status"
-              :key="d.value"
-              :label="d.label"
-              :value="d.value"
-            />
+            <el-option v-for="d in gz_bean_booking_status" :key="d.value" :label="d.label" :value="d.value" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('gzBeanBooking.mobile')">
@@ -77,13 +66,7 @@
       </el-row>
 
       <!-- 数据表格 -->
-      <el-table
-        v-loading="loading"
-        :data="rows"
-        border
-        stripe
-        size="small"
-      >
+      <el-table v-loading="loading" :data="rows" border stripe size="small">
         <el-table-column :label="t('gzBeanBooking.colBookingNo')" prop="bookingNo" width="170" />
         <el-table-column :label="t('gzBeanBooking.colStore')" prop="storeName" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">{{ row.storeName || '-' }}</template>
@@ -92,11 +75,14 @@
           <template #default="{ row }">{{ row.mobileSnapshot || '-' }}</template>
         </el-table-column>
         <el-table-column :label="t('gzBeanBooking.colSession')" min-width="200">
+          <template #default="{ row }"> {{ row.sessDate }} {{ shortTime(row.slotStart) }}-{{ shortTime(row.slotEnd) }} </template>
+        </el-table-column>
+        <el-table-column :label="t('gzBeanBooking.colSeat')" width="150" align="center">
           <template #default="{ row }">
-            {{ row.sessDate }} {{ shortTime(row.slotStart) }}-{{ shortTime(row.slotEnd) }}
+            <span class="seat-no">{{ row.seatNoSnapshot || '-' }}</span>
+            <span v-if="row.seatTypeSnapshot" class="seat-type">{{ row.seatTypeSnapshot }}</span>
           </template>
         </el-table-column>
-        <el-table-column :label="t('gzBeanBooking.colSeat')" prop="seatNoSnapshot" width="90" align="center" />
         <el-table-column :label="t('gzBeanBooking.colStatus')" prop="bizStatus" width="100" align="center">
           <template #default="{ row }">
             <dict-tag :options="gz_bean_booking_status" :value="row.bizStatus" />
@@ -126,35 +112,17 @@
       </el-table>
 
       <!-- 分页 -->
-      <pagination
-        v-show="total > 0"
-        v-model:limit="query.pageSize"
-        v-model:page="query.pageNum"
-        :total="total"
-        @pagination="loadList"
-      />
+      <pagination v-show="total > 0" v-model:limit="query.pageSize" v-model:page="query.pageNum" :total="total" @pagination="loadList" />
     </el-card>
 
     <!-- 扫码核销 dialog（PC 端上传 QR 截图，不调摄像头） -->
     <el-dialog v-model="scanVisible" :title="t('gzBeanBooking.scanDialogTitle')" width="460px" @close="resetScan">
-      <el-alert
-        :title="t('gzBeanBooking.scanTip')"
-        type="info"
-        show-icon
-        :closable="false"
-        class="mb-3"
-      />
+      <el-alert :title="t('gzBeanBooking.scanTip')" type="info" show-icon :closable="false" class="mb-3" />
       <div class="scan-upload">
         <el-button type="primary" :icon="Upload" :loading="scanDecoding" @click="triggerFile">
           {{ t('gzBeanBooking.scanUpload') }}
         </el-button>
-        <input
-          ref="fileInput"
-          type="file"
-          accept="image/*"
-          style="display: none"
-          @change="onFileChange"
-        />
+        <input ref="fileInput" type="file" accept="image/*" style="display: none" @change="onFileChange" />
         <div v-if="scanFileName" class="scan-filename">{{ scanFileName }}</div>
       </div>
       <div v-if="scanPayloadPreview" class="scan-payload">
@@ -163,12 +131,7 @@
       </div>
       <template #footer>
         <el-button @click="scanVisible = false">{{ t('gzBeanBooking.cancel') }}</el-button>
-        <el-button
-          type="success"
-          :loading="scanVerifying"
-          :disabled="!scanPayload"
-          @click="submitScanVerify"
-        >
+        <el-button type="success" :loading="scanVerifying" :disabled="!scanPayload" @click="submitScanVerify">
           {{ t('gzBeanBooking.confirmVerify') }}
         </el-button>
       </template>
@@ -180,7 +143,10 @@
         <el-descriptions-item :label="t('gzBeanBooking.colBookingNo')" :span="2">{{ detail.bookingNo }}</el-descriptions-item>
         <el-descriptions-item :label="t('gzBeanBooking.colStore')" :span="2">{{ detail.storeName || '-' }}</el-descriptions-item>
         <el-descriptions-item :label="t('gzBeanBooking.colMobile')">{{ detail.mobileSnapshot || '-' }}</el-descriptions-item>
-        <el-descriptions-item :label="t('gzBeanBooking.colSeat')">{{ detail.seatNoSnapshot }}</el-descriptions-item>
+        <el-descriptions-item :label="t('gzBeanBooking.colSeat')">
+          {{ detail.seatNoSnapshot || '-' }}
+          <span v-if="detail.seatTypeSnapshot" class="seat-type-inline">（{{ detail.seatTypeSnapshot }}）</span>
+        </el-descriptions-item>
         <el-descriptions-item :label="t('gzBeanBooking.colSession')" :span="2">
           {{ detail.sessDate }} {{ shortTime(detail.slotStart) }}-{{ shortTime(detail.slotEnd) }}
         </el-descriptions-item>
@@ -306,11 +272,11 @@ async function handleDetail(row: GzBeanBookingVO) {
 
 /** 手动核销：二次确认 → 调 /{id}/verify */
 async function handleManualVerify(row: GzBeanBookingVO) {
-  const ok = await ElMessageBox.confirm(
-    t('gzBeanBooking.verifyConfirm', { no: row.bookingNo }),
-    t('gzBeanBooking.verifyConfirmTitle'),
-    { confirmButtonText: t('gzBeanBooking.confirmVerify'), cancelButtonText: t('gzBeanBooking.cancel'), type: 'warning' }
-  ).catch(() => false);
+  const ok = await ElMessageBox.confirm(t('gzBeanBooking.verifyConfirm', { no: row.bookingNo }), t('gzBeanBooking.verifyConfirmTitle'), {
+    confirmButtonText: t('gzBeanBooking.confirmVerify'),
+    cancelButtonText: t('gzBeanBooking.cancel'),
+    type: 'warning'
+  }).catch(() => false);
   if (!ok) return;
   try {
     await verifyGzBeanBookingManual(row.id);
@@ -435,6 +401,19 @@ loadList();
   color: var(--el-color-primary);
   border-radius: 4px;
   font-size: 12px;
+}
+.seat-no {
+  font-weight: 600;
+}
+.seat-type {
+  display: block;
+  margin-top: 2px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+.seat-type-inline {
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
 }
 .scan-upload {
   display: flex;
