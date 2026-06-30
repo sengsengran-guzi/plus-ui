@@ -258,9 +258,9 @@ function hourLabel(h: number): string {
   return `${String(h).padStart(2, '0')}:00`;
 }
 
-/** 整点小时 → "HH:00:00" 提交值 */
+/** 整点小时 → "HH:00" 提交值（后端 @JsonFormat(pattern="HH:mm") 期望 HH:mm，不可带秒） */
 function hourToTime(h: number): string {
-  return `${String(h).padStart(2, '0')}:00:00`;
+  return `${String(h).padStart(2, '0')}:00`;
 }
 
 /** "HH:mm:ss" → 整点小时（0-24）；非法返回 null */
