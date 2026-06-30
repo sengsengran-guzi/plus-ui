@@ -25,14 +25,9 @@
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button
-            v-hasPermi="['gz:bean:seatTypeConfig:add']"
-            type="primary"
-            plain
-            :icon="Plus"
-            :disabled="!currentStoreId"
-            @click="handleAdd"
-          >{{ t('gzBeanSeatTypeConfig.add') }}</el-button>
+          <el-button v-hasPermi="['gz:bean:seatTypeConfig:add']" type="primary" plain :icon="Plus" :disabled="!currentStoreId" @click="handleAdd">{{
+            t('gzBeanSeatTypeConfig.add')
+          }}</el-button>
           <el-button :icon="Refresh" @click="loadList">{{ t('gzBeanSeatTypeConfig.refresh') }}</el-button>
         </el-form-item>
       </el-form>
@@ -130,12 +125,7 @@
     </el-dialog>
 
     <!-- 星期 × 1h 格价格网格弹窗 -->
-    <el-dialog
-      v-model="wpVisible"
-      :title="t('gzBeanSeatTypeConfig.weekdayPriceTitle', { name: wpName })"
-      width="80%"
-      top="6vh"
-    >
+    <el-dialog v-model="wpVisible" :title="t('gzBeanSeatTypeConfig.weekdayPriceTitle', { name: wpName })" width="80%" top="6vh">
       <el-alert type="info" :closable="false" show-icon class="mb-3">
         <template #default>
           <div>{{ t('gzBeanSeatTypeConfig.gridDescBase', { base: formatYuan(wpBaseCent) }) }}</div>
@@ -145,61 +135,77 @@
 
       <div v-loading="wpLoading">
         <el-empty v-if="hourSlots.length === 0" :description="t('gzBeanSeatTypeConfig.gridNoSlot')" />
-        <el-table v-else :data="gridRows" border size="small" class="wp-grid">
-          <el-table-column
-            :label="t('gzBeanSeatTypeConfig.gridColWeekday')"
-            prop="weekdayLabel"
-            width="84"
-            align="center"
-            fixed="left"
-          />
-          <!-- 整天默认列（slotStart = null） -->
-          <el-table-column :label="t('gzBeanSeatTypeConfig.gridColAllDay')" width="130" align="center">
-            <template #default="{ row }">
-              <el-input-number
-                v-model="row.allDay"
-                :min="0"
-                :precision="2"
-                :step="1"
-                :controls="false"
-                size="small"
-                :placeholder="formatYuan(wpBaseCent)"
-                class="wp-cell"
-              />
-            </template>
-          </el-table-column>
-          <!-- 各 1h 格列（slotStart = HH:00:00） -->
-          <el-table-column
-            v-for="h in hourSlots"
-            :key="h"
-            :label="hourLabel(h)"
-            width="106"
-            align="center"
-          >
-            <template #default="{ row }">
-              <el-input-number
-                v-model="row.hours[h]"
-                :min="0"
-                :precision="2"
-                :step="1"
-                :controls="false"
-                size="small"
-                :placeholder="placeholderForCell(row)"
-                class="wp-cell"
-              />
-            </template>
-          </el-table-column>
-        </el-table>
+        <template v-else>
+          <!-- 区间批量填充：把所选星期、[起,止) 范围内的小时格一键写成同价（纯前端，保存仍逐格写） -->
+          <div class="bulk-fill mb-3">
+            <span class="bulk-fill__label">{{ t('gzBeanSeatTypeConfig.bulkFillTitle') }}</span>
+            <el-select v-model="bulkFill.startHour" :placeholder="t('gzBeanSeatTypeConfig.bulkStart')" size="small" style="width: 110px">
+              <el-option v-for="h in bulkStartOptions" :key="h" :label="hourLabel(h)" :value="h" />
+            </el-select>
+            <span class="bulk-fill__sep">{{ t('gzBeanSeatTypeConfig.bulkTo') }}</span>
+            <el-select v-model="bulkFill.endHour" :placeholder="t('gzBeanSeatTypeConfig.bulkEnd')" size="small" style="width: 110px">
+              <el-option v-for="h in bulkEndOptions" :key="h" :label="hourLabel(h)" :value="h" />
+            </el-select>
+            <el-input-number
+              v-model="bulkFill.priceYuan"
+              :min="0"
+              :precision="2"
+              :step="1"
+              :controls="false"
+              size="small"
+              class="bulk-fill__price"
+              :placeholder="t('gzBeanSeatTypeConfig.bulkPrice')"
+            />
+            <span class="bulk-fill__unit">{{ t('gzBeanSeatTypeConfig.bulkPriceUnit') }}</span>
+            <el-checkbox v-model="bulkFillAllWeekdays" class="bulk-fill__all">{{ t('gzBeanSeatTypeConfig.bulkAllWeekdays') }}</el-checkbox>
+            <el-checkbox-group v-model="bulkFill.weekdays" size="small" class="bulk-fill__weekdays">
+              <el-checkbox-button v-for="d in weekdays" :key="d" :value="d">{{ t('gzBeanSeatTypeConfig.week' + d) }}</el-checkbox-button>
+            </el-checkbox-group>
+            <el-button type="primary" plain size="small" :icon="MagicStick" @click="applyBulkFill">
+              {{ t('gzBeanSeatTypeConfig.bulkFillBtn') }}
+            </el-button>
+          </div>
+          <el-table :data="gridRows" border size="small" class="wp-grid">
+            <el-table-column :label="t('gzBeanSeatTypeConfig.gridColWeekday')" prop="weekdayLabel" width="84" align="center" fixed="left" />
+            <!-- 整天默认列（slotStart = null） -->
+            <el-table-column :label="t('gzBeanSeatTypeConfig.gridColAllDay')" width="130" align="center">
+              <template #default="{ row }">
+                <el-input-number
+                  v-model="row.allDay"
+                  :min="0"
+                  :precision="2"
+                  :step="1"
+                  :controls="false"
+                  size="small"
+                  :placeholder="formatYuan(wpBaseCent)"
+                  class="wp-cell"
+                />
+              </template>
+            </el-table-column>
+            <!-- 各 1h 格列（slotStart = HH:00:00） -->
+            <el-table-column v-for="h in hourSlots" :key="h" :label="hourLabel(h)" width="106" align="center">
+              <template #default="{ row }">
+                <el-input-number
+                  v-model="row.hours[h]"
+                  :min="0"
+                  :precision="2"
+                  :step="1"
+                  :controls="false"
+                  size="small"
+                  :placeholder="placeholderForCell(row)"
+                  class="wp-cell"
+                />
+              </template>
+            </el-table-column>
+          </el-table>
+        </template>
       </div>
 
       <template #footer>
         <el-button @click="wpVisible = false">{{ t('gzBeanSeatTypeConfig.cancel') }}</el-button>
-        <el-button
-          type="primary"
-          :loading="wpSubmitting"
-          :disabled="hourSlots.length === 0"
-          @click="handleWeekdayPriceSave"
-        >{{ t('gzBeanSeatTypeConfig.confirm') }}</el-button>
+        <el-button type="primary" :loading="wpSubmitting" :disabled="hourSlots.length === 0" @click="handleWeekdayPriceSave">{{
+          t('gzBeanSeatTypeConfig.confirm')
+        }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -207,7 +213,7 @@
 
 <script setup lang="ts" name="GzBeanSeatTypeConfig">
 import { ref, reactive, computed, onMounted } from 'vue';
-import { Plus, Refresh } from '@element-plus/icons-vue';
+import { Plus, Refresh, MagicStick } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { getGzBeanStoreOptions, type GzBeanStoreVO } from '@/api/gz-bean/store';
@@ -264,9 +270,7 @@ const form = reactive<FormState>({
   sortNo: 0,
   remark: ''
 });
-const formTitle = computed(() =>
-  formMode.value === 'add' ? t('gzBeanSeatTypeConfig.addTitle') : t('gzBeanSeatTypeConfig.editTitle')
-);
+const formTitle = computed(() => (formMode.value === 'add' ? t('gzBeanSeatTypeConfig.addTitle') : t('gzBeanSeatTypeConfig.editTitle')));
 const rules = {
   name: [{ required: true, message: t('gzBeanSeatTypeConfig.ruleNameRequired'), trigger: 'blur' }],
   bookMode: [{ required: true, message: t('gzBeanSeatTypeConfig.ruleBookModeRequired'), trigger: 'change' }],
@@ -297,6 +301,92 @@ interface GridRow {
   hours: Record<number, number | undefined>;
 }
 const gridRows = ref<GridRow[]>([]);
+
+// ============ 区间批量填充（纯前端：把所选星期 [起,止) 范围内的小时格全写成该价） ============
+interface BulkFillState {
+  /** 起始小时（hourSlots 中的整点） */
+  startHour: number | null;
+  /** 结束小时（不含；须 > startHour） */
+  endHour: number | null;
+  /** 填充价（元） */
+  priceYuan: number | null;
+  /** 应用到哪些星期；空数组语义 = 全部（由 UI「全选」勾选驱动） */
+  weekdays: number[];
+}
+const bulkFill = reactive<BulkFillState>({
+  startHour: null,
+  endHour: null,
+  priceYuan: null,
+  weekdays: []
+});
+
+/** 「全部星期」勾选（与 weekdays 多选互为镜像） */
+const bulkFillAllWeekdays = computed<boolean>({
+  get: () => bulkFill.weekdays.length === weekdays.length,
+  set: (v: boolean) => {
+    bulkFill.weekdays = v ? [...weekdays] : [];
+  }
+});
+
+/** 起始下拉选项 = 当前营业 1h 格（不含末格外的整点） */
+const bulkStartOptions = computed<number[]>(() => hourSlots.value);
+
+/** 结束下拉选项：营业格 + 末格后一个整点，且须 > startHour（保证 [起,止) 含至少 1 格） */
+const bulkEndOptions = computed<number[]>(() => {
+  if (hourSlots.value.length === 0) return [];
+  const last = hourSlots.value[hourSlots.value.length - 1];
+  // 结束整点候选 = 每个起整点 + 末格收尾整点(last+1)
+  const ends = [...hourSlots.value.slice(1), last + 1];
+  const s = bulkFill.startHour;
+  return ends.filter((h) => (s == null ? true : h > s));
+});
+
+function resetBulkFill() {
+  bulkFill.startHour = null;
+  bulkFill.endHour = null;
+  bulkFill.priceYuan = null;
+  bulkFill.weekdays = [...weekdays]; // 默认全部星期
+}
+
+/**
+ * 执行区间填充：把 bulkFill 选中星期、[startHour, endHour) 内、且属于营业 1h 格的 cell
+ * 全部写成 priceYuan。纯改 gridRows，保存仍走原 handleWeekdayPriceSave 逐格写。
+ */
+function applyBulkFill() {
+  if (bulkFill.startHour == null || bulkFill.endHour == null) {
+    ElMessage.warning(t('gzBeanSeatTypeConfig.bulkRuleRangeRequired'));
+    return;
+  }
+  if (bulkFill.endHour <= bulkFill.startHour) {
+    ElMessage.warning(t('gzBeanSeatTypeConfig.bulkRuleEndAfterStart'));
+    return;
+  }
+  if (bulkFill.priceYuan == null || bulkFill.priceYuan < 0) {
+    ElMessage.warning(t('gzBeanSeatTypeConfig.bulkRulePriceRequired'));
+    return;
+  }
+  if (bulkFill.weekdays.length === 0) {
+    ElMessage.warning(t('gzBeanSeatTypeConfig.bulkRuleWeekdayRequired'));
+    return;
+  }
+  // 命中的营业小时格 = hourSlots 中落在 [start, end) 的整点
+  const targetHours = hourSlots.value.filter((h) => h >= bulkFill.startHour! && h < bulkFill.endHour!);
+  if (targetHours.length === 0) {
+    ElMessage.warning(t('gzBeanSeatTypeConfig.bulkNoSlotInRange'));
+    return;
+  }
+  const wantWeekdays = new Set(bulkFill.weekdays);
+  const price = Number(bulkFill.priceYuan);
+  let cellCount = 0;
+  gridRows.value.forEach((row) => {
+    if (!wantWeekdays.has(row.weekday)) return;
+    targetHours.forEach((h) => {
+      row.hours[h] = price;
+      cellCount += 1;
+    });
+  });
+  ElMessage.success(t('gzBeanSeatTypeConfig.bulkFillSuccess', { count: cellCount }));
+}
 
 // ============ helpers ============
 function formatYuan(priceCent: number): string {
@@ -472,11 +562,7 @@ async function handleToggleEnabled(row: GzBeanSeatTypeConfigVO, enabled: number)
 
 async function handleDel(row: GzBeanSeatTypeConfigVO) {
   try {
-    await ElMessageBox.confirm(
-      t('gzBeanSeatTypeConfig.delConfirm', { type: row.name }),
-      t('gzBeanSeatTypeConfig.confirmTitle'),
-      { type: 'warning' }
-    );
+    await ElMessageBox.confirm(t('gzBeanSeatTypeConfig.delConfirm', { type: row.name }), t('gzBeanSeatTypeConfig.confirmTitle'), { type: 'warning' });
     await delGzBeanSeatTypeConfig(row.id);
     ElMessage.success(t('gzBeanSeatTypeConfig.delSuccess'));
     await loadList();
@@ -521,6 +607,7 @@ async function handleWeekdayPrice(row: GzBeanSeatTypeConfigVO) {
   wpBaseCent.value = row.priceCent || 0;
   hourSlots.value = [];
   gridRows.value = [];
+  resetBulkFill();
   wpVisible.value = true;
   wpLoading.value = true;
   try {
@@ -599,6 +686,36 @@ onMounted(() => {
 }
 .wp-grid {
   width: 100%;
+}
+.bulk-fill {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #f5f7fa;
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+}
+.bulk-fill__label {
+  font-weight: 600;
+  color: #303133;
+  margin-right: 4px;
+}
+.bulk-fill__sep {
+  color: #606266;
+}
+.bulk-fill__price {
+  width: 120px;
+}
+.bulk-fill__unit {
+  color: #606266;
+}
+.bulk-fill__all {
+  margin-left: 4px;
+}
+.bulk-fill__weekdays {
+  display: inline-flex;
 }
 .wp-cell {
   width: 100%;
