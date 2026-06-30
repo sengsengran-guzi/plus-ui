@@ -819,7 +819,7 @@ export default {
     title: '店内计时看板',
     alertTitle: '说明',
     alertDesc:
-      '到店核销 = 计时起点；看板按当前时刻实时显示各座位状态与剩余时间。临近结束高亮提醒，可在客人离场后「提前放座」立即放开该座位供再约，或「延时」延长占用（延时不走线上补付，差额按门店政策线下结算）。',
+      '到店核销 = 计时起点；看板按当前时刻实时显示各座位状态与剩余时间。临近结束高亮提醒，客人离场后由店员「放座」立即放开该座位供再约，或「延时」延长占用（延时不走线上补付，差额按门店政策线下结算）。',
     store: '门店',
     date: '看板日期',
     datePlaceholder: '选择日期',
@@ -859,10 +859,10 @@ export default {
     colActualEndTime: '放座时间',
     colRemaining: '剩余时间',
     colIsFree: '类型',
-    releaseSeat: '提前放座',
+    releaseSeat: '放座',
     extend: '延时',
-    actionsHint: '提前放座后该座位剩余时间立即可被再约；延时需该座新增时段未被占用。',
-    releaseConfirm: '确认对座位「{no}」（预约 {booking}）提前放座吗？放座后该座剩余时段立即可被再约。',
+    actionsHint: '由店员控制放座；放座后该座位立即空出可被再约（超时单放座只空出本时段，不会延后占用）；延时需该座新增时段未被占用。',
+    releaseConfirm: '确认对座位「{no}」（预约 {booking}）放座吗？放座后该座立即空出、可被再约。',
     releaseSuccess: '已放座',
     extendTitle: '延时',
     extendHours: '延后小时',
@@ -1653,7 +1653,14 @@ export default {
     colExpireTime: '过期时间',
     colUsedTime: '使用时间',
     colRelatedPay: '关联支付单',
-    colAction: '操作'
+    colAction: '操作',
+    batchRevoke: '批量作废',
+    revokeHint: '勾选「未使用」券可批量作废（发错撤回）；已锁定 / 已使用 / 已过期券不可作废',
+    revoke: '作废',
+    revokeConfirmTitle: '撤回确认',
+    revokeConfirmOne: '确定作废券「{no}」？作废后该券立即不可使用，不可恢复。',
+    revokeConfirmBatch: '确定作废所选 {n} 张未使用券？作废后立即不可使用，不可恢复。',
+    revokeSuccess: '已作废 {revoked} 张，跳过 {skipped} 张（仅未使用券可作废）'
   },
   gzRecyclePriceRule: {
     title: '回收价目表',

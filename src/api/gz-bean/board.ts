@@ -6,7 +6,7 @@
  *       菜单可见性走独立点 gz:bean:board:view（GZ-BEAN-028 菜单 seed）。
  *
  * 模型背景：到店核销（verify_time）= 计时起点；看板按当前时刻 + booking 状态算每座实时状态行，
- * 店员现场可提前放座（写 actual_end_time/slot，该座剩余格立即可再约）或延时（推 slot_end）。
+ * 店员现场可放座（写 actual_end_time/slot，该座立即空出可再约；超时单放座只空出本时段不外延）或延时（推 slot_end）。
  * 字段权威：doc/11 §3.12 gz_bean_booking 看板派生 / GzBeanBoardRowVO.java。
  */
 import request from '@/utils/request';
@@ -130,7 +130,7 @@ export function verifyGzBeanBookingWithSeat(id: number | string, seatId: number 
 }
 
 /**
- * POST /system/gz/bean/booking/{id}/release-seat — 提前放座
+ * POST /system/gz/bean/booking/{id}/release-seat — 放座
  * 对在店使用中（used）单写 actual_end_time/slot，该座剩余格立即可再约（不改 status）。
  * @param id 预约 id
  */

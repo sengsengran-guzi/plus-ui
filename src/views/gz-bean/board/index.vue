@@ -596,7 +596,7 @@ function openDetail(row: GzBeanBoardRowVO) {
   detailVisible.value = true;
 }
 
-// ============ 提前放座 ============
+// ============ 放座 ============
 async function handleRelease(row: GzBeanBoardRowVO) {
   if (!row.currentBookingId) return;
   try {

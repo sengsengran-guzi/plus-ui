@@ -23,7 +23,22 @@
         </el-form-item>
       </el-form>
 
-      <el-table :data="list" border stripe size="small">
+      <div class="mb-2">
+        <el-button
+          v-hasPermi="['gz:coupon:userCoupon:revoke']"
+          type="danger"
+          plain
+          :icon="Delete"
+          :disabled="selectedIds.length === 0"
+          @click="handleBatchRevoke"
+        >
+          {{ t('gzCouponUserCoupon.batchRevoke') }}
+        </el-button>
+        <span class="revoke-hint">{{ t('gzCouponUserCoupon.revokeHint') }}</span>
+      </div>
+
+      <el-table :data="list" border stripe size="small" @selection-change="onSelectionChange">
+        <el-table-column type="selection" width="44" :selectable="(row: GzUserCouponVO) => row.status === 'unused'" />
         <el-table-column :label="t('gzCouponUserCoupon.colCouponNo')" prop="couponNo" width="170" />
         <el-table-column :label="t('gzCouponUserCoupon.colTemplateName')" prop="templateName" min-width="150" show-overflow-tooltip />
         <el-table-column :label="t('gzCouponUserCoupon.colNickname')" prop="userNickname" width="130" show-overflow-tooltip />
@@ -42,6 +57,21 @@
         <el-table-column :label="t('gzCouponUserCoupon.colRelatedPay')" prop="relatedPayOutTradeNo" width="180">
           <template #default="{ row }">{{ row.relatedPayOutTradeNo || '-' }}</template>
         </el-table-column>
+        <el-table-column :label="t('gzCouponUserCoupon.colAction')" width="90" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              v-if="row.status === 'unused'"
+              v-hasPermi="['gz:coupon:userCoupon:revoke']"
+              type="danger"
+              link
+              size="small"
+              @click="handleRevoke(row)"
+            >
+              {{ t('gzCouponUserCoupon.revoke') }}
+            </el-button>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
         <template #empty><el-empty :description="t('gzCouponUserCoupon.empty')" /></template>
       </el-table>
 
@@ -58,10 +88,10 @@
 
 <script setup lang="ts" name="GzCouponUserCoupon">
 import { ref, reactive, getCurrentInstance, type ComponentInternalInstance, toRefs, onMounted } from 'vue';
-import { Refresh, Search } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
+import { Delete, Refresh, Search } from '@element-plus/icons-vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { useI18n } from 'vue-i18n';
-import { listGzUserCoupon, type GzUserCouponVO, type GzUserCouponQuery } from '@/api/gz-coupon/userCoupon';
+import { listGzUserCoupon, revokeGzUserCoupon, type GzUserCouponVO, type GzUserCouponQuery } from '@/api/gz-coupon/userCoupon';
 
 const { t } = useI18n();
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
@@ -71,9 +101,42 @@ const listLoading = ref(false);
 const list = ref<GzUserCouponVO[]>([]);
 const total = ref(0);
 const query = reactive<GzUserCouponQuery>({ couponNo: '', status: '', pageNum: 1, pageSize: 10 });
+/** 勾选的「未使用」券 id（selection 列 :selectable 已限制只能选 unused） */
+const selectedIds = ref<string[]>([]);
 
 function formatYuan(cent: number): string {
   return ((cent || 0) / 100).toFixed(2);
+}
+
+function onSelectionChange(rows: GzUserCouponVO[]) {
+  selectedIds.value = rows.map((r) => r.id);
+}
+
+/** 作废确认 + 执行（单条 / 批量共用），成功后提示作废数 / 跳过数并刷新。 */
+async function doRevoke(ids: string[], confirmMsg: string) {
+  try {
+    await ElMessageBox.confirm(confirmMsg, t('gzCouponUserCoupon.revokeConfirmTitle'), { type: 'warning' });
+  } catch {
+    return; // 取消
+  }
+  try {
+    const resp = await revokeGzUserCoupon(ids);
+    const r = (resp as any).data ?? resp;
+    ElMessage.success(t('gzCouponUserCoupon.revokeSuccess', { revoked: r.revoked ?? 0, skipped: r.skipped ?? 0 }));
+    selectedIds.value = [];
+    loadList();
+  } catch (e) {
+    console.error('[gz-coupon-user-coupon] revoke failed', e);
+  }
+}
+
+function handleRevoke(row: GzUserCouponVO) {
+  doRevoke([row.id], t('gzCouponUserCoupon.revokeConfirmOne', { no: row.couponNo }));
+}
+
+function handleBatchRevoke() {
+  if (selectedIds.value.length === 0) return;
+  doRevoke([...selectedIds.value], t('gzCouponUserCoupon.revokeConfirmBatch', { n: selectedIds.value.length }));
 }
 
 async function loadList() {
@@ -107,6 +170,11 @@ onMounted(loadList);
   color: #0369a1;
   padding: 2px 8px;
   border-radius: 4px;
+  font-size: 12px;
+}
+.revoke-hint {
+  margin-left: 12px;
+  color: #909399;
   font-size: 12px;
 }
 </style>

@@ -68,3 +68,17 @@ export function listGzCouponUserOptions(
 ): AxiosPromise<{ total: number; rows: GzCouponUserOptionVO[] }> {
   return request({ url: '/system/gz/coupon/userCoupon/userOptions', method: 'get', params: query });
 }
+
+/** 撤回作废结果（unused→revoked） */
+export interface GzUserCouponRevokeResult {
+  /** 实际作废数 */
+  revoked: number;
+  /** 跳过数（非 unused 的 locked/used/expired/已作废） */
+  skipped: number;
+}
+
+/** PUT 发错撤回：批量作废未使用券（unused→revoked，仅 owner 权限 gz:coupon:userCoupon:revoke） */
+export function revokeGzUserCoupon(ids: Array<string> | string): AxiosPromise<GzUserCouponRevokeResult> {
+  const idStr = Array.isArray(ids) ? ids.join(',') : ids;
+  return request({ url: `/system/gz/coupon/userCoupon/revoke/${idStr}`, method: 'put' });
+}

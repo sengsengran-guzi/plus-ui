@@ -822,7 +822,7 @@ export default {
     title: 'In-store Timing Board',
     alertTitle: 'About',
     alertDesc:
-      'Check-in marks the timing start. The board shows each seat status and remaining time in real time. Near-end seats are highlighted; after a guest leaves you can "release seat early" to free it for re-booking, or "extend" the occupancy (extension is not paid online; settle any difference offline per store policy).',
+      'Check-in marks the timing start. The board shows each seat status and remaining time in real time. Near-end seats are highlighted; after a guest leaves, staff "release" the seat to free it immediately for re-booking, or "extend" the occupancy (extension is not paid online; settle any difference offline per store policy).',
     store: 'Store',
     date: 'Date',
     datePlaceholder: 'Pick date',
@@ -862,10 +862,10 @@ export default {
     colActualEndTime: 'Released at',
     colRemaining: 'Remaining',
     colIsFree: 'Type',
-    releaseSeat: 'Release early',
+    releaseSeat: 'Release seat',
     extend: 'Extend',
-    actionsHint: 'After releasing, the remaining time is immediately available for re-booking; extension requires the new slots to be free.',
-    releaseConfirm: 'Release seat "{no}" (booking {booking}) early? The remaining slots become available for re-booking.',
+    actionsHint: 'Staff control release; once released the seat is freed immediately for re-booking (releasing an overtime booking only frees its own slot, never extends occupancy); extension requires the new slots to be free.',
+    releaseConfirm: 'Release seat "{no}" (booking {booking})? The seat is freed immediately and becomes available for re-booking.',
     releaseSuccess: 'Seat released',
     extendTitle: 'Extend',
     extendHours: 'Add hours',
@@ -1653,7 +1653,14 @@ export default {
     colExpireTime: 'Expires',
     colUsedTime: 'Used',
     colRelatedPay: 'Related Pay',
-    colAction: 'Action'
+    colAction: 'Action',
+    batchRevoke: 'Revoke Selected',
+    revokeHint: 'Select "unused" coupons to revoke in bulk (undo mis-issued); locked / used / expired cannot be revoked',
+    revoke: 'Revoke',
+    revokeConfirmTitle: 'Confirm Revoke',
+    revokeConfirmOne: 'Revoke coupon "{no}"? It becomes unusable immediately and cannot be restored.',
+    revokeConfirmBatch: 'Revoke {n} selected unused coupons? They become unusable immediately and cannot be restored.',
+    revokeSuccess: 'Revoked {revoked}, skipped {skipped} (only unused coupons can be revoked)'
   },
   gzRecyclePriceRule: {
     title: 'Recycle Price Rules',
