@@ -8,14 +8,7 @@
         </div>
       </template>
 
-      <el-alert
-        :title="t('gzBeanStore.alertTitle')"
-        type="info"
-        :description="t('gzBeanStore.alertDesc')"
-        show-icon
-        :closable="false"
-        class="mb-3"
-      />
+      <el-alert :title="t('gzBeanStore.alertTitle')" type="info" :description="t('gzBeanStore.alertDesc')" show-icon :closable="false" class="mb-3" />
 
       <!-- 查询表单 -->
       <el-form :model="query" inline @submit.prevent="handleQuery">
@@ -29,32 +22,16 @@
           />
         </el-form-item>
         <el-form-item :label="t('gzBeanStore.name')">
-          <el-input
-            v-model="query.name"
-            :placeholder="t('gzBeanStore.namePlaceholder')"
-            clearable
-            style="width: 200px"
-            @keyup.enter="handleQuery"
-          />
+          <el-input v-model="query.name" :placeholder="t('gzBeanStore.namePlaceholder')" clearable style="width: 200px" @keyup.enter="handleQuery" />
         </el-form-item>
         <el-form-item :label="t('gzBeanStore.type')">
-          <el-select
-            v-model="query.type"
-            :placeholder="t('gzBeanStore.typePlaceholder')"
-            clearable
-            style="width: 160px"
-          >
+          <el-select v-model="query.type" :placeholder="t('gzBeanStore.typePlaceholder')" clearable style="width: 160px">
             <el-option :label="t('gzBeanStore.typePindou')" value="pindou" />
             <el-option :label="t('gzBeanStore.typeGuzi')" value="guzi" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('gzBeanStore.status')">
-          <el-select
-            v-model="query.status"
-            :placeholder="t('gzBeanStore.statusPlaceholder')"
-            clearable
-            style="width: 160px"
-          >
+          <el-select v-model="query.status" :placeholder="t('gzBeanStore.statusPlaceholder')" clearable style="width: 160px">
             <el-option :label="t('gzBeanStore.statusOpen')" value="open" />
             <el-option :label="t('gzBeanStore.statusClosed')" value="closed" />
             <el-option :label="t('gzBeanStore.statusMaintenance')" value="maintenance" />
@@ -76,28 +53,14 @@
           </el-button>
         </el-col>
         <el-col :span="1.5">
-          <el-button
-            v-hasPermi="['gz:bean:store:remove']"
-            type="danger"
-            plain
-            :icon="Delete"
-            :disabled="!selectedIds.length"
-            @click="handleBatchDel"
-          >
+          <el-button v-hasPermi="['gz:bean:store:remove']" type="danger" plain :icon="Delete" :disabled="!selectedIds.length" @click="handleBatchDel">
             {{ t('gzBeanStore.del') }}
           </el-button>
         </el-col>
       </el-row>
 
       <!-- 数据表格 -->
-      <el-table
-        v-loading="loading"
-        :data="rows"
-        border
-        stripe
-        size="small"
-        @selection-change="handleSelectionChange"
-      >
+      <el-table v-loading="loading" :data="rows" border stripe size="small" @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="50" align="center" />
         <el-table-column :label="t('gzBeanStore.colId')" prop="id" width="80" align="center" />
         <el-table-column :label="t('gzBeanStore.colStoreNo')" prop="storeNo" width="130" />
@@ -143,13 +106,7 @@
       </el-table>
 
       <!-- 分页 -->
-      <pagination
-        v-show="total > 0"
-        v-model:limit="query.pageSize"
-        v-model:page="query.pageNum"
-        :total="total"
-        @pagination="loadList"
-      />
+      <pagination v-show="total > 0" v-model:limit="query.pageSize" v-model:page="query.pageNum" :total="total" @pagination="loadList" />
     </el-card>
 
     <!-- 新增 / 编辑弹窗 -->
@@ -206,6 +163,14 @@
         </el-row>
         <el-row :gutter="16">
           <el-col :span="12">
+            <el-form-item :label="t('gzBeanStore.nearEndMinutes')">
+              <el-input-number v-model="form.nearEndMinutes" :min="5" :max="120" :step="5" />
+              <div class="form-tip">{{ t('gzBeanStore.nearEndMinutesHint') }}</div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :span="12">
             <el-form-item :label="t('gzBeanStore.longitude')">
               <el-input v-model="longitudeStr" :placeholder="t('gzBeanStore.longitudePlaceholder')" />
             </el-form-item>
@@ -248,6 +213,9 @@
         <el-descriptions-item :label="t('gzBeanStore.colPhone')">{{ detail.phone || '-' }}</el-descriptions-item>
         <el-descriptions-item :label="t('gzBeanStore.colBusinessHours')">{{ detail.businessHours || '-' }}</el-descriptions-item>
         <el-descriptions-item :label="t('gzBeanStore.colMaxAdvanceDays')">{{ detail.maxAdvanceDays }}</el-descriptions-item>
+        <el-descriptions-item :label="t('gzBeanStore.nearEndMinutes')">{{
+          detail.nearEndMinutes ?? t('gzBeanStore.nearEndMinutesDefault')
+        }}</el-descriptions-item>
         <el-descriptions-item :label="t('gzBeanStore.colCreateTime')">{{ detail.createTime }}</el-descriptions-item>
         <el-descriptions-item :label="t('gzBeanStore.longitude')">{{ detail.longitude ?? '-' }}</el-descriptions-item>
         <el-descriptions-item :label="t('gzBeanStore.latitude')">{{ detail.latitude ?? '-' }}</el-descriptions-item>
@@ -302,16 +270,15 @@ const formRef = ref<FormInstance>();
 const form = reactive<GzBeanStoreForm>({
   type: 'pindou',
   status: 'open',
-  maxAdvanceDays: 14
+  maxAdvanceDays: 14,
+  nearEndMinutes: 30
 });
 
 /** 经纬度用字符串中转避免 el-input-number 强制数值导致提交时 "" → null 处理麻烦 */
 const longitudeStr = ref<string>('');
 const latitudeStr = ref<string>('');
 
-const formTitle = computed(() =>
-  formMode.value === 'add' ? t('gzBeanStore.addDialogTitle') : t('gzBeanStore.editDialogTitle')
-);
+const formTitle = computed(() => (formMode.value === 'add' ? t('gzBeanStore.addDialogTitle') : t('gzBeanStore.editDialogTitle')));
 
 const rules = {
   storeNo: [{ required: true, message: t('gzBeanStore.ruleStoreNoRequired'), trigger: 'blur' }],
@@ -382,6 +349,7 @@ function resetForm() {
     imageId: null,
     status: 'open',
     maxAdvanceDays: 14,
+    nearEndMinutes: 30,
     remark: ''
   });
   longitudeStr.value = '';
@@ -414,6 +382,7 @@ async function handleEdit(row: GzBeanStoreVO) {
       imageId: d.imageId !== null && d.imageId !== undefined ? String(d.imageId) : null,
       status: d.status,
       maxAdvanceDays: d.maxAdvanceDays,
+      nearEndMinutes: d.nearEndMinutes ?? 30,
       remark: d.remark
     });
     longitudeStr.value = d.longitude !== null && d.longitude !== undefined ? String(d.longitude) : '';
@@ -457,11 +426,11 @@ async function handleSubmit() {
 }
 
 async function handleDel(row: GzBeanStoreVO) {
-  const ok = await ElMessageBox.confirm(
-    t('gzBeanStore.delConfirm', { name: row.name }),
-    t('gzBeanStore.delConfirmTitle'),
-    { confirmButtonText: t('gzBeanStore.confirm'), cancelButtonText: t('gzBeanStore.cancel'), type: 'warning' }
-  ).catch(() => false);
+  const ok = await ElMessageBox.confirm(t('gzBeanStore.delConfirm', { name: row.name }), t('gzBeanStore.delConfirmTitle'), {
+    confirmButtonText: t('gzBeanStore.confirm'),
+    cancelButtonText: t('gzBeanStore.cancel'),
+    type: 'warning'
+  }).catch(() => false);
   if (!ok) return;
   try {
     await delGzBeanStore(row.id);
@@ -474,11 +443,11 @@ async function handleDel(row: GzBeanStoreVO) {
 
 async function handleBatchDel() {
   if (!selectedIds.value.length) return;
-  const ok = await ElMessageBox.confirm(
-    t('gzBeanStore.delBatchConfirm', { n: selectedIds.value.length }),
-    t('gzBeanStore.delConfirmTitle'),
-    { confirmButtonText: t('gzBeanStore.confirm'), cancelButtonText: t('gzBeanStore.cancel'), type: 'warning' }
-  ).catch(() => false);
+  const ok = await ElMessageBox.confirm(t('gzBeanStore.delBatchConfirm', { n: selectedIds.value.length }), t('gzBeanStore.delConfirmTitle'), {
+    confirmButtonText: t('gzBeanStore.confirm'),
+    cancelButtonText: t('gzBeanStore.cancel'),
+    type: 'warning'
+  }).catch(() => false);
   if (!ok) return;
   try {
     await delGzBeanStore(selectedIds.value);

@@ -361,6 +361,9 @@ export default {
     statusClosed: 'Closed',
     statusMaintenance: 'Maintenance',
     maxAdvanceDays: 'Max Advance Days',
+    nearEndMinutes: 'Near-end alert (min)',
+    nearEndMinutesHint: 'Board near-end advance alert, default 30 minutes',
+    nearEndMinutesDefault: 'Default 30',
     longitude: 'Longitude',
     longitudePlaceholder: 'V1.0 optional (e.g. 104.07)',
     latitude: 'Latitude',
@@ -606,8 +609,10 @@ export default {
     weekdayPriceTitle: 'Weekday × Slot Price · {name}',
     weekdayPriceSaveSuccess: 'Weekday × slot prices saved',
     weekdayBase: 'Base',
-    gridDescBase: 'Rows = Mon–Sun, columns = the store\'s 1h business slots; fill the per-slot unit price (Yuan), blank falls back upward. Base price ¥{base} (fallback).',
-    gridDescRule: 'Fallback: slot price → weekday "All-day default" → base price. Interval total = sum of selected per-hour slot prices (hours may differ).',
+    gridDescBase:
+      "Rows = Mon–Sun, columns = the store's 1h business slots; fill the per-slot unit price (Yuan), blank falls back upward. Base price ¥{base} (fallback).",
+    gridDescRule:
+      'Fallback: slot price → weekday "All-day default" → base price. Interval total = sum of selected per-hour slot prices (hours may differ).',
     gridColWeekday: 'Weekday',
     gridColAllDay: 'All-day default',
     gridNoSlot: 'No business slots configured for this store. Please configure them in "Slot Templates" first, then set per-slot pricing here.',
@@ -675,7 +680,7 @@ export default {
     loadFailed: 'Load failed',
     batchGenerateTitle: 'Batch Generate Seat Units by Type',
     batchGenerateDesc:
-      'Auto-generate numbered seats based on each type\'s booking mode and capacity: whole tables generate the table count of units; per-seat generates tables × seats-per-table units. Existing seats with the same no. are skipped (soft-deleted ones are revived); safe to re-run.',
+      "Auto-generate numbered seats based on each type's booking mode and capacity: whole tables generate the table count of units; per-seat generates tables × seats-per-table units. Existing seats with the same no. are skipped (soft-deleted ones are revived); safe to re-run.",
     bgScope: 'Scope',
     bgScopeAll: 'All enabled types in this store',
     bgScopeOne: 'Specified type only',
@@ -797,7 +802,29 @@ export default {
     confirm: 'Confirm',
     cancel: 'Cancel',
     confirmTitle: 'Notice',
-    loadFailed: 'Load failed'
+    loadFailed: 'Load failed',
+    // ADR-0016 §6 proactive notification + sound
+    alertSwitch: 'Near-end alert',
+    soundSwitch: 'Sound',
+    notifyTitle: '{seat} ending soon',
+    notifyBodyExtend: '{n} min left. No follow-up booking; you may ask the guest about extending.',
+    notifyBodyWrapup: '{n} min left. Fully booked after; please remind the guest to wrap up.',
+    notifyBodyExtendNoMin: 'Ending soon. No follow-up booking; you may ask the guest about extending.',
+    notifyBodyWrapupNoMin: 'Ending soon. Fully booked after; please remind the guest to wrap up.',
+    // ADR-0016 §6 fully-booked signal
+    canExtendYes: 'Extendable',
+    canExtendNo: 'Wrap up',
+    colCanExtend: 'Stay signal',
+    // ADR-0016 §3/§5 pending-assign zone
+    pendingTitle: 'Pending seat assignment (paid, awaiting verify)',
+    pendingEmpty: 'No bookings pending assignment',
+    assignVerify: 'Assign seat & verify',
+    assignTitle: 'Assign seat & verify',
+    assignPickSeat: 'Pick an idle seat (should match the booked table type)',
+    assignNoIdle: 'No idle seat available',
+    assignNoIdleHint: 'No idle seat available for this store/date. Wait for guests to release/extend, or check seat-unit config.',
+    assignConfirm: 'Assign & verify',
+    assignSuccess: 'Assigned & verified'
   },
   // Pindou booking management (D05 GZ-BEAN-008)
   gzBeanBooking: {
@@ -1768,7 +1795,8 @@ export default {
   },
   gzRecycleTimeSlot: {
     title: 'Recycle Time Slots',
-    alertDesc: 'Configure on-site recycle time slots per store (any window, e.g. 10:00-13:00, 14:00-17:00). Enabled slots appear in the mini-program recycle form for single selection. Pick a store first.',
+    alertDesc:
+      'Configure on-site recycle time slots per store (any window, e.g. 10:00-13:00, 14:00-17:00). Enabled slots appear in the mini-program recycle form for single selection. Pick a store first.',
     colStore: 'Store',
     storePlaceholder: 'Select store',
     colTimeRange: 'Time Slot',

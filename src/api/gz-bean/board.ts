@@ -55,6 +55,35 @@ export interface GzBeanBoardRowVO {
   actualEndTime?: string | null;
   /** 到计划 slot_end 的剩余分钟（仅 in_use / near_end 回填）；其余 null */
   remainingMinutes?: number | null;
+  /**
+   * 该座当前单是否可延时（ADR-0016 §6 排满收尾信号）：紧邻后续 1h 格未被本座别的活跃单占 → true
+   * （admin 提示「可问客人是否延时」）；已占 → false（admin 提示「请客人收尾」）。
+   * 仅 in_use / near_end / overtime 回填，其余 null。
+   */
+  canExtend?: boolean | null;
+}
+
+/**
+ * 看板②待分座区行 VO（ADR-0016 §3/§5）：已付款待核销但尚未分配物理座位（seat_id NULL）的预约。
+ * 与后端 GzBeanBookingVO 子集对齐（仅取看板分座所需字段；id 类全部 string 防 JS 精度丢失）。
+ */
+export interface GzBeanPendingAssignVO {
+  /** 预约 id（string） */
+  id: string;
+  /** 业务码 BK... */
+  bookingNo: string;
+  /** 桌型 code（single/double/quad；可空） */
+  seatType?: string | null;
+  /** 桌型中文名快照（与 board 行 typeName 同源，用于过滤匹配桌型的空闲座） */
+  seatTypeSnapshot?: string | null;
+  /** 预约日期 yyyy-MM-dd */
+  sessDate: string;
+  /** 计划时段起 HH:mm:ss */
+  slotStart: string;
+  /** 计划时段止 HH:mm:ss */
+  slotEnd: string;
+  /** 手机号 snapshot（店员看全量，前端展示尾号） */
+  mobileSnapshot?: string | null;
 }
 
 /**
@@ -67,6 +96,36 @@ export function getGzBeanBoard(storeId: number | string, sessDate: string): Axio
     url: '/system/gz/bean/booking/board',
     method: 'get',
     params: { storeId, sessDate }
+  });
+}
+
+/**
+ * GET /system/gz/bean/booking/board/pending-assign — 看板②待分座区
+ * 某门店某日已付款待核销但未分配物理座位（seat_id NULL）的预约列表。
+ * 店员从中挑一笔 → 选一个①区空闲座 → POST /{id}/verify?seatId= 完成核销分座。
+ * @param storeId 门店 id（必填）
+ * @param sessDate 看板日期 yyyy-MM-dd（必填）
+ */
+export function getGzBeanPendingAssign(storeId: number | string, sessDate: string): AxiosPromise<GzBeanPendingAssignVO[]> {
+  return request({
+    url: '/system/gz/bean/booking/board/pending-assign',
+    method: 'get',
+    params: { storeId, sessDate }
+  });
+}
+
+/**
+ * POST /system/gz/bean/booking/{id}/verify?seatId= — 核销 + 现场分座（ADR-0016 §3）
+ * 新模型单必传 seatId（店员从该桌型空闲座挑一个）。
+ * 错误码：4021 SEAT_REQUIRED（未分座）/ 4022 SEAT_TYPE_MISMATCH（桌型不符）/ 4002 SEAT_TAKEN（座被占）。
+ * @param id 预约 id
+ * @param seatId 现场分配的物理座位 id
+ */
+export function verifyGzBeanBookingWithSeat(id: number | string, seatId: number | string): AxiosPromise<GzBeanBoardRowVO> {
+  return request({
+    url: `/system/gz/bean/booking/${id}/verify`,
+    method: 'post',
+    params: { seatId }
   });
 }
 

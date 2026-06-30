@@ -361,6 +361,9 @@ export default {
     statusClosed: '已停业',
     statusMaintenance: '维护中',
     maxAdvanceDays: '可预约天数',
+    nearEndMinutes: '临近提醒分钟',
+    nearEndMinutesHint: '计时看板临近结束提前提醒，默认 30 分钟',
+    nearEndMinutesDefault: '默认 30',
     longitude: '经度',
     longitudePlaceholder: 'V1.0 可空（如 104.07）',
     latitude: '纬度',
@@ -497,8 +500,7 @@ export default {
   gzBeanConfig: {
     title: '营业时段配置',
     alertTitle: '说明',
-    alertDesc:
-      '门店级营业时段配置。配「营业窗口」，系统按 1h 整点切格供用户预约；可按周批量配置避免逐条新建。时段停用不影响已有预约。',
+    alertDesc: '门店级营业时段配置。配「营业窗口」，系统按 1h 整点切格供用户预约；可按周批量配置避免逐条新建。时段停用不影响已有预约。',
     windowAlertTitle: '营业窗口须整点',
     windowAlertDesc:
       '这里配的是「营业窗口」，系统会按 1h 整点自动切格给用户预约。起止时间必须为整点（如 10:00 / 22:00）；午休断档用多个窗口表达，如 10:00–13:00 + 14:00–22:00。',
@@ -743,7 +745,8 @@ export default {
   gzBeanBoard: {
     title: '店内计时看板',
     alertTitle: '说明',
-    alertDesc: '到店核销 = 计时起点；看板按当前时刻实时显示各座位状态与剩余时间。临近结束高亮提醒，可在客人离场后「提前放座」立即放开该座位供再约，或「延时」延长占用（延时不走线上补付，差额按门店政策线下结算）。',
+    alertDesc:
+      '到店核销 = 计时起点；看板按当前时刻实时显示各座位状态与剩余时间。临近结束高亮提醒，可在客人离场后「提前放座」立即放开该座位供再约，或「延时」延长占用（延时不走线上补付，差额按门店政策线下结算）。',
     store: '门店',
     date: '看板日期',
     datePlaceholder: '选择日期',
@@ -796,7 +799,29 @@ export default {
     confirm: '确定',
     cancel: '取消',
     confirmTitle: '提示',
-    loadFailed: '加载失败'
+    loadFailed: '加载失败',
+    // ADR-0016 §6 主动弹窗 + 提示音
+    alertSwitch: '临近提醒',
+    soundSwitch: '提示音',
+    notifyTitle: '{seat} 临近结束',
+    notifyBodyExtend: '剩 {n} 分钟。后续暂无排座，可问客人是否延时。',
+    notifyBodyWrapup: '剩 {n} 分钟。后续已排满，请提醒客人收尾。',
+    notifyBodyExtendNoMin: '即将结束。后续暂无排座，可问客人是否延时。',
+    notifyBodyWrapupNoMin: '即将结束。后续已排满，请提醒客人收尾。',
+    // ADR-0016 §6 排满信号
+    canExtendYes: '可延时',
+    canExtendNo: '请收尾',
+    colCanExtend: '续坐信号',
+    // ADR-0016 §3/§5 ②待分座区
+    pendingTitle: '待分座（已付款待核销）',
+    pendingEmpty: '暂无待分座预约',
+    assignVerify: '分配座位并核销',
+    assignTitle: '分配座位并核销',
+    assignPickSeat: '选择一个空闲座位（应与预约桌型一致）',
+    assignNoIdle: '当前无空闲座位',
+    assignNoIdleHint: '该门店该日暂无空闲座位可分配。可待在店客人放座 / 延时后再分，或核对座位单元配置。',
+    assignConfirm: '确认分座并核销',
+    assignSuccess: '已分座并核销'
   },
   // 拼豆预约管理（D05 GZ-BEAN-008）
   gzBeanBooking: {

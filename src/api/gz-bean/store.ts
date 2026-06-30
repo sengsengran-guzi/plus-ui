@@ -35,6 +35,8 @@ export interface GzBeanStoreVO {
   status: string;
   /** 可预约最大提前天数 */
   maxAdvanceDays: number;
+  /** 计时看板临近结束提前提醒分钟数（ADR-0016 §6 门店级阈值，默认 30；空回退全局/默认） */
+  nearEndMinutes?: number | null;
   /** 创建时间 */
   createTime?: string;
   /** 备注 */
@@ -56,6 +58,8 @@ export interface GzBeanStoreForm {
   imageId?: string | null;
   status?: string;
   maxAdvanceDays?: number | null;
+  /** 计时看板临近结束提前提醒分钟数（ADR-0016 §6，默认 30） */
+  nearEndMinutes?: number | null;
   remark?: string | null;
 }
 
