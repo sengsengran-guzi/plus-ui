@@ -9,6 +9,7 @@
  */
 import request from '@/utils/request';
 import { AxiosPromise } from 'axios';
+import type { GzBeanSeatVO } from './seat';
 
 /** 预约 VO（与 GzBeanBookingVO.java 对齐；id 类全部 string 防 JS 精度丢失） */
 export interface GzBeanBookingVO {
@@ -107,6 +108,17 @@ export function verifyGzBeanBookingWithSeat(id: number | string, seatId: number 
   });
 }
 
+/**
+ * GET /system/gz/bean/booking/{id}/assignable-seats — 该预约核销分座可选的空闲座。
+ * 后端按预约的 桌型 + 日期 + 时段 算，已排除已占用 / 已关闭座，下拉只列点了不报错的座（ADR-0016 §3）。
+ */
+export function getGzBeanAssignableSeats(id: number | string): AxiosPromise<GzBeanSeatVO[]> {
+  return request({
+    url: `/system/gz/bean/booking/${id}/assignable-seats`,
+    method: 'get'
+  });
+}
+
 /** POST /system/gz/bean/booking/verify-scan — 扫码核销（解析 payload + 校签 + pending → used） */
 export function verifyGzBeanBookingByScan(qrPayload: string): AxiosPromise<GzBeanBookingVO> {
   return request({
@@ -120,8 +132,6 @@ export function verifyGzBeanBookingByScan(qrPayload: string): AxiosPromise<GzBea
 export interface GzBeanAdminCreateBody {
   storeId: number | string;
   seatTypeConfigId: number | string;
-  /** 店员代分配的具体座位 id */
-  seatId: number | string;
   sessDate: string;
   /** 区间起 HH:mm:ss */
   slotStart: string;
@@ -137,7 +147,7 @@ export interface GzBeanAdminCreateBody {
 
 /**
  * POST /system/gz/bean/booking/admin-create — 代客预定（GZ-BEAN-039 / kevin-test §4）
- * 现场没带手机的用户，店员代为选具体座位锁座，一步 used + 线下已付。仍走逐格配额防超卖 + 座位区间互斥。
+ * 店员代建单（线下已付），建成 pending 待分座 —— 不在此选座，座位留到核销时现场分（ADR-0016 §3）。
  */
 export function adminCreateGzBeanBooking(data: GzBeanAdminCreateBody): AxiosPromise<GzBeanBookingVO> {
   return request({

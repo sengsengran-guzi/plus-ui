@@ -153,7 +153,7 @@
       </template>
     </el-dialog>
 
-    <!-- 代客预定 dialog（GZ-BEAN-039 线下散客，店员代选座一步 used + 线下已付） -->
+    <!-- 代客预定 dialog（GZ-BEAN-039 线下散客：店员代建 pending 待分座单，线下已付；座位留到核销时分） -->
     <el-dialog v-model="proxyVisible" :title="t('gzBeanBooking.proxyCreateTitle')" width="560px" @close="resetProxy">
       <el-form ref="proxyFormRef" :model="proxyForm" label-width="120px">
         <el-form-item :label="t('gzBeanBooking.proxyStore')" required>
@@ -204,30 +204,12 @@
             :loading="proxyTypeLoading"
             :disabled="!proxyForm.storeId"
             style="width: 100%"
-            @change="onProxySeatTypeChange"
           >
             <el-option
               v-for="c in proxySeatTypeOptions"
               :key="c.id"
               :label="`${c.name}（¥${c.priceYuan}）`"
               :value="c.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('gzBeanBooking.proxySeat')" required>
-          <el-select
-            v-model="proxyForm.seatId"
-            :placeholder="proxySeatOptions.length === 0 ? t('gzBeanBooking.proxyNoSeat') : t('gzBeanBooking.proxySeatPlaceholder')"
-            filterable
-            :loading="proxySeatLoading"
-            :disabled="!proxyForm.seatTypeConfigId || proxySeatOptions.length === 0"
-            style="width: 100%"
-          >
-            <el-option
-              v-for="seat in proxySeatOptions"
-              :key="seat.id"
-              :label="seat.tableNo ? `${seat.seatNo}（${seat.tableNo}）` : seat.seatNo"
-              :value="seat.id"
             />
           </el-select>
         </el-form-item>
@@ -304,6 +286,7 @@ import {
   listGzBeanBooking,
   getGzBeanBooking,
   verifyGzBeanBookingWithSeat,
+  getGzBeanAssignableSeats,
   adminCreateGzBeanBooking,
   type GzBeanBookingVO,
   type GzBeanBookingQuery,
@@ -311,7 +294,7 @@ import {
 } from '@/api/gz-bean/booking';
 import { getGzBeanStoreOptions, type GzBeanStoreVO } from '@/api/gz-bean/store';
 import { listGzBeanSeatTypeConfigByStore, type GzBeanSeatTypeConfigVO } from '@/api/gz-bean/seatTypeConfig';
-import { listGzBeanSeatByStore, type GzBeanSeatVO } from '@/api/gz-bean/seat';
+import type { GzBeanSeatVO } from '@/api/gz-bean/seat';
 
 const { t } = useI18n();
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
@@ -404,28 +387,21 @@ const verifySubmitting = ref<boolean>(false);
 const verifySeatLoading = ref<boolean>(false);
 const verifyTarget = ref<GzBeanBookingVO | null>(null);
 const verifySeatId = ref<number | string | undefined>(undefined);
-const verifyAllSeats = ref<GzBeanSeatVO[]>([]);
+/** 核销弹窗可选座：后端已按「该预约桌型 + 日期 + 时段」算好可分配空闲座（排已占/已关闭），前端直接展示。 */
+const verifySeatOptions = ref<GzBeanSeatVO[]>([]);
 
-/** 核销弹窗可选座：本店 + 同桌型档 + 启用；存量无 seatTypeConfigId 单回退全部启用座（交后端校验桌型）。 */
-const verifySeatOptions = computed<GzBeanSeatVO[]>(() => {
-  const enabled = verifyAllSeats.value.filter((s) => s.enabled === 1);
-  const cid = verifyTarget.value?.seatTypeConfigId;
-  if (cid == null) return enabled;
-  return enabled.filter((s) => String(s.seatTypeConfigId) === String(cid));
-});
-
-/** 打开核销分座弹窗：载本店座位（按预约桌型筛），店员选座后再核销。 */
+/** 打开核销分座弹窗：拉该预约时段可分配的空闲座（避免店员点到已占座再报错）。 */
 async function openVerifyAssign(row: GzBeanBookingVO) {
   verifyTarget.value = row;
   verifySeatId.value = undefined;
-  verifyAllSeats.value = [];
+  verifySeatOptions.value = [];
   verifyVisible.value = true;
   verifySeatLoading.value = true;
   try {
-    const resp = await listGzBeanSeatByStore(row.storeId);
-    verifyAllSeats.value = ((resp as any).data || resp || []) as GzBeanSeatVO[];
+    const resp = await getGzBeanAssignableSeats(row.id);
+    verifySeatOptions.value = ((resp as any).data || resp || []) as GzBeanSeatVO[];
   } catch (e) {
-    console.error('[gz-bean-booking] load seats for verify failed', e);
+    console.error('[gz-bean-booking] load assignable seats failed', e);
     ElMessage.error(t('gzBeanBooking.loadFailed'));
   } finally {
     verifySeatLoading.value = false;
@@ -462,7 +438,6 @@ async function submitVerifyAssign() {
 interface ProxyForm {
   storeId?: number | string;
   seatTypeConfigId?: number | string;
-  seatId?: number | string;
   sessDate?: string;
   mobile?: string;
   customerName?: string;
@@ -471,7 +446,6 @@ interface ProxyForm {
 const proxyVisible = ref<boolean>(false);
 const proxySubmitting = ref<boolean>(false);
 const proxyTypeLoading = ref<boolean>(false);
-const proxySeatLoading = ref<boolean>(false);
 const proxyForm = reactive<ProxyForm>({});
 /** 时段（HH:mm，提交时补 :00 → HH:mm:ss） */
 const proxySlotStart = ref<string>('');
@@ -479,7 +453,6 @@ const proxySlotEnd = ref<string>('');
 /** 金额按元输入（el-input-number），提交转分；留空（null）= 后端自动计价 */
 const proxyAmountYuan = ref<number | null>(null);
 const proxySeatTypeOptions = ref<GzBeanSeatTypeConfigVO[]>([]);
-const proxyAllSeats = ref<GzBeanSeatVO[]>([]);
 
 /** 结束时段下拉起点 = 开始时段 + 1h（保证连续整点、止 > 起） */
 const proxySlotEndStart = computed<string>(() => {
@@ -489,22 +462,29 @@ const proxySlotEndStart = computed<string>(() => {
   return `${String(h + 1).padStart(2, '0')}:00`;
 });
 
-/** 当前桌型档对应的启用空闲座（按 seatTypeConfigId + enabled=1 过滤） */
-const proxySeatOptions = computed<GzBeanSeatVO[]>(() => {
-  const cid = proxyForm.seatTypeConfigId;
-  if (cid == null) return [];
-  return proxyAllSeats.value.filter((s) => s.enabled === 1 && String(s.seatTypeConfigId) === String(cid));
-});
+/** 今天 yyyy-MM-dd（代客预定默认日期）。 */
+function todayStr(): string {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
 
+/** 打开代客预定：默认门店=第一个、日期=今天（店员通常只改时段/桌型），不在此选座（核销时分座）。 */
 function openProxyCreate() {
   resetProxy();
+  proxyForm.sessDate = todayStr();
+  const firstStore = storeOptions.value[0]?.id;
+  if (firstStore != null) {
+    proxyForm.storeId = firstStore;
+    void onProxyStoreChange(firstStore);
+  }
   proxyVisible.value = true;
 }
 
 function resetProxy() {
   proxyForm.storeId = undefined;
   proxyForm.seatTypeConfigId = undefined;
-  proxyForm.seatId = undefined;
   proxyForm.sessDate = undefined;
   proxyForm.mobile = undefined;
   proxyForm.customerName = undefined;
@@ -512,38 +492,24 @@ function resetProxy() {
   proxySlotEnd.value = '';
   proxyAmountYuan.value = null;
   proxySeatTypeOptions.value = [];
-  proxyAllSeats.value = [];
 }
 
-/** 切门店 → 重拉该店桌型档 + 座位，清空已选桌型/座位 */
+/** 切门店 → 重拉该店桌型档，清空已选桌型（座位不在此选，核销时分）。 */
 async function onProxyStoreChange(storeId: number | string) {
   proxyForm.seatTypeConfigId = undefined;
-  proxyForm.seatId = undefined;
   proxySeatTypeOptions.value = [];
-  proxyAllSeats.value = [];
   if (storeId == null) return;
   proxyTypeLoading.value = true;
-  proxySeatLoading.value = true;
   try {
-    const [typeResp, seatResp] = await Promise.all([
-      listGzBeanSeatTypeConfigByStore(Number(storeId)),
-      listGzBeanSeatByStore(storeId)
-    ]);
+    const typeResp = await listGzBeanSeatTypeConfigByStore(Number(storeId));
     const types = ((typeResp as any).data || typeResp || []) as GzBeanSeatTypeConfigVO[];
     proxySeatTypeOptions.value = types.filter((c) => c.enabled === 1);
-    proxyAllSeats.value = ((seatResp as any).data || seatResp || []) as GzBeanSeatVO[];
   } catch (e) {
-    console.error('[gz-bean-booking] proxy load store config failed', e);
+    console.error('[gz-bean-booking] proxy load store types failed', e);
     ElMessage.error(t('gzBeanBooking.loadFailed'));
   } finally {
     proxyTypeLoading.value = false;
-    proxySeatLoading.value = false;
   }
-}
-
-/** 切桌型档 → 清空已选座位（座位下拉重过滤） */
-function onProxySeatTypeChange() {
-  proxyForm.seatId = undefined;
 }
 
 async function submitProxyCreate() {
@@ -567,14 +533,9 @@ async function submitProxyCreate() {
     ElMessage.warning(t('gzBeanBooking.proxyRequireSeatType'));
     return;
   }
-  if (proxyForm.seatId == null) {
-    ElMessage.warning(t('gzBeanBooking.proxyRequireSeat'));
-    return;
-  }
   const body: GzBeanAdminCreateBody = {
     storeId: proxyForm.storeId,
     seatTypeConfigId: proxyForm.seatTypeConfigId,
-    seatId: proxyForm.seatId,
     sessDate: proxyForm.sessDate,
     slotStart: `${proxySlotStart.value}:00`,
     slotEnd: `${proxySlotEnd.value}:00`
