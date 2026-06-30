@@ -57,7 +57,16 @@
         </div>
         <el-empty v-if="!pendingLoading && pendingRows.length === 0" :description="t('gzBeanBoard.pendingEmpty')" :image-size="60" />
         <div v-else v-loading="pendingLoading" class="pending-grid">
-          <div v-for="p in pendingRows" :key="p.id" class="pending-card">
+          <div v-for="p in pendingRows" :key="p.id" class="pending-card" :class="{ 'is-consecutive': p.consecutiveWithActive === true }">
+            <el-tag
+              v-if="p.consecutiveWithActive === true"
+              type="danger"
+              size="small"
+              effect="dark"
+              class="pending-card__badge"
+            >
+              {{ t('gzBeanBoard.consecutiveTag', { seat: p.suggestedSeatNo || '-' }) }}
+            </el-tag>
             <div class="pending-card__main">
               <div class="pending-card__no">{{ p.bookingNo }}</div>
               <div class="pending-card__line">
@@ -68,12 +77,100 @@
                 {{ t('gzBeanBoard.mobileTail') }} {{ mobileTail(p.mobileSnapshot) }}
               </div>
             </div>
-            <el-button v-hasPermi="['gz:bean:booking:verify']" type="primary" size="small" :icon="Select" @click="openAssign(p)">
-              {{ t('gzBeanBoard.assignVerify') }}
-            </el-button>
+            <div class="pending-card__actions">
+              <el-button
+                v-if="p.consecutiveWithActive === true"
+                v-hasPermi="['gz:bean:booking:verify']"
+                type="danger"
+                size="small"
+                :icon="Select"
+                @click="openAssign(p, true)"
+              >
+                {{ t('gzBeanBoard.earlyVerify') }}
+              </el-button>
+              <el-button v-else v-hasPermi="['gz:bean:booking:verify']" type="primary" size="small" :icon="Select" @click="openAssign(p)">
+                {{ t('gzBeanBoard.assignVerify') }}
+              </el-button>
+            </div>
           </div>
         </div>
       </div>
+
+      <!-- 过期待处理 panel + 批量结单（GZ-BEAN-041） -->
+      <el-collapse v-if="currentStoreId" v-model="expiredCollapse" class="expired-panel mb-3">
+        <el-collapse-item name="expired">
+          <template #title>
+            <el-icon class="expired-panel__icon"><WarningFilled /></el-icon>
+            <span class="expired-panel__title">{{ t('gzBeanBoard.expiredTitle') }}（{{ expiredRows.length }}）</span>
+            <el-button text size="small" :icon="Refresh" :loading="expiredLoading" class="ml-2" @click.stop="loadExpired">
+              {{ t('gzBeanBoard.expiredRefresh') }}
+            </el-button>
+          </template>
+          <div class="expired-toolbar mb-2">
+            <el-button
+              v-hasPermi="['gz:bean:booking:verify']"
+              type="success"
+              size="small"
+              :loading="settling"
+              :disabled="selectedExpiredIds.length === 0"
+              @click="handleBatchSettle('completed')"
+            >
+              {{ t('gzBeanBoard.settleCompleted') }}
+            </el-button>
+            <el-button
+              v-hasPermi="['gz:bean:booking:verify']"
+              type="warning"
+              size="small"
+              :loading="settling"
+              :disabled="selectedExpiredIds.length === 0"
+              @click="handleBatchSettle('no_show')"
+            >
+              {{ t('gzBeanBoard.markNoShow') }}
+            </el-button>
+            <el-button
+              v-hasPermi="['gz:bean:booking:verify']"
+              type="danger"
+              size="small"
+              :loading="settling"
+              :disabled="selectedExpiredIds.length === 0"
+              @click="handleBatchSettle('released')"
+            >
+              {{ t('gzBeanBoard.markEnded') }}
+            </el-button>
+          </div>
+          <el-table
+            v-loading="expiredLoading"
+            :data="expiredRows"
+            border
+            stripe
+            size="small"
+            row-key="id"
+            @selection-change="onExpiredSelectionChange"
+          >
+            <el-table-column type="selection" width="42" />
+            <el-table-column :label="t('gzBeanBoard.expiredColBookingNo')" prop="bookingNo" min-width="160" />
+            <el-table-column :label="t('gzBeanBoard.expiredColType')" min-width="110">
+              <template #default="{ row }">{{ row.seatTypeSnapshot || t('gzBeanBoard.typeUnknown') }}</template>
+            </el-table-column>
+            <el-table-column :label="t('gzBeanBoard.expiredColSlot')" min-width="150">
+              <template #default="{ row }">{{ row.sessDate }} {{ hhmm(row.slotStart) }}-{{ hhmm(row.slotEnd) }}</template>
+            </el-table-column>
+            <el-table-column :label="t('gzBeanBoard.expiredColStatus')" width="110" align="center">
+              <template #default="{ row }">
+                <el-tag :type="expiredStatusTagType(row.status)" effect="plain" size="small">
+                  {{ expiredStatusLabel(row.status) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('gzBeanBoard.expiredColExpired')" width="130" align="center">
+              <template #default="{ row }">{{ expiredLabel(row.expiredMinutes) }}</template>
+            </el-table-column>
+            <template #empty>
+              <el-empty :description="t('gzBeanBoard.expiredEmpty')" :image-size="60" />
+            </template>
+          </el-table>
+        </el-collapse-item>
+      </el-collapse>
 
       <!-- 状态图例 + 统计 -->
       <div class="board-legend mb-3">
@@ -109,6 +206,9 @@
               </div>
               <div v-if="showCountdown(row)" class="board-seat__countdown" :class="{ 'is-near': row.boardStatus === 'near_end' }">
                 {{ countdownLabel(row) }}
+              </div>
+              <div v-if="row.continuousUntil" class="board-seat__continuous">
+                {{ t('gzBeanBoard.continuousTag', { time: hhmm(row.continuousUntil) }) }}
               </div>
               <el-tag v-if="showCanExtend(row)" :type="row.canExtend ? 'success' : 'danger'" size="small" effect="plain" class="board-seat__extend">
                 {{ row.canExtend ? t('gzBeanBoard.canExtendYes') : t('gzBeanBoard.canExtendNo') }}
@@ -178,6 +278,15 @@
           <el-button v-hasPermi="['gz:bean:booking:verify']" type="primary" :icon="Timer" :loading="extending" @click="openExtend(activeRow)">
             {{ t('gzBeanBoard.extend') }}
           </el-button>
+          <el-button
+            v-if="canReassign(activeRow)"
+            v-hasPermi="['gz:bean:booking:verify']"
+            type="info"
+            :icon="Switch"
+            @click="openReassign(activeRow)"
+          >
+            {{ t('gzBeanBoard.reassign') }}
+          </el-button>
         </div>
         <div v-if="canOperate(activeRow)" class="board-actions-hint mt-2">{{ t('gzBeanBoard.actionsHint') }}</div>
       </template>
@@ -186,9 +295,9 @@
     <!-- 延时弹窗 -->
     <el-dialog v-model="extendVisible" :title="t('gzBeanBoard.extendTitle')" width="380px">
       <el-form label-width="100px">
-        <el-form-item :label="t('gzBeanBoard.extendHours')">
-          <el-input-number v-model="extendHours" :min="1" :max="12" :step="1" />
-          <span class="form-hint">{{ t('gzBeanBoard.extendHoursHint') }}</span>
+        <el-form-item :label="t('gzBeanBoard.extendMinutes')">
+          <el-input-number v-model="extendMinutes" :min="5" :max="720" :step="5" />
+          <span class="form-hint">{{ t('gzBeanBoard.extendMinutesHint') }}</span>
         </el-form-item>
       </el-form>
       <el-alert type="warning" :closable="false" show-icon :description="t('gzBeanBoard.extendNoPayHint')" />
@@ -198,29 +307,44 @@
       </template>
     </el-dialog>
 
-    <!-- 分配座位并核销弹窗（②待分座 → 选空闲座 → verify?seatId=） -->
-    <el-dialog v-model="assignVisible" :title="t('gzBeanBoard.assignTitle')" width="480px">
-      <template v-if="assignTarget">
+    <!-- 分配座位弹窗：核销分座（②待分座/提前核销）/ 改派座位（详情抽屉）两用 -->
+    <el-dialog v-model="assignVisible" :title="assignMode === 'reassign' ? t('gzBeanBoard.reassignTitle') : t('gzBeanBoard.assignTitle')" width="480px">
+      <template v-if="assignSummary">
         <el-descriptions :column="1" border size="small" class="mb-3">
-          <el-descriptions-item :label="t('gzBeanBoard.colBookingNo')">{{ assignTarget.bookingNo }}</el-descriptions-item>
-          <el-descriptions-item :label="t('gzBeanBoard.colTypeName')">
-            {{ assignTarget.seatTypeSnapshot || assignTarget.seatType || t('gzBeanBoard.typeUnknown') }}
-          </el-descriptions-item>
-          <el-descriptions-item :label="t('gzBeanBoard.colSlot')"
-            >{{ hhmm(assignTarget.slotStart) }} - {{ hhmm(assignTarget.slotEnd) }}</el-descriptions-item
-          >
+          <el-descriptions-item :label="t('gzBeanBoard.colBookingNo')">{{ assignSummary.bookingNo }}</el-descriptions-item>
+          <el-descriptions-item :label="t('gzBeanBoard.colTypeName')">{{ assignSummary.typeName }}</el-descriptions-item>
+          <el-descriptions-item :label="t('gzBeanBoard.colSlot')">{{ assignSummary.slot }}</el-descriptions-item>
         </el-descriptions>
 
-        <div class="assign-seat-label">{{ t('gzBeanBoard.assignPickSeat') }}</div>
+        <div class="assign-seat-label">
+          {{ assignMode === 'reassign' ? t('gzBeanBoard.reassignPickSeat') : t('gzBeanBoard.assignPickSeat') }}
+        </div>
+        <el-alert
+          v-if="suggestedSeatId"
+          type="warning"
+          :closable="false"
+          show-icon
+          class="mb-2"
+          :description="t('gzBeanBoard.assignSuggestedHint')"
+        />
         <el-empty v-if="assignSeatOptions.length === 0" :description="t('gzBeanBoard.assignNoIdle')" :image-size="60" />
         <div v-else class="assign-seat-grid">
           <div
             v-for="seat in assignSeatOptions"
             :key="seat.seatId"
             class="assign-seat"
-            :class="{ 'is-selected': selectedSeatId === seat.seatId }"
+            :class="{ 'is-selected': selectedSeatId === seat.seatId, 'is-suggested': seat.seatId === suggestedSeatId }"
             @click="selectedSeatId = seat.seatId"
           >
+            <el-tag
+              v-if="seat.seatId === suggestedSeatId"
+              type="danger"
+              size="small"
+              effect="dark"
+              class="assign-seat__suggest"
+            >
+              {{ t('gzBeanBoard.assignSuggestedTag') }}
+            </el-tag>
             <div class="assign-seat__no">
               {{ seat.seatNo }}<span v-if="seat.tableNo" class="assign-seat__table">{{ seat.tableNo }}</span>
             </div>
@@ -238,8 +362,8 @@
       </template>
       <template #footer>
         <el-button @click="assignVisible = false">{{ t('gzBeanBoard.cancel') }}</el-button>
-        <el-button type="primary" :loading="assigning" :disabled="!selectedSeatId" @click="handleAssignVerify">
-          {{ t('gzBeanBoard.assignConfirm') }}
+        <el-button type="primary" :loading="assigning" :disabled="!selectedSeatId" @click="handleAssignConfirm">
+          {{ assignMode === 'reassign' ? t('gzBeanBoard.reassignConfirm') : t('gzBeanBoard.assignConfirm') }}
         </el-button>
       </template>
     </el-dialog>
@@ -247,8 +371,8 @@
 </template>
 
 <script setup lang="ts" name="GzBeanBoard">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
-import { Search, Refresh, Timer, CircleClose, Bell, Select } from '@element-plus/icons-vue';
+import { ref, computed, onMounted, onActivated, onDeactivated, onBeforeUnmount } from 'vue';
+import { Search, Refresh, Timer, CircleClose, Bell, Select, Switch, WarningFilled } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox, ElNotification } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { getGzBeanStoreOptions, type GzBeanStoreVO } from '@/api/gz-bean/store';
@@ -256,11 +380,16 @@ import {
   getGzBeanBoard,
   getGzBeanPendingAssign,
   verifyGzBeanBookingWithSeat,
+  reassignGzBeanSeat,
   releaseGzBeanSeat,
   extendGzBeanBooking,
+  getGzBeanExpiredUnsettled,
+  batchSettleGzBeanBookings,
   type GzBeanBoardRowVO,
   type GzBeanBoardStatus,
-  type GzBeanPendingAssignVO
+  type GzBeanPendingAssignVO,
+  type GzBeanExpiredUnsettledVO,
+  type GzBeanSettleAction
 } from '@/api/gz-bean/board';
 
 const { t } = useI18n();
@@ -376,6 +505,11 @@ function canOperate(row: GzBeanBoardRowVO): boolean {
   return row.boardStatus === 'in_use' || row.boardStatus === 'near_end' || row.boardStatus === 'overtime';
 }
 
+/** 可改派：已核销在店（used 未放座 = canOperate）且 actualEndTime 为空（未放座） */
+function canReassign(row: GzBeanBoardRowVO): boolean {
+  return canOperate(row) && !!row.currentBookingId && !row.actualEndTime;
+}
+
 /** 显示倒计时：in_use / near_end（后端回填 remainingMinutes），本地按秒细化 */
 function showCountdown(row: GzBeanBoardRowVO): boolean {
   return (row.boardStatus === 'in_use' || row.boardStatus === 'near_end') && row.slotEnd != null;
@@ -457,9 +591,11 @@ async function loadStoreOptions() {
 
 async function onStoreChange(id: number) {
   currentStoreId.value = id;
-  // 换店清空提醒记账 + 待分座区，避免上一店的 near_end / 待分座单串到本店
+  // 换店清空提醒记账 + 待分座区 + 过期待处理区，避免上一店的 near_end / 待分座 / 过期单串到本店
   notifiedNearEnd.clear();
   pendingRows.value = [];
+  expiredRows.value = [];
+  selectedExpiredIds.value = [];
   await loadBoard();
 }
 
@@ -471,7 +607,6 @@ async function loadBoard() {
     const next = ((resp as any).data || []) as GzBeanBoardRowVO[];
     detectNearEnd(next);
     rows.value = next;
-    lastFetchAt = Date.now();
     // 抽屉打开时同步刷新当前选中座位
     if (detailVisible.value && activeRow.value) {
       const nextRow = rows.value.find((r) => r.seatId === activeRow.value!.seatId);
@@ -482,10 +617,13 @@ async function loadBoard() {
     console.error('[gz-bean-board] loadBoard failed', e);
     ElMessage.error(t('gzBeanBoard.loadFailed'));
   } finally {
+    // 成功 / 失败都前移 lastFetchAt：接口异常时仍按 30s 退避重试，避免每秒重试刷屏（500 风暴根因）
+    lastFetchAt = Date.now();
     listLoading.value = false;
   }
-  // 看板与待分座区一起刷新（同一动作触发，互不阻塞）
+  // 看板与待分座区 / 过期待处理区一起刷新（同一动作触发，互不阻塞）
   loadPending();
+  loadExpired();
 }
 
 /** ②待分座区加载 */
@@ -621,13 +759,13 @@ async function handleRelease(row: GzBeanBoardRowVO) {
 
 // ============ 延时 ============
 const extendVisible = ref(false);
-const extendHours = ref(1);
+const extendMinutes = ref(60);
 const extendTargetId = ref<string | null>(null);
 
 function openExtend(row: GzBeanBoardRowVO) {
   if (!row.currentBookingId) return;
   extendTargetId.value = row.currentBookingId;
-  extendHours.value = 1;
+  extendMinutes.value = 60;
   extendVisible.value = true;
 }
 
@@ -635,7 +773,7 @@ async function handleExtend() {
   if (!extendTargetId.value) return;
   extending.value = true;
   try {
-    await extendGzBeanBooking(extendTargetId.value, extendHours.value);
+    await extendGzBeanBooking(extendTargetId.value, extendMinutes.value);
     ElMessage.success(t('gzBeanBoard.extendSuccess'));
     extendVisible.value = false;
     detailVisible.value = false;
@@ -647,32 +785,103 @@ async function handleExtend() {
   }
 }
 
-// ============ 分配座位并核销（②待分座 → 选①区空闲座 → verify?seatId=） ============
+// ============ 分配座位弹窗：核销分座（②待分座/提前核销）/ 改派座位 两用 ============
+type AssignMode = 'verify' | 'reassign';
 const assignVisible = ref(false);
 const assigning = ref(false);
+const assignMode = ref<AssignMode>('verify');
+/** 核销分座的目标待分座单（verify 模式） */
 const assignTarget = ref<GzBeanPendingAssignVO | null>(null);
+/** 改派的目标看板行（reassign 模式） */
+const reassignTargetRow = ref<GzBeanBoardRowVO | null>(null);
 const selectedSeatId = ref<string | null>(null);
 
+/** 弹窗头部摘要（两模式统一渲染） */
+interface AssignSummary {
+  bookingNo: string;
+  typeName: string;
+  slot: string;
+}
+const assignSummary = computed<AssignSummary | null>(() => {
+  if (assignMode.value === 'reassign' && reassignTargetRow.value) {
+    const r = reassignTargetRow.value;
+    return {
+      bookingNo: r.bookingNo || '-',
+      typeName: r.typeName || t('gzBeanBoard.typeUnknown'),
+      slot: r.slotStart && r.slotEnd ? `${hhmm(r.slotStart)} - ${hhmm(r.slotEnd)}` : '-'
+    };
+  }
+  if (assignTarget.value) {
+    const p = assignTarget.value;
+    return {
+      bookingNo: p.bookingNo,
+      typeName: p.seatTypeSnapshot || p.seatType || t('gzBeanBoard.typeUnknown'),
+      slot: `${hhmm(p.slotStart)} - ${hhmm(p.slotEnd)}`
+    };
+  }
+  return null;
+});
+
+/** 当前 verify 弹窗的续坐建议座 id（reassign 模式无）；驱动续坐座入选项 + 角标 + 默认选中。 */
+const suggestedSeatId = computed<string | null>(() =>
+  assignMode.value === 'verify' ? assignTarget.value?.suggestedSeatId ?? null : null
+);
+
 /**
- * 当前待分座单可选的空闲座：①区 boardStatus='idle'，且桌型匹配（typeName === 预约桌型快照名）。
- * 名称匹配是便利过滤（后端 verify 仍以 seat_type_config_id 为准做 SEAT_TYPE_MISMATCH 校验）；
- * 无快照名 / 无匹配时回退展示全部空闲座，交由后端兜底校验，避免「明明有空座却过滤没了」。
+ * 当前弹窗可选座：①区 boardStatus='idle' 空闲座，且桌型匹配（typeName === 目标桌型名）。
+ * 名称匹配是便利过滤（后端 verify/reassign 仍以 seat_type_config_id 为准做 SEAT_TYPE_MISMATCH 校验）；
+ * 无目标桌型名 / 无匹配时回退展示全部空闲座，交由后端兜底校验。
+ * GZ-BEAN-037 续坐：建议座被同用户相邻在店单占用（非 idle，不在空闲列表里）→ 置顶并入选项，
+ * 让店员看到并确认默认选中的续坐座（两段不重叠，后端区间互斥放行）。
  */
 const assignSeatOptions = computed<GzBeanBoardRowVO[]>(() => {
   const idle = rows.value.filter((r) => r.boardStatus === 'idle' && r.seatId);
-  const wantType = assignTarget.value?.seatTypeSnapshot;
-  if (!wantType) return idle;
-  const matched = idle.filter((r) => r.typeName === wantType);
-  return matched.length > 0 ? matched : idle;
+  const wantType =
+    assignMode.value === 'reassign' ? reassignTargetRow.value?.typeName : assignTarget.value?.seatTypeSnapshot;
+  let options = idle;
+  if (wantType) {
+    const matched = idle.filter((r) => r.typeName === wantType);
+    options = matched.length > 0 ? matched : idle;
+  }
+  const sid = suggestedSeatId.value;
+  if (sid && !options.some((r) => r.seatId === sid)) {
+    const suggestedRow = rows.value.find((r) => r.seatId === sid);
+    if (suggestedRow) options = [suggestedRow, ...options];
+  }
+  return options;
 });
 
-function openAssign(p: GzBeanPendingAssignVO) {
+/**
+ * 打开核销分座弹窗。preselectSuggested=true（GZ-BEAN-037 提前核销）时默认预选建议座位，
+ * 店员可确认或改选；最终仍走 verifyGzBeanBookingWithSeat(选定座)。
+ */
+function openAssign(p: GzBeanPendingAssignVO, preselectSuggested = false) {
+  assignMode.value = 'verify';
   assignTarget.value = p;
+  reassignTargetRow.value = null;
+  selectedSeatId.value = preselectSuggested && p.suggestedSeatId ? p.suggestedSeatId : null;
+  assignVisible.value = true;
+}
+
+/** 打开改派弹窗（GZ-BEAN-040）：从详情抽屉对已核销在店单改派到另一空闲座。 */
+function openReassign(row: GzBeanBoardRowVO) {
+  if (!row.currentBookingId) return;
+  assignMode.value = 'reassign';
+  reassignTargetRow.value = row;
+  assignTarget.value = null;
   selectedSeatId.value = null;
   assignVisible.value = true;
 }
 
-async function handleAssignVerify() {
+async function handleAssignConfirm() {
+  if (assignMode.value === 'reassign') {
+    await doReassign();
+  } else {
+    await doAssignVerify();
+  }
+}
+
+async function doAssignVerify() {
   if (!assignTarget.value || !selectedSeatId.value) return;
   assigning.value = true;
   try {
@@ -690,6 +899,110 @@ async function handleAssignVerify() {
     loadBoard();
   } finally {
     assigning.value = false;
+  }
+}
+
+async function doReassign() {
+  if (!reassignTargetRow.value?.currentBookingId || !selectedSeatId.value) return;
+  assigning.value = true;
+  try {
+    await reassignGzBeanSeat(reassignTargetRow.value.currentBookingId, selectedSeatId.value);
+    ElMessage.success(t('gzBeanBoard.reassignSuccess'));
+    assignVisible.value = false;
+    reassignTargetRow.value = null;
+    selectedSeatId.value = null;
+    detailVisible.value = false;
+    await loadBoard();
+  } catch (e) {
+    // 业务错误码（4017 已放座/非 used / 4022 桌型不符 / 4002 座被占）已由拦截器 toast；重拉看板回正空闲座。
+    console.error('[gz-bean-board] reassign failed', e);
+    loadBoard();
+  } finally {
+    assigning.value = false;
+  }
+}
+
+// ============ 过期待处理 + 批量结单（GZ-BEAN-041） ============
+const expiredCollapse = ref<string[]>([]);
+const expiredRows = ref<GzBeanExpiredUnsettledVO[]>([]);
+const expiredLoading = ref(false);
+const settling = ref(false);
+const selectedExpiredIds = ref<string[]>([]);
+
+async function loadExpired() {
+  if (currentStoreId.value == null) return;
+  expiredLoading.value = true;
+  try {
+    const resp = await getGzBeanExpiredUnsettled(currentStoreId.value, sessDate.value);
+    expiredRows.value = ((resp as any).data || []) as GzBeanExpiredUnsettledVO[];
+    selectedExpiredIds.value = [];
+  } catch (e) {
+    console.error('[gz-bean-board] loadExpired failed', e);
+    // 过期区失败不打断主看板
+  } finally {
+    expiredLoading.value = false;
+  }
+}
+
+function onExpiredSelectionChange(sel: GzBeanExpiredUnsettledVO[]) {
+  selectedExpiredIds.value = sel.map((r) => r.id);
+}
+
+function expiredStatusLabel(status: string): string {
+  if (status === 'pending') return t('gzBeanBoard.expiredStatus.pending');
+  if (status === 'no_show') return t('gzBeanBoard.expiredStatus.no_show');
+  if (status === 'used') return t('gzBeanBoard.expiredStatus.used');
+  return status;
+}
+
+function expiredStatusTagType(status: string): 'info' | 'warning' | 'danger' {
+  if (status === 'no_show') return 'warning';
+  if (status === 'used') return 'danger';
+  return 'info';
+}
+
+/** expiredMinutes → 「已过期 N 分钟 / 小时」（> 60 显小时） */
+function expiredLabel(min: number | null | undefined): string {
+  if (min == null || min <= 0) return '-';
+  if (min > 60) return t('gzBeanBoard.expiredHoursLabel', { n: Math.floor(min / 60) });
+  return t('gzBeanBoard.expiredMinutesLabel', { n: min });
+}
+
+async function handleBatchSettle(action: GzBeanSettleAction) {
+  if (selectedExpiredIds.value.length === 0) {
+    ElMessage.warning(t('gzBeanBoard.batchSelectEmpty'));
+    return;
+  }
+  const n = selectedExpiredIds.value.length;
+  const confirmMsg =
+    action === 'completed'
+      ? t('gzBeanBoard.settleCompletedConfirm', { n })
+      : action === 'no_show'
+        ? t('gzBeanBoard.markNoShowConfirm', { n })
+        : t('gzBeanBoard.markEndedConfirm', { n });
+  try {
+    await ElMessageBox.confirm(confirmMsg, t('gzBeanBoard.batchConfirm'), { type: 'warning' });
+  } catch {
+    return; // 取消
+  }
+  settling.value = true;
+  try {
+    const resp = await batchSettleGzBeanBookings(selectedExpiredIds.value, action);
+    const result = (resp as any).data || resp;
+    ElMessage.success(
+      t('gzBeanBoard.batchResult', {
+        succeeded: result.succeeded ?? 0,
+        skipped: result.skipped ?? 0,
+        failed: result.failed ?? 0
+      })
+    );
+    await loadExpired();
+    await loadBoard();
+  } catch (e) {
+    console.error('[gz-bean-board] batch settle failed', e);
+    ElMessage.error(t('gzBeanBoard.batchFailed'));
+  } finally {
+    settling.value = false;
   }
 }
 
@@ -713,7 +1026,18 @@ function stopTick() {
 
 onMounted(() => {
   loadStoreOptions();
+});
+
+// 本页在 ruoyi tabsView 下被 keep-alive 缓存：必须仅在「激活（当前 tab）」时轮询，切走即停。
+// 否则 startTick 的 setInterval 会在后台持续打 board/pending-assign/expired 三接口（切到别的 tab 也在跑），
+// 接口异常时更会刷屏。onActivated 在首次挂载后也会触发一次，故 startTick 只放这里、不放 onMounted。
+onActivated(() => {
+  if (currentStoreId.value != null) loadBoard();
   startTick();
+});
+
+onDeactivated(() => {
+  stopTick();
 });
 
 onBeforeUnmount(() => {
@@ -825,6 +1149,12 @@ onBeforeUnmount(() => {
   top: 8px;
   right: 8px;
 }
+.board-seat__continuous {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-color-primary);
+}
 .board-seat__extend {
   margin-top: 4px;
 }
@@ -854,6 +1184,7 @@ onBeforeUnmount(() => {
   gap: 10px;
 }
 .pending-card {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -862,6 +1193,22 @@ onBeforeUnmount(() => {
   background: #fff;
   border-radius: 8px;
   padding: 10px 12px;
+}
+.pending-card.is-consecutive {
+  border: 2px solid #f56c6c;
+  background: #fef4f4;
+  box-shadow: 0 0 0 2px rgba(245, 108, 108, 0.12);
+}
+.pending-card__badge {
+  position: absolute;
+  top: -10px;
+  left: 10px;
+}
+.pending-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 .pending-card__no {
   font-weight: 700;
@@ -882,6 +1229,26 @@ onBeforeUnmount(() => {
 .pending-card__mobile {
   color: #909399;
 }
+/* 过期待处理 panel */
+.expired-panel {
+  border: 1px solid #fde2e2;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #fffafa;
+}
+.expired-panel__icon {
+  color: #f56c6c;
+  margin-right: 6px;
+}
+.expired-panel__title {
+  font-weight: 600;
+  color: #303133;
+}
+.expired-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 /* 分配座位弹窗 */
 .assign-seat-label {
   font-weight: 600;
@@ -896,6 +1263,7 @@ onBeforeUnmount(() => {
   overflow-y: auto;
 }
 .assign-seat {
+  position: relative;
   border: 1px solid #e4e7ed;
   border-radius: 6px;
   padding: 8px;
@@ -911,6 +1279,18 @@ onBeforeUnmount(() => {
 .assign-seat.is-selected {
   border-color: var(--el-color-primary);
   background: var(--el-color-primary-light-9);
+}
+.assign-seat.is-suggested {
+  border-color: #f56c6c;
+}
+.assign-seat.is-suggested.is-selected {
+  background: #fef0f0;
+}
+.assign-seat__suggest {
+  position: absolute;
+  top: -8px;
+  right: -4px;
+  transform: scale(0.85);
 }
 .assign-seat__no {
   font-weight: 700;

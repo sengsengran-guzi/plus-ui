@@ -61,6 +61,11 @@ export interface GzBeanBoardRowVO {
    * 仅 in_use / near_end / overtime 回填，其余 null。
    */
   canExtend?: boolean | null;
+  /**
+   * 续坐止界 HH:mm:ss（GZ-BEAN-037）：当前单同座同用户 back-to-back 续坐链的最末 slot_end，
+   * 仅存在续坐（> 当前 slotEnd）时回填 → 看板显「续坐 → HH:mm」角标；无续坐 / idle 时 null。
+   */
+  continuousUntil?: string | null;
 }
 
 /**
@@ -76,6 +81,8 @@ export interface GzBeanPendingAssignVO {
   seatType?: string | null;
   /** 桌型中文名快照（与 board 行 typeName 同源，用于过滤匹配桌型的空闲座） */
   seatTypeSnapshot?: string | null;
+  /** 桌型 config id（string；分座弹窗按它筛同桌型空闲座） */
+  seatTypeConfigId?: string | null;
   /** 预约日期 yyyy-MM-dd */
   sessDate: string;
   /** 计划时段起 HH:mm:ss */
@@ -84,6 +91,45 @@ export interface GzBeanPendingAssignVO {
   slotEnd: string;
   /** 手机号 snapshot（店员看全量，前端展示尾号） */
   mobileSnapshot?: string | null;
+  /** GZ-BEAN-037：是否与同用户当前在店单时段相连（true → 高亮 + 一键提前核销，弹窗默认预选建议座） */
+  consecutiveWithActive?: boolean | null;
+  /** 建议沿用座位 id（string；consecutiveWithActive=true 时有值，分座弹窗默认预选） */
+  suggestedSeatId?: string | null;
+  /** 建议沿用座位号（展示用，如 D5） */
+  suggestedSeatNo?: string | null;
+  /** 同用户相连在店单的占用止界 = 本单时段开始 HH:mm:ss（展示「接续 …后」用） */
+  activeSlotEnd?: string | null;
+}
+
+/**
+ * 过期未结单行 VO（GZ-BEAN-041 / kevin-test §6）：时段已过仍未终结的单
+ * （待分座过期 pending / cron 扫走的 no_show / 已超时 used 未放座）。看板「过期待处理」区批量结单用。
+ */
+export interface GzBeanExpiredUnsettledVO {
+  id: string;
+  bookingNo: string;
+  seatTypeSnapshot?: string | null;
+  seatNoSnapshot?: string | null;
+  sessDate: string;
+  slotStart: string;
+  slotEnd: string;
+  /** 业务状态 pending / no_show / used */
+  status: string;
+  /** admin 综合状态（dict gz_bean_booking_status） */
+  bizStatus?: string | null;
+  mobileSnapshot?: string | null;
+  /** 时段已过分钟数（展示「已过期 N 分钟/小时」） */
+  expiredMinutes?: number | null;
+}
+
+/** 批量结单动作：completed=补核销为已完成 / no_show=标爽约 / released=已超时标已结束（放座） */
+export type GzBeanSettleAction = 'completed' | 'no_show' | 'released';
+
+/** 批量结单结果 */
+export interface GzBeanBatchSettleResult {
+  succeeded: number;
+  skipped: number;
+  failed: number;
 }
 
 /**
@@ -142,15 +188,56 @@ export function releaseGzBeanSeat(id: number | string): AxiosPromise<GzBeanBoard
 }
 
 /**
- * POST /system/gz/bean/booking/{id}/extend?addHours= — 延时
- * 把 slot_end 往后推 addHours 个整点格；先校验新增格未被占（占了拒绝 EXTEND_CONFLICT）。
+ * POST /system/gz/bean/booking/{id}/extend?addMinutes= — 延时（kevin-test §3a 改输入分钟）
+ * 把 slot_end 往后推 addMinutes 分钟（精确到分，差额线下结算）；占用按整点格回收（溢入下一格即占该格、mp 余量 −1）。
+ * 先校验新增格未被占（占了拒绝 EXTEND_CONFLICT）。
  * @param id 预约 id
- * @param addHours 延后整点格数（正整数）
+ * @param addMinutes 延后分钟数（正整数 1-720）
  */
-export function extendGzBeanBooking(id: number | string, addHours: number): AxiosPromise<GzBeanBoardRowVO> {
+export function extendGzBeanBooking(id: number | string, addMinutes: number): AxiosPromise<GzBeanBoardRowVO> {
   return request({
     url: `/system/gz/bean/booking/${id}/extend`,
     method: 'post',
-    params: { addHours }
+    params: { addMinutes }
+  });
+}
+
+/**
+ * POST /system/gz/bean/booking/{id}/reassign-seat?seatId= — 改派座位（GZ-BEAN-040 / kevin-test §5）
+ * 把已核销（used 未放座）单改派到另一空闲座位（店员分错座的补救）。复用核销分座校验链。
+ * 错误码：4017（已放座/非used）/ 4022（桌型不符）/ 4002（座被占）。
+ */
+export function reassignGzBeanSeat(id: number | string, seatId: number | string): AxiosPromise<GzBeanBoardRowVO> {
+  return request({
+    url: `/system/gz/bean/booking/${id}/reassign-seat`,
+    method: 'post',
+    params: { seatId }
+  });
+}
+
+/**
+ * GET /system/gz/bean/booking/board/expired-unsettled — 看板「过期待处理」区（GZ-BEAN-041 / kevin-test §6）
+ * 某门店某日时段已过仍未终结的单（pending 过期 / no_show 翻案 / used 已超时未放座）。
+ */
+export function getGzBeanExpiredUnsettled(storeId: number | string, sessDate: string): AxiosPromise<GzBeanExpiredUnsettledVO[]> {
+  return request({
+    url: '/system/gz/bean/booking/board/expired-unsettled',
+    method: 'get',
+    params: { storeId, sessDate }
+  });
+}
+
+/**
+ * POST /system/gz/bean/booking/batch-settle — 批量结单（GZ-BEAN-041 / kevin-test §6）
+ * action: completed（补核销为已完成，pending|no_show→used，无座历史结算）/ no_show（标爽约）/ released（已超时标已结束=放座）。
+ */
+export function batchSettleGzBeanBookings(
+  bookingIds: (number | string)[],
+  action: GzBeanSettleAction
+): AxiosPromise<GzBeanBatchSettleResult> {
+  return request({
+    url: '/system/gz/bean/booking/batch-settle',
+    method: 'post',
+    data: { bookingIds, action }
   });
 }

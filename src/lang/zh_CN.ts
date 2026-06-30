@@ -865,8 +865,8 @@ export default {
     releaseConfirm: '确认对座位「{no}」（预约 {booking}）放座吗？放座后该座立即空出、可被再约。',
     releaseSuccess: '已放座',
     extendTitle: '延时',
-    extendHours: '延后小时',
-    extendHoursHint: '按整点格延后（1-12 小时）',
+    extendMinutes: '延后分钟',
+    extendMinutesHint: '延后分钟（5-720，差额按门店政策线下结算）',
     extendNoPayHint: '延时不走线上补付；如该座新增时段已被占用将无法延时。差额按门店政策线下结算。',
     extendSuccess: '延时成功',
     confirm: '确定',
@@ -894,7 +894,46 @@ export default {
     assignNoIdle: '当前无空闲座位',
     assignNoIdleHint: '该门店该日暂无空闲座位可分配。可待在店客人放座 / 延时后再分，或核对座位单元配置。',
     assignConfirm: '确认分座并核销',
-    assignSuccess: '已分座并核销'
+    assignSuccess: '已分座并核销',
+    // GZ-BEAN-037 续坐：弹窗续坐建议座角标/提示 + 看板续坐角标
+    assignSuggestedTag: '续坐',
+    assignSuggestedHint: '该客人上一时段就坐此座，已默认选中续坐同座；如需换座可改选下方空闲座位。',
+    continuousTag: '续坐 → {time}',
+    // GZ-BEAN-037 待分座连续时段高亮 + 提前核销
+    consecutiveTag: '连续 · 建议 {seat}',
+    earlyVerify: '提前核销',
+    // GZ-BEAN-040 改派座位
+    reassign: '改派座位',
+    reassignTitle: '改派座位',
+    reassignPickSeat: '选择改派到的空闲座位（应与当前桌型一致）',
+    reassignConfirm: '确认改派',
+    reassignSuccess: '已改派座位',
+    // GZ-BEAN-041 过期待处理 + 批量结单
+    expiredTitle: '过期待处理',
+    expiredRefresh: '刷新',
+    expiredEmpty: '暂无过期待处理预约',
+    expiredColBookingNo: '预约单号',
+    expiredColType: '桌型',
+    expiredColSlot: '时段',
+    expiredColStatus: '状态',
+    expiredColExpired: '已过期',
+    expiredMinutesLabel: '已过期 {n} 分钟',
+    expiredHoursLabel: '已过期 {n} 小时',
+    expiredStatus: {
+      pending: '待补核销',
+      no_show: '已爽约',
+      used: '已超时'
+    },
+    settleCompleted: '补核销为已完成',
+    markNoShow: '标爽约',
+    markEnded: '标已结束',
+    batchSelectEmpty: '请先勾选要处理的预约',
+    settleCompletedConfirm: '确认将选中的 {n} 笔补核销为「已完成」？',
+    markNoShowConfirm: '确认将选中的 {n} 笔标记为「爽约」？',
+    markEndedConfirm: '确认将选中的 {n} 笔已超时单标记为「已结束」（放座）？',
+    batchConfirm: '批量结单确认',
+    batchResult: '处理完成：成功 {succeeded} / 跳过 {skipped} / 失败 {failed}',
+    batchFailed: '批量结单失败'
   },
   // 拼豆预约管理（D05 GZ-BEAN-008）
   gzBeanBooking: {
@@ -919,6 +958,13 @@ export default {
     verifyConfirmTitle: '核销确认',
     verifyConfirm: '确认核销预约「{no}」？核销后状态变为已核销，不可撤销。',
     verifySuccess: '核销成功',
+    // ADR-0016 核销分座（列表页核销也需现场选座）
+    verifyAssignTitle: '核销分座',
+    verifyPickSeat: '分配座位',
+    verifySeatPlaceholder: '选择本店同桌型空闲座',
+    verifyNoSeat: '该桌型暂无可用座位（核对座位单元配置）',
+    verifyRequireSeat: '请先选择座位',
+    verifyAssignHint: '核销即计时起点；若所选座位已被占用会提示，请改选其他座位。',
     loadFailed: '加载失败，请稍后重试',
     empty: '没有数据',
     scanDialogTitle: '扫码核销',
@@ -939,7 +985,36 @@ export default {
     colSeat: '座位',
     colStatus: '状态',
     colCreateTime: '创建时间',
-    colAction: '操作'
+    colAction: '操作',
+    // GZ-BEAN-039 代客预定
+    proxyCreate: '代客预定',
+    proxyCreateTitle: '代客预定（线下散客）',
+    proxyStore: '门店',
+    proxyStorePlaceholder: '选择门店',
+    proxyDate: '预约日期',
+    proxyDatePlaceholder: '选择日期',
+    proxySlotStart: '时段开始',
+    proxySlotEnd: '时段结束',
+    proxySlotPlaceholder: '选择整点',
+    proxySeatType: '桌型档',
+    proxySeatTypePlaceholder: '选择桌型',
+    proxySeat: '具体座位',
+    proxySeatPlaceholder: '选择空闲座位',
+    proxyMobile: '手机号',
+    proxyMobilePlaceholder: '选填，命中既有用户则关联',
+    customerName: '顾客姓名',
+    customerNamePlaceholder: '选填，备注用',
+    offlineAmount: '线下收款金额（元）',
+    offlineAmountPlaceholder: '选填，留空按价目自动计价',
+    proxySubmit: '提交',
+    proxyCreateSuccess: '代客预定成功',
+    proxyRequireStore: '请选择门店',
+    proxyRequireSeatType: '请选择桌型档',
+    proxyRequireSeat: '请选择具体座位',
+    proxyRequireDate: '请选择预约日期',
+    proxyRequireSlot: '请选择完整时段',
+    proxySlotInvalid: '时段结束须晚于开始',
+    proxyNoSeat: '该门店该桌型暂无可用座位'
   },
   // 微信支付 V3 通道（D07 GZ-PAY-001）
   gzPay: {
@@ -1629,7 +1704,18 @@ export default {
     issueQuotaExceeded: '配额不足，发放被拦截（不超发）',
     colUserNo: '用户号',
     colNickname: '昵称',
-    colMobile: '手机号'
+    colMobile: '手机号',
+    // 自动发放（GZ-COUPON-003）
+    colAutoIssue: '自动发放',
+    colLastAutoIssue: '上次自动发放',
+    autoIssueOn: '开',
+    autoIssueOff: '关',
+    fieldAutoIssue: '自动发放',
+    autoIssueHint: '开启后由定时任务每 15 分钟按条件自动补发给新增命中用户（已持券者不重发），仅条件筛选策略可用',
+    autoIssueRunOnce: '立即试跑',
+    autoIssueRunOnceConfirm: '确认对模板「{name}」立即试跑自动发放？将按条件圈人后给未持券的新增用户发券。',
+    autoIssueRunOnceSuccess: '试跑完成：本次发放 {count} 张（已去重已持券用户）',
+    neverAutoIssued: '从未'
   },
   // 优惠券发放记录（D12 GZ-COUPON-001）
   gzCouponUserCoupon: {

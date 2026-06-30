@@ -52,9 +52,33 @@
         <el-table-column :label="t('gzCouponTemplate.colStatus')" width="100">
           <template #default="{ row }"><dict-tag :options="gz_coupon_template_status" :value="row.status" /></template>
         </el-table-column>
-        <el-table-column :label="t('gzCouponTemplate.colAction')" fixed="right" width="290" align="center">
+        <el-table-column :label="t('gzCouponTemplate.colAutoIssue')" width="90" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.issueStrategy === 'filtered'" :type="row.autoIssue === 1 ? 'success' : 'info'" size="small">
+              {{ row.autoIssue === 1 ? t('gzCouponTemplate.autoIssueOn') : t('gzCouponTemplate.autoIssueOff') }}
+            </el-tag>
+            <span v-else>—</span>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('gzCouponTemplate.colLastAutoIssue')" width="160" align="center">
+          <template #default="{ row }">
+            <span v-if="row.lastAutoIssueTime">{{ proxy.parseTime(row.lastAutoIssueTime) }}</span>
+            <span v-else class="form-hint">{{ t('gzCouponTemplate.neverAutoIssued') }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('gzCouponTemplate.colAction')" fixed="right" width="360" align="center">
           <template #default="{ row }">
             <el-button v-if="row.status === 'active'" v-hasPermi="['gz:coupon:issue']" type="primary" link size="small" @click="openIssue(row)">{{ t('gzCouponTemplate.issue') }}</el-button>
+            <el-button
+              v-if="row.status === 'active' && row.issueStrategy === 'filtered' && row.autoIssue === 1"
+              v-hasPermi="['gz:coupon:issue']"
+              type="primary"
+              link
+              size="small"
+              @click="handleAutoIssueOnce(row)"
+            >
+              {{ t('gzCouponTemplate.autoIssueRunOnce') }}
+            </el-button>
             <el-button v-hasPermi="['gz:coupon:template:edit']" :disabled="row.status === 'archived'" type="success" link size="small" @click="handleEdit(row)">{{ t('gzCouponTemplate.edit') }}</el-button>
             <el-button v-if="row.status === 'active'" v-hasPermi="['gz:coupon:template:edit']" type="warning" link size="small" @click="handlePause(row)">{{ t('gzCouponTemplate.pause') }}</el-button>
             <el-button v-if="row.status === 'paused'" v-hasPermi="['gz:coupon:template:edit']" type="primary" link size="small" @click="handleActivate(row)">{{ t('gzCouponTemplate.activate') }}</el-button>
@@ -146,6 +170,12 @@
             </div>
             <div class="form-hint">{{ t('gzCouponTemplate.condHint') }}</div>
           </div>
+        </el-form-item>
+
+        <!-- 自动发放开关（filtered 专属，GZ-COUPON-003） -->
+        <el-form-item v-if="form.issueStrategy === 'filtered'" :label="t('gzCouponTemplate.fieldAutoIssue')">
+          <el-switch v-model="form.autoIssue" :active-value="1" :inactive-value="0" />
+          <span class="form-hint">{{ t('gzCouponTemplate.autoIssueHint') }}</span>
         </el-form-item>
 
         <el-form-item :label="t('gzCouponTemplate.fieldRemark')">
@@ -250,6 +280,7 @@ import {
   archiveGzCouponTemplate,
   issueGzCoupon,
   previewGzCouponAudience,
+  autoIssueOnceGzCouponTemplate,
   type CouponAudienceCondition,
   type GzCouponTemplateVO,
   type GzCouponTemplateForm,
@@ -366,6 +397,7 @@ interface FormState {
   totalQuota: number | null;
   issueStrategy: string;
   conditions: ConditionRow[];
+  autoIssue: number;
   remark: string;
 }
 const formVisible = ref(false);
@@ -381,6 +413,7 @@ const form = reactive<FormState>({
   totalQuota: null,
   issueStrategy: 'manual',
   conditions: [],
+  autoIssue: 0,
   remark: ''
 });
 const formTitle = computed(() => (formMode.value === 'add' ? t('gzCouponTemplate.addTitle') : t('gzCouponTemplate.editTitle')));
@@ -458,6 +491,7 @@ function handleAdd() {
     totalQuota: null,
     issueStrategy: 'manual',
     conditions: [],
+    autoIssue: 0,
     remark: ''
   });
   previewCount.value = null;
@@ -476,6 +510,7 @@ function handleEdit(row: GzCouponTemplateVO) {
     totalQuota: row.totalQuota,
     issueStrategy: row.issueStrategy,
     conditions: parseConditionRows(row.issueConfigJson),
+    autoIssue: row.autoIssue === 1 ? 1 : 0,
     remark: row.remark || ''
   });
   previewCount.value = null;
@@ -507,6 +542,8 @@ async function handleSubmit() {
       totalQuota: form.totalQuota,
       issueStrategy: form.issueStrategy,
       issueConfigJson,
+      // 自动发放仅 filtered 生效；非 filtered 传 0（后端亦强制归零）
+      autoIssue: form.issueStrategy === 'filtered' ? form.autoIssue : 0,
       remark: form.remark
     };
     if (formMode.value === 'add') {
@@ -537,6 +574,20 @@ async function handleArchive(row: GzCouponTemplateVO) {
 }
 async function handleDel(row: GzCouponTemplateVO) {
   await confirmAndRun(() => delGzCouponTemplate(row.id), t('gzCouponTemplate.delConfirm', { name: row.name }), t('gzCouponTemplate.delSuccess'));
+}
+
+/** 自动发放「立即试跑」（GZ-COUPON-003）：按模板条件圈人 → 给未持券新增用户发券，弹发放张数。 */
+async function handleAutoIssueOnce(row: GzCouponTemplateVO) {
+  try {
+    await ElMessageBox.confirm(t('gzCouponTemplate.autoIssueRunOnceConfirm', { name: row.name }), t('gzCouponTemplate.confirmTitle'), { type: 'warning' });
+    const resp = await autoIssueOnceGzCouponTemplate(row.id);
+    const r = resp as any;
+    const issued = (r.data ?? r) as number;
+    ElMessage.success(t('gzCouponTemplate.autoIssueRunOnceSuccess', { count: issued ?? 0 }));
+    await loadList();
+  } catch (e: any) {
+    if (e !== 'cancel') console.error('[gz-coupon-template] auto-issue once failed', e);
+  }
 }
 
 async function confirmAndRun(fn: () => Promise<any>, confirmMsg: string, successMsg?: string) {

@@ -3,12 +3,37 @@
     "n": "13-bean-booking",
     "p": "/gz-bean/booking",
     "t": "拼豆-预约管理",
-    "ok": false,
+    "ok": true,
     "url": "http://localhost:8090/gz-bean/booking",
     "isLogin": false,
-    "rows": 0,
+    "rows": 8,
     "shot": "13-bean-booking.png",
     "dialogShot": "",
+    "err": ""
+  },
+  {
+    "n": "16-bean-board",
+    "p": "/gz-bean/board",
+    "t": "拼豆-店内计时看板(ADR-0015)",
+    "ok": true,
+    "url": "http://localhost:8090/gz-bean/board",
+    "isLogin": false,
+    "rows": 1,
+    "shot": "16-bean-board.png",
+    "dialogShot": "",
+    "err": ""
+  },
+  {
+    "n": "60-coupon-template",
+    "p": "/gz-coupon/template",
+    "t": "优惠券-券模板",
+    "dialog": true,
+    "ok": true,
+    "url": "http://localhost:8090/gz-coupon/template",
+    "isLogin": false,
+    "rows": 2,
+    "shot": "60-coupon-template.png",
+    "dialogShot": "60-coupon-template-dialog.png",
     "err": ""
   }
 ]

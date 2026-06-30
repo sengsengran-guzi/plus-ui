@@ -868,8 +868,8 @@ export default {
     releaseConfirm: 'Release seat "{no}" (booking {booking})? The seat is freed immediately and becomes available for re-booking.',
     releaseSuccess: 'Seat released',
     extendTitle: 'Extend',
-    extendHours: 'Add hours',
-    extendHoursHint: 'Extend by whole hours (1-12)',
+    extendMinutes: 'Add minutes',
+    extendMinutesHint: 'Extend by minutes (5-720; settle the difference offline per store policy)',
     extendNoPayHint: 'Extension is not paid online; it fails if the new slots are already taken. Settle any difference offline per store policy.',
     extendSuccess: 'Extended',
     confirm: 'Confirm',
@@ -897,7 +897,46 @@ export default {
     assignNoIdle: 'No idle seat available',
     assignNoIdleHint: 'No idle seat available for this store/date. Wait for guests to release/extend, or check seat-unit config.',
     assignConfirm: 'Assign & verify',
-    assignSuccess: 'Assigned & verified'
+    assignSuccess: 'Assigned & verified',
+    // GZ-BEAN-037 continue-seating: suggested-seat tag/hint in dialog + board badge
+    assignSuggestedTag: 'Continue',
+    assignSuggestedHint: 'This guest is seated here in the previous slot; the same seat is preselected. Pick an idle seat below to switch.',
+    continuousTag: 'Continues → {time}',
+    // GZ-BEAN-037 pending-assign consecutive highlight + early verify
+    consecutiveTag: 'Consecutive · suggest {seat}',
+    earlyVerify: 'Verify early',
+    // GZ-BEAN-040 reassign seat
+    reassign: 'Reassign seat',
+    reassignTitle: 'Reassign Seat',
+    reassignPickSeat: 'Pick an idle seat to reassign to (should match the current type)',
+    reassignConfirm: 'Confirm reassign',
+    reassignSuccess: 'Seat reassigned',
+    // GZ-BEAN-041 expired unsettled + batch settle
+    expiredTitle: 'Expired unsettled',
+    expiredRefresh: 'Refresh',
+    expiredEmpty: 'No expired unsettled bookings',
+    expiredColBookingNo: 'Booking No.',
+    expiredColType: 'Type',
+    expiredColSlot: 'Slot',
+    expiredColStatus: 'Status',
+    expiredColExpired: 'Expired',
+    expiredMinutesLabel: 'Expired {n} min',
+    expiredHoursLabel: 'Expired {n} h',
+    expiredStatus: {
+      pending: 'Awaiting verify',
+      no_show: 'No-show',
+      used: 'Overtime'
+    },
+    settleCompleted: 'Settle as completed',
+    markNoShow: 'Mark no-show',
+    markEnded: 'Mark ended',
+    batchSelectEmpty: 'Please select bookings first',
+    settleCompletedConfirm: 'Settle the selected {n} booking(s) as "completed"?',
+    markNoShowConfirm: 'Mark the selected {n} booking(s) as "no-show"?',
+    markEndedConfirm: 'Mark the selected {n} overtime booking(s) as "ended" (release)?',
+    batchConfirm: 'Batch settle confirm',
+    batchResult: 'Done: succeeded {succeeded} / skipped {skipped} / failed {failed}',
+    batchFailed: 'Batch settle failed'
   },
   // Pindou booking management (D05 GZ-BEAN-008)
   gzBeanBooking: {
@@ -922,6 +961,13 @@ export default {
     verifyConfirmTitle: 'Verify Confirm',
     verifyConfirm: 'Verify booking "{no}"? Status will become Used and cannot be reverted.',
     verifySuccess: 'Verified',
+    // ADR-0016 verify with seat assignment (list-page verify also needs a seat)
+    verifyAssignTitle: 'Verify & Assign Seat',
+    verifyPickSeat: 'Assign seat',
+    verifySeatPlaceholder: 'Pick an idle seat of the same table type',
+    verifyNoSeat: 'No seat available for this table type (check seat-unit config)',
+    verifyRequireSeat: 'Please pick a seat first',
+    verifyAssignHint: 'Verifying starts the timer; if the seat is taken you will be prompted to pick another.',
     loadFailed: 'Load failed, please retry',
     empty: 'No data',
     scanDialogTitle: 'Scan Verify',
@@ -942,7 +988,36 @@ export default {
     colSeat: 'Seat',
     colStatus: 'Status',
     colCreateTime: 'Created',
-    colAction: 'Action'
+    colAction: 'Action',
+    // GZ-BEAN-039 proxy create
+    proxyCreate: 'Proxy booking',
+    proxyCreateTitle: 'Proxy Booking (offline walk-in)',
+    proxyStore: 'Store',
+    proxyStorePlaceholder: 'Pick store',
+    proxyDate: 'Date',
+    proxyDatePlaceholder: 'Pick date',
+    proxySlotStart: 'Slot start',
+    proxySlotEnd: 'Slot end',
+    proxySlotPlaceholder: 'Pick hour',
+    proxySeatType: 'Table type',
+    proxySeatTypePlaceholder: 'Pick type',
+    proxySeat: 'Seat',
+    proxySeatPlaceholder: 'Pick idle seat',
+    proxyMobile: 'Mobile',
+    proxyMobilePlaceholder: 'Optional, links existing user if matched',
+    customerName: 'Customer name',
+    customerNamePlaceholder: 'Optional, for remark',
+    offlineAmount: 'Offline amount (CNY)',
+    offlineAmountPlaceholder: 'Optional, auto-priced if empty',
+    proxySubmit: 'Submit',
+    proxyCreateSuccess: 'Proxy booking created',
+    proxyRequireStore: 'Please pick a store',
+    proxyRequireSeatType: 'Please pick a table type',
+    proxyRequireSeat: 'Please pick a seat',
+    proxyRequireDate: 'Please pick a date',
+    proxyRequireSlot: 'Please pick the full slot',
+    proxySlotInvalid: 'Slot end must be later than start',
+    proxyNoSeat: 'No available seat for this store/type'
   },
   // WeChat Pay V3 channel (D07 GZ-PAY-001)
   gzPay: {
@@ -1629,7 +1704,18 @@ export default {
     issueQuotaExceeded: 'Quota exceeded, issuance blocked (no oversell)',
     colUserNo: 'User No',
     colNickname: 'Nickname',
-    colMobile: 'Mobile'
+    colMobile: 'Mobile',
+    // Auto issuance (GZ-COUPON-003)
+    colAutoIssue: 'Auto Issue',
+    colLastAutoIssue: 'Last Auto Issue',
+    autoIssueOn: 'On',
+    autoIssueOff: 'Off',
+    fieldAutoIssue: 'Auto Issue',
+    autoIssueHint: 'When on, a scheduled job issues coupons every 15 min to newly matched users (holders are not re-issued); filtered strategy only',
+    autoIssueRunOnce: 'Run Once',
+    autoIssueRunOnceConfirm: 'Run auto-issue once for template "{name}" now? Matched users without this coupon will be issued.',
+    autoIssueRunOnceSuccess: 'Done: {count} coupons issued (holders deduplicated)',
+    neverAutoIssued: 'Never'
   },
   // Coupon issuance records (D12 GZ-COUPON-001)
   gzCouponUserCoupon: {

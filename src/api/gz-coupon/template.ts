@@ -31,6 +31,10 @@ export interface GzCouponTemplateVO {
   issueConfigJson?: string | null;
   /** active / paused / archived（字典 gz_coupon_template_status） */
   status: string;
+  /** 是否自动发放（仅 filtered 生效）：0=否 1=是（GZ-COUPON-003） */
+  autoIssue?: number;
+  /** 上次自动发放时间（null=从未自动发放） */
+  lastAutoIssueTime?: string | null;
   version: number;
   createTime?: string;
   updateTime?: string;
@@ -48,6 +52,8 @@ export interface GzCouponTemplateForm {
   totalQuota?: number | null;
   issueStrategy?: string;
   issueConfigJson?: string | null;
+  /** 自动发放开关（仅 filtered 生效）：0=否 1=是；非 filtered 后端强制归零（GZ-COUPON-003） */
+  autoIssue?: number;
   remark?: string | null;
 }
 
@@ -144,4 +150,9 @@ export function issueGzCoupon(data: GzCouponIssueForm): AxiosPromise<GzCouponIss
 /** POST 条件筛选「预览命中人数」（ADR-0010；配置/发放前校验，预览口径=实发口径） */
 export function previewGzCouponAudience(data: CouponAudienceConfig): AxiosPromise<number> {
   return request({ url: '/system/gz/coupon/template/preview-audience', method: 'post', data });
+}
+
+/** POST 自动发放「立即试跑」（GZ-COUPON-003；仅 filtered+auto 模板，返本次发放张数） */
+export function autoIssueOnceGzCouponTemplate(id: string): AxiosPromise<number> {
+  return request({ url: `/system/gz/coupon/template/${id}/auto-issue-once`, method: 'post' });
 }

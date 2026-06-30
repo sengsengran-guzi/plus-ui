@@ -26,6 +26,8 @@ export interface GzBeanBookingVO {
   seatNoSnapshot: string;
   /** 桌型名 snapshot（config.name；列表/详情与座位号并列展示） */
   seatTypeSnapshot?: string | null;
+  /** 桌型档 id（string 化；核销分座弹窗按它筛同桌型空闲座，ADR-0016） */
+  seatTypeConfigId?: string | null;
   /** 预约日期 yyyy-MM-dd */
   sessDate: string;
   /** 时段开始 HH:mm:ss */
@@ -93,11 +95,15 @@ export function getGzBeanBooking(id: number | string): AxiosPromise<GzBeanBookin
   });
 }
 
-/** POST /system/gz/bean/booking/{id}/verify — 手动核销（pending → used） */
-export function verifyGzBeanBookingManual(id: number | string): AxiosPromise<GzBeanBookingVO> {
+/**
+ * POST /system/gz/bean/booking/{id}/verify?seatId= — 核销 + 现场分座（ADR-0016 §3）。
+ * ADR-0016 后核销必须带座位（无座 → 后端 SEAT_REQUIRED「先选座」），预约管理页核销走此接口。
+ */
+export function verifyGzBeanBookingWithSeat(id: number | string, seatId: number | string): AxiosPromise<GzBeanBookingVO> {
   return request({
     url: `/system/gz/bean/booking/${id}/verify`,
-    method: 'post'
+    method: 'post',
+    params: { seatId }
   });
 }
 
@@ -107,5 +113,36 @@ export function verifyGzBeanBookingByScan(qrPayload: string): AxiosPromise<GzBea
     url: '/system/gz/bean/booking/verify-scan',
     method: 'post',
     data: { qrPayload }
+  });
+}
+
+/** 代客预定参数（GZ-BEAN-039 / kevin-test §4；与 GzBeanAdminCreateBo.java 对齐） */
+export interface GzBeanAdminCreateBody {
+  storeId: number | string;
+  seatTypeConfigId: number | string;
+  /** 店员代分配的具体座位 id */
+  seatId: number | string;
+  sessDate: string;
+  /** 区间起 HH:mm:ss */
+  slotStart: string;
+  /** 区间止 HH:mm:ss */
+  slotEnd: string;
+  /** 顾客手机号（选填，命中既有用户则关联，否则线下散客占位） */
+  mobile?: string;
+  /** 顾客姓名/备注（选填） */
+  customerName?: string;
+  /** 线下收款金额（分，选填；默认按区间逐格求和计价，入参覆盖） */
+  amountCent?: number;
+}
+
+/**
+ * POST /system/gz/bean/booking/admin-create — 代客预定（GZ-BEAN-039 / kevin-test §4）
+ * 现场没带手机的用户，店员代为选具体座位锁座，一步 used + 线下已付。仍走逐格配额防超卖 + 座位区间互斥。
+ */
+export function adminCreateGzBeanBooking(data: GzBeanAdminCreateBody): AxiosPromise<GzBeanBookingVO> {
+  return request({
+    url: '/system/gz/bean/booking/admin-create',
+    method: 'post',
+    data
   });
 }

@@ -56,11 +56,11 @@
         </el-form-item>
       </el-form>
 
-      <!-- 工具栏：扫码核销 -->
+      <!-- 工具栏：代客预定（扫码核销已下线，真机扫码走 mp 店员端） -->
       <el-row :gutter="10" class="mb-2">
         <el-col :span="1.5">
-          <el-button v-hasPermi="['gz:bean:booking:verify']" type="success" plain :icon="Camera" @click="openScanDialog">
-            {{ t('gzBeanBooking.scanVerify') }}
+          <el-button v-hasPermi="['gz:bean:booking:verify']" type="primary" plain :icon="Plus" @click="openProxyCreate">
+            {{ t('gzBeanBooking.proxyCreate') }}
           </el-button>
         </el-col>
       </el-row>
@@ -97,7 +97,7 @@
               link
               size="small"
               :disabled="row.bizStatus !== 'paid'"
-              @click="handleManualVerify(row)"
+              @click="openVerifyAssign(row)"
             >
               {{ t('gzBeanBooking.verify') }}
             </el-button>
@@ -115,24 +115,156 @@
       <pagination v-show="total > 0" v-model:limit="query.pageSize" v-model:page="query.pageNum" :total="total" @pagination="loadList" />
     </el-card>
 
-    <!-- 扫码核销 dialog（PC 端上传 QR 截图，不调摄像头） -->
-    <el-dialog v-model="scanVisible" :title="t('gzBeanBooking.scanDialogTitle')" width="460px" @close="resetScan">
-      <el-alert :title="t('gzBeanBooking.scanTip')" type="info" show-icon :closable="false" class="mb-3" />
-      <div class="scan-upload">
-        <el-button type="primary" :icon="Upload" :loading="scanDecoding" @click="triggerFile">
-          {{ t('gzBeanBooking.scanUpload') }}
-        </el-button>
-        <input ref="fileInput" type="file" accept="image/*" style="display: none" @change="onFileChange" />
-        <div v-if="scanFileName" class="scan-filename">{{ scanFileName }}</div>
-      </div>
-      <div v-if="scanPayloadPreview" class="scan-payload">
-        <span class="scan-payload-label">{{ t('gzBeanBooking.scanDecoded') }}</span>
-        <code>{{ scanPayloadPreview }}</code>
-      </div>
+    <!-- 核销分座 dialog（ADR-0016：列表核销也需现场选座，选本店同桌型座） -->
+    <el-dialog v-model="verifyVisible" :title="t('gzBeanBooking.verifyAssignTitle')" width="460px">
+      <template v-if="verifyTarget">
+        <el-descriptions :column="1" border size="small" class="mb-3">
+          <el-descriptions-item :label="t('gzBeanBooking.colBookingNo')">{{ verifyTarget.bookingNo }}</el-descriptions-item>
+          <el-descriptions-item :label="t('gzBeanBooking.colSeat')">{{ verifyTarget.seatTypeSnapshot || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('gzBeanBooking.colSession')">
+            {{ verifyTarget.sessDate }} {{ shortTime(verifyTarget.slotStart) }}-{{ shortTime(verifyTarget.slotEnd) }}
+          </el-descriptions-item>
+        </el-descriptions>
+        <div class="verify-seat-row">
+          <span class="verify-seat-label">{{ t('gzBeanBooking.verifyPickSeat') }}</span>
+          <el-select
+            v-model="verifySeatId"
+            :placeholder="verifySeatOptions.length === 0 ? t('gzBeanBooking.verifyNoSeat') : t('gzBeanBooking.verifySeatPlaceholder')"
+            filterable
+            :loading="verifySeatLoading"
+            :disabled="verifySeatOptions.length === 0"
+            style="flex: 1"
+          >
+            <el-option
+              v-for="seat in verifySeatOptions"
+              :key="seat.id"
+              :label="seat.tableNo ? `${seat.seatNo}（${seat.tableNo}）` : seat.seatNo"
+              :value="seat.id"
+            />
+          </el-select>
+        </div>
+        <el-alert type="info" :closable="false" show-icon class="mt-2" :description="t('gzBeanBooking.verifyAssignHint')" />
+      </template>
       <template #footer>
-        <el-button @click="scanVisible = false">{{ t('gzBeanBooking.cancel') }}</el-button>
-        <el-button type="success" :loading="scanVerifying" :disabled="!scanPayload" @click="submitScanVerify">
+        <el-button @click="verifyVisible = false">{{ t('gzBeanBooking.cancel') }}</el-button>
+        <el-button type="success" :loading="verifySubmitting" :disabled="verifySeatId == null" @click="submitVerifyAssign">
           {{ t('gzBeanBooking.confirmVerify') }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 代客预定 dialog（GZ-BEAN-039 线下散客，店员代选座一步 used + 线下已付） -->
+    <el-dialog v-model="proxyVisible" :title="t('gzBeanBooking.proxyCreateTitle')" width="560px" @close="resetProxy">
+      <el-form ref="proxyFormRef" :model="proxyForm" label-width="120px">
+        <el-form-item :label="t('gzBeanBooking.proxyStore')" required>
+          <el-select
+            v-model="proxyForm.storeId"
+            :placeholder="t('gzBeanBooking.proxyStorePlaceholder')"
+            filterable
+            style="width: 100%"
+            @change="onProxyStoreChange"
+          >
+            <el-option v-for="s in storeOptions" :key="s.id" :label="s.name" :value="s.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('gzBeanBooking.proxyDate')" required>
+          <el-date-picker
+            v-model="proxyForm.sessDate"
+            type="date"
+            value-format="YYYY-MM-DD"
+            :placeholder="t('gzBeanBooking.proxyDatePlaceholder')"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item :label="t('gzBeanBooking.proxySlotStart')" required>
+          <el-time-select
+            v-model="proxySlotStart"
+            :placeholder="t('gzBeanBooking.proxySlotPlaceholder')"
+            start="08:00"
+            step="01:00"
+            end="23:00"
+            style="width: 48%"
+          />
+          <span class="proxy-slot-sep">-</span>
+          <el-time-select
+            v-model="proxySlotEnd"
+            :placeholder="t('gzBeanBooking.proxySlotPlaceholder')"
+            :start="proxySlotEndStart"
+            step="01:00"
+            end="24:00"
+            :disabled="!proxySlotStart"
+            style="width: 48%"
+          />
+        </el-form-item>
+        <el-form-item :label="t('gzBeanBooking.proxySeatType')" required>
+          <el-select
+            v-model="proxyForm.seatTypeConfigId"
+            :placeholder="t('gzBeanBooking.proxySeatTypePlaceholder')"
+            filterable
+            :loading="proxyTypeLoading"
+            :disabled="!proxyForm.storeId"
+            style="width: 100%"
+            @change="onProxySeatTypeChange"
+          >
+            <el-option
+              v-for="c in proxySeatTypeOptions"
+              :key="c.id"
+              :label="`${c.name}（¥${c.priceYuan}）`"
+              :value="c.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('gzBeanBooking.proxySeat')" required>
+          <el-select
+            v-model="proxyForm.seatId"
+            :placeholder="proxySeatOptions.length === 0 ? t('gzBeanBooking.proxyNoSeat') : t('gzBeanBooking.proxySeatPlaceholder')"
+            filterable
+            :loading="proxySeatLoading"
+            :disabled="!proxyForm.seatTypeConfigId || proxySeatOptions.length === 0"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="seat in proxySeatOptions"
+              :key="seat.id"
+              :label="seat.tableNo ? `${seat.seatNo}（${seat.tableNo}）` : seat.seatNo"
+              :value="seat.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('gzBeanBooking.proxyMobile')">
+          <el-input
+            v-model="proxyForm.mobile"
+            :placeholder="t('gzBeanBooking.proxyMobilePlaceholder')"
+            clearable
+            maxlength="11"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item :label="t('gzBeanBooking.customerName')">
+          <el-input
+            v-model="proxyForm.customerName"
+            :placeholder="t('gzBeanBooking.customerNamePlaceholder')"
+            clearable
+            maxlength="50"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item :label="t('gzBeanBooking.offlineAmount')">
+          <el-input-number
+            v-model="proxyAmountYuan"
+            :min="0"
+            :precision="2"
+            :step="1"
+            :placeholder="t('gzBeanBooking.offlineAmountPlaceholder')"
+            controls-position="right"
+            style="width: 100%"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="proxyVisible = false">{{ t('gzBeanBooking.cancel') }}</el-button>
+        <el-button type="primary" :loading="proxySubmitting" @click="submitProxyCreate">
+          {{ t('gzBeanBooking.proxySubmit') }}
         </el-button>
       </template>
     </el-dialog>
@@ -164,20 +296,22 @@
 </template>
 
 <script setup lang="ts" name="GzBeanBooking">
-import { ref, reactive, getCurrentInstance, type ComponentInternalInstance, toRefs, watch } from 'vue';
-import { Search, Refresh, Camera, Upload } from '@element-plus/icons-vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ref, reactive, computed, getCurrentInstance, type ComponentInternalInstance, toRefs } from 'vue';
+import { Search, Refresh, Plus } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
 import { useI18n } from 'vue-i18n';
-import jsQR from 'jsqr';
 import {
   listGzBeanBooking,
   getGzBeanBooking,
-  verifyGzBeanBookingManual,
-  verifyGzBeanBookingByScan,
+  verifyGzBeanBookingWithSeat,
+  adminCreateGzBeanBooking,
   type GzBeanBookingVO,
-  type GzBeanBookingQuery
+  type GzBeanBookingQuery,
+  type GzBeanAdminCreateBody
 } from '@/api/gz-bean/booking';
 import { getGzBeanStoreOptions, type GzBeanStoreVO } from '@/api/gz-bean/store';
+import { listGzBeanSeatTypeConfigByStore, type GzBeanSeatTypeConfigVO } from '@/api/gz-bean/seatTypeConfig';
+import { listGzBeanSeatByStore, type GzBeanSeatVO } from '@/api/gz-bean/seat';
 
 const { t } = useI18n();
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
@@ -203,15 +337,6 @@ const query = reactive<GzBeanBookingQuery>({
 
 const detailVisible = ref<boolean>(false);
 const detail = ref<GzBeanBookingVO | null>(null);
-
-// ---- 扫码核销状态 ----
-const scanVisible = ref<boolean>(false);
-const scanDecoding = ref<boolean>(false);
-const scanVerifying = ref<boolean>(false);
-const scanPayload = ref<string>('');
-const scanPayloadPreview = ref<string>('');
-const scanFileName = ref<string>('');
-const fileInput = ref<HTMLInputElement>();
 
 /** HH:mm:ss → HH:mm */
 function shortTime(t?: string): string {
@@ -270,125 +395,207 @@ async function handleDetail(row: GzBeanBookingVO) {
   }
 }
 
-/** 手动核销：二次确认 → 调 /{id}/verify */
-async function handleManualVerify(row: GzBeanBookingVO) {
-  const ok = await ElMessageBox.confirm(t('gzBeanBooking.verifyConfirm', { no: row.bookingNo }), t('gzBeanBooking.verifyConfirmTitle'), {
-    confirmButtonText: t('gzBeanBooking.confirmVerify'),
-    cancelButtonText: t('gzBeanBooking.cancel'),
-    type: 'warning'
-  }).catch(() => false);
-  if (!ok) return;
-  try {
-    await verifyGzBeanBookingManual(row.id);
-    ElMessage.success(t('gzBeanBooking.verifySuccess'));
-    loadList();
-  } catch (e) {
-    // 后端业务错误（INVALID_STATUS / NOT_FOUND）已由 request 拦截器 toast 中文 msg，这里仅记录 + 刷新
-    console.error('[gz-bean-booking] manual verify failed', e);
-    loadList();
-  }
-}
-
 // ============================================================
-//  扫码核销（PC 端上传 QR 截图 → jsqr canvas 解码 → verify-scan）
+//  核销分座（ADR-0016：列表核销也需现场选座，否则后端 SEAT_REQUIRED「先选座」）
 // ============================================================
 
-function openScanDialog() {
-  resetScan();
-  scanVisible.value = true;
-}
+const verifyVisible = ref<boolean>(false);
+const verifySubmitting = ref<boolean>(false);
+const verifySeatLoading = ref<boolean>(false);
+const verifyTarget = ref<GzBeanBookingVO | null>(null);
+const verifySeatId = ref<number | string | undefined>(undefined);
+const verifyAllSeats = ref<GzBeanSeatVO[]>([]);
 
-function triggerFile() {
-  fileInput.value?.click();
-}
-
-function onFileChange(e: Event) {
-  const input = e.target as HTMLInputElement;
-  const file = input.files?.[0];
-  if (!file) return;
-  scanFileName.value = file.name;
-  scanPayload.value = '';
-  scanPayloadPreview.value = '';
-  decodeQrFromFile(file);
-  // 清掉 input.value 以便同一文件可重复选
-  input.value = '';
-}
-
-/** 用 canvas 读像素 → jsqr 解码（不调摄像头，强约束 #1） */
-function decodeQrFromFile(file: File) {
-  scanDecoding.value = true;
-  const reader = new FileReader();
-  reader.onload = () => {
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          scanDecoding.value = false;
-          ElMessage.error(t('gzBeanBooking.scanDecodeFailed'));
-          return;
-        }
-        ctx.drawImage(img, 0, 0);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const result = jsQR(imageData.data, imageData.width, imageData.height);
-        scanDecoding.value = false;
-        if (result && result.data) {
-          scanPayload.value = result.data;
-          scanPayloadPreview.value = result.data;
-        } else {
-          ElMessage.error(t('gzBeanBooking.scanNoCode'));
-        }
-      } catch (err) {
-        scanDecoding.value = false;
-        console.error('[gz-bean-booking] qr decode error', err);
-        ElMessage.error(t('gzBeanBooking.scanDecodeFailed'));
-      }
-    };
-    img.onerror = () => {
-      scanDecoding.value = false;
-      ElMessage.error(t('gzBeanBooking.scanDecodeFailed'));
-    };
-    img.src = reader.result as string;
-  };
-  reader.onerror = () => {
-    scanDecoding.value = false;
-    ElMessage.error(t('gzBeanBooking.scanDecodeFailed'));
-  };
-  reader.readAsDataURL(file);
-}
-
-/** 提交扫码核销：调 verify-scan（后端校签 + 状态校验，错误 msg 由拦截器 toast） */
-async function submitScanVerify() {
-  if (!scanPayload.value) return;
-  scanVerifying.value = true;
-  try {
-    await verifyGzBeanBookingByScan(scanPayload.value);
-    ElMessage.success(t('gzBeanBooking.verifySuccess'));
-    scanVisible.value = false;
-    loadList();
-  } catch (e) {
-    // 后端业务错误（QR_SIGNATURE_INVALID / INVALID_STATUS / NOT_FOUND）已由 request 拦截器
-    // ElNotification 中文 msg；保留 dialog 让店员可改用手动核销 fallback（强约束 R3）
-    console.error('[gz-bean-booking] scan verify failed', e);
-  } finally {
-    scanVerifying.value = false;
-  }
-}
-
-function resetScan() {
-  scanPayload.value = '';
-  scanPayloadPreview.value = '';
-  scanFileName.value = '';
-  scanDecoding.value = false;
-  scanVerifying.value = false;
-}
-
-watch(scanVisible, (v) => {
-  if (!v) resetScan();
+/** 核销弹窗可选座：本店 + 同桌型档 + 启用；存量无 seatTypeConfigId 单回退全部启用座（交后端校验桌型）。 */
+const verifySeatOptions = computed<GzBeanSeatVO[]>(() => {
+  const enabled = verifyAllSeats.value.filter((s) => s.enabled === 1);
+  const cid = verifyTarget.value?.seatTypeConfigId;
+  if (cid == null) return enabled;
+  return enabled.filter((s) => String(s.seatTypeConfigId) === String(cid));
 });
+
+/** 打开核销分座弹窗：载本店座位（按预约桌型筛），店员选座后再核销。 */
+async function openVerifyAssign(row: GzBeanBookingVO) {
+  verifyTarget.value = row;
+  verifySeatId.value = undefined;
+  verifyAllSeats.value = [];
+  verifyVisible.value = true;
+  verifySeatLoading.value = true;
+  try {
+    const resp = await listGzBeanSeatByStore(row.storeId);
+    verifyAllSeats.value = ((resp as any).data || resp || []) as GzBeanSeatVO[];
+  } catch (e) {
+    console.error('[gz-bean-booking] load seats for verify failed', e);
+    ElMessage.error(t('gzBeanBooking.loadFailed'));
+  } finally {
+    verifySeatLoading.value = false;
+  }
+}
+
+/** 提交核销分座：verify?seatId=（后端校座位存在/本店/桌型匹配/未被占，错误 msg 由拦截器 toast）。 */
+async function submitVerifyAssign() {
+  if (!verifyTarget.value) return;
+  if (verifySeatId.value == null) {
+    ElMessage.warning(t('gzBeanBooking.verifyRequireSeat'));
+    return;
+  }
+  verifySubmitting.value = true;
+  try {
+    await verifyGzBeanBookingWithSeat(verifyTarget.value.id, verifySeatId.value);
+    ElMessage.success(t('gzBeanBooking.verifySuccess'));
+    verifyVisible.value = false;
+    loadList();
+  } catch (e) {
+    // 座被占（SEAT_TAKEN）/ 桌型不符 / 已非 pending 等业务码 → 拦截器已 toast 中文 msg；
+    // 保留弹窗让店员改选座位重试，并刷新列表（可能已被并发核销 / 座位状态变化）。
+    console.error('[gz-bean-booking] verify-with-seat failed', e);
+    loadList();
+  } finally {
+    verifySubmitting.value = false;
+  }
+}
+
+// ============================================================
+//  代客预定（GZ-BEAN-039 线下散客：店员代选座 → 一步 used + 线下已付）
+// ============================================================
+
+interface ProxyForm {
+  storeId?: number | string;
+  seatTypeConfigId?: number | string;
+  seatId?: number | string;
+  sessDate?: string;
+  mobile?: string;
+  customerName?: string;
+}
+
+const proxyVisible = ref<boolean>(false);
+const proxySubmitting = ref<boolean>(false);
+const proxyTypeLoading = ref<boolean>(false);
+const proxySeatLoading = ref<boolean>(false);
+const proxyForm = reactive<ProxyForm>({});
+/** 时段（HH:mm，提交时补 :00 → HH:mm:ss） */
+const proxySlotStart = ref<string>('');
+const proxySlotEnd = ref<string>('');
+/** 金额按元输入（el-input-number），提交转分；留空（null）= 后端自动计价 */
+const proxyAmountYuan = ref<number | null>(null);
+const proxySeatTypeOptions = ref<GzBeanSeatTypeConfigVO[]>([]);
+const proxyAllSeats = ref<GzBeanSeatVO[]>([]);
+
+/** 结束时段下拉起点 = 开始时段 + 1h（保证连续整点、止 > 起） */
+const proxySlotEndStart = computed<string>(() => {
+  if (!proxySlotStart.value) return '09:00';
+  const h = Number(proxySlotStart.value.split(':')[0]);
+  if (Number.isNaN(h)) return '09:00';
+  return `${String(h + 1).padStart(2, '0')}:00`;
+});
+
+/** 当前桌型档对应的启用空闲座（按 seatTypeConfigId + enabled=1 过滤） */
+const proxySeatOptions = computed<GzBeanSeatVO[]>(() => {
+  const cid = proxyForm.seatTypeConfigId;
+  if (cid == null) return [];
+  return proxyAllSeats.value.filter((s) => s.enabled === 1 && String(s.seatTypeConfigId) === String(cid));
+});
+
+function openProxyCreate() {
+  resetProxy();
+  proxyVisible.value = true;
+}
+
+function resetProxy() {
+  proxyForm.storeId = undefined;
+  proxyForm.seatTypeConfigId = undefined;
+  proxyForm.seatId = undefined;
+  proxyForm.sessDate = undefined;
+  proxyForm.mobile = undefined;
+  proxyForm.customerName = undefined;
+  proxySlotStart.value = '';
+  proxySlotEnd.value = '';
+  proxyAmountYuan.value = null;
+  proxySeatTypeOptions.value = [];
+  proxyAllSeats.value = [];
+}
+
+/** 切门店 → 重拉该店桌型档 + 座位，清空已选桌型/座位 */
+async function onProxyStoreChange(storeId: number | string) {
+  proxyForm.seatTypeConfigId = undefined;
+  proxyForm.seatId = undefined;
+  proxySeatTypeOptions.value = [];
+  proxyAllSeats.value = [];
+  if (storeId == null) return;
+  proxyTypeLoading.value = true;
+  proxySeatLoading.value = true;
+  try {
+    const [typeResp, seatResp] = await Promise.all([
+      listGzBeanSeatTypeConfigByStore(Number(storeId)),
+      listGzBeanSeatByStore(storeId)
+    ]);
+    const types = ((typeResp as any).data || typeResp || []) as GzBeanSeatTypeConfigVO[];
+    proxySeatTypeOptions.value = types.filter((c) => c.enabled === 1);
+    proxyAllSeats.value = ((seatResp as any).data || seatResp || []) as GzBeanSeatVO[];
+  } catch (e) {
+    console.error('[gz-bean-booking] proxy load store config failed', e);
+    ElMessage.error(t('gzBeanBooking.loadFailed'));
+  } finally {
+    proxyTypeLoading.value = false;
+    proxySeatLoading.value = false;
+  }
+}
+
+/** 切桌型档 → 清空已选座位（座位下拉重过滤） */
+function onProxySeatTypeChange() {
+  proxyForm.seatId = undefined;
+}
+
+async function submitProxyCreate() {
+  if (proxyForm.storeId == null) {
+    ElMessage.warning(t('gzBeanBooking.proxyRequireStore'));
+    return;
+  }
+  if (!proxyForm.sessDate) {
+    ElMessage.warning(t('gzBeanBooking.proxyRequireDate'));
+    return;
+  }
+  if (!proxySlotStart.value || !proxySlotEnd.value) {
+    ElMessage.warning(t('gzBeanBooking.proxyRequireSlot'));
+    return;
+  }
+  if (proxySlotEnd.value <= proxySlotStart.value) {
+    ElMessage.warning(t('gzBeanBooking.proxySlotInvalid'));
+    return;
+  }
+  if (proxyForm.seatTypeConfigId == null) {
+    ElMessage.warning(t('gzBeanBooking.proxyRequireSeatType'));
+    return;
+  }
+  if (proxyForm.seatId == null) {
+    ElMessage.warning(t('gzBeanBooking.proxyRequireSeat'));
+    return;
+  }
+  const body: GzBeanAdminCreateBody = {
+    storeId: proxyForm.storeId,
+    seatTypeConfigId: proxyForm.seatTypeConfigId,
+    seatId: proxyForm.seatId,
+    sessDate: proxyForm.sessDate,
+    slotStart: `${proxySlotStart.value}:00`,
+    slotEnd: `${proxySlotEnd.value}:00`
+  };
+  if (proxyForm.mobile) body.mobile = proxyForm.mobile;
+  if (proxyForm.customerName) body.customerName = proxyForm.customerName;
+  if (proxyAmountYuan.value != null) body.amountCent = Math.round(proxyAmountYuan.value * 100);
+
+  proxySubmitting.value = true;
+  try {
+    await adminCreateGzBeanBooking(body);
+    ElMessage.success(t('gzBeanBooking.proxyCreateSuccess'));
+    proxyVisible.value = false;
+    loadList();
+  } catch (e) {
+    // 后端业务错误码（座被占 / 桌型不符 / 配额不足等）已由 request 拦截器 toast 中文 msg
+    console.error('[gz-bean-booking] proxy create failed', e);
+  } finally {
+    proxySubmitting.value = false;
+  }
+}
 
 loadStores();
 loadList();
@@ -415,30 +622,20 @@ loadList();
   color: var(--el-text-color-secondary);
   font-size: 13px;
 }
-.scan-upload {
+.proxy-slot-sep {
+  display: inline-block;
+  width: 4%;
+  text-align: center;
+  color: var(--el-text-color-secondary);
+}
+.verify-seat-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  .scan-filename {
-    color: var(--el-text-color-secondary);
-    font-size: 13px;
-  }
 }
-.scan-payload {
-  margin-top: 14px;
-  padding: 10px 12px;
-  background: var(--el-fill-color-light);
-  border-radius: 6px;
-  word-break: break-all;
-  .scan-payload-label {
-    display: block;
-    color: var(--el-text-color-secondary);
-    font-size: 12px;
-    margin-bottom: 4px;
-  }
-  code {
-    font-size: 13px;
-    color: var(--el-color-success);
-  }
+.verify-seat-label {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--el-text-color-regular);
 }
 </style>
