@@ -399,7 +399,12 @@ function countdownLabel(row: GzBeanBoardRowVO): string {
     }
     return t('gzBeanBoard.endingSoon');
   }
-  const diff = endMs - now.value;
+  // 起算点取 max(now, slot_start)：核销早于时段开始时剩余冻结在「预约时长」上限、不从 slot_end 直接倒推超发
+  //   （用户订 1h → 显示 ≤ 60min，修掉「核销 11:37、订 14:00-15:00 → 显 203min」；时段开始后正常按秒倒计）。
+  //   与后端 fillCurrentBooking 的 countFrom = max(now, plannedStart) 同口径。
+  const startMs = slotStartMs(row);
+  const anchor = startMs != null ? Math.max(now.value, startMs) : now.value;
+  const diff = endMs - anchor;
   if (diff <= 0) return t('gzBeanBoard.endingSoon');
   const totalSec = Math.floor(diff / 1000);
   const m = Math.floor(totalSec / 60);
@@ -407,10 +412,20 @@ function countdownLabel(row: GzBeanBoardRowVO): string {
   return t('gzBeanBoard.remainCountdown', { m, s: String(s).padStart(2, '0') });
 }
 
+/** 由 sessDate + slotStart(HH:mm:ss) 组装该单计划开始的本地时间戳（倒计时起算下限）。 */
+function slotStartMs(row: GzBeanBoardRowVO): number | null {
+  return hhmmsToMs(row.slotStart);
+}
+
 /** 由 sessDate + slotEnd(HH:mm:ss) 组装该单计划结束的本地时间戳 */
 function slotEndMs(row: GzBeanBoardRowVO): number | null {
-  if (!row.slotEnd) return null;
-  const parts = row.slotEnd.split(':');
+  return hhmmsToMs(row.slotEnd);
+}
+
+/** sessDate（当日）+ "HH:mm[:ss]" → 本地时间戳；解析失败返回 null。 */
+function hhmmsToMs(time: string | null | undefined): number | null {
+  if (!time) return null;
+  const parts = time.split(':');
   if (parts.length < 2) return null;
   const h = Number(parts[0]);
   const mi = Number(parts[1]);
