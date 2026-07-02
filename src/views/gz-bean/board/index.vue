@@ -207,6 +207,11 @@
                 <span v-if="row.tableNo" class="board-seat__table">{{ row.tableNo }}</span>
               </div>
               <div class="board-seat__status">{{ t(`gzBeanBoard.status.${row.boardStatus}`) }}</div>
+              <!-- 座位/本次备注：店员提醒，直接显示在卡片上（长文 2 行截断，hover 看全文） -->
+              <div v-if="row.remark" class="board-seat__remark" :title="row.remark">
+                <el-icon class="board-seat__remark-icon"><EditPen /></el-icon>
+                <span class="board-seat__remark-text">{{ row.remark }}</span>
+              </div>
               <div v-if="isOccupied(row)" class="board-seat__meta">
                 <div v-if="row.bookingNo" class="board-seat__line">{{ row.bookingNo }}</div>
                 <div v-if="row.mobileSnapshot" class="board-seat__line">{{ t('gzBeanBoard.mobileTail') }} {{ mobileTail(row.mobileSnapshot) }}</div>
@@ -230,8 +235,9 @@
       </div>
     </el-card>
 
-    <!-- 座位当前单详情 + 操作抽屉 -->
-    <el-drawer v-model="detailVisible" :title="t('gzBeanBoard.detailTitle')" size="420px" direction="rtl">
+    <!-- 座位当前单详情 + 操作抽屉（close-on-click-modal 显式置 true：main.ts 把 ElDialog 默认改成 false
+         经 drawerProps spread dialogProps 泄漏到 el-drawer，这里覆盖回来 → 点蒙层即关闭） -->
+    <el-drawer v-model="detailVisible" :title="t('gzBeanBoard.detailTitle')" size="420px" direction="rtl" :close-on-click-modal="true">
       <template v-if="activeRow">
         <el-descriptions :column="1" border size="small">
           <el-descriptions-item :label="t('gzBeanBoard.colSeatNo')">
@@ -297,6 +303,47 @@
           </el-button>
         </div>
         <div v-if="canOperate(activeRow)" class="board-actions-hint mt-2">{{ t('gzBeanBoard.actionsHint') }}</div>
+
+        <!-- 备注：占用中 → 本次占用备注（挂本单，放座后消失）；空闲 → 座位永久备注。店员可随时编辑/删除 -->
+        <div class="board-remark mt-4">
+          <div class="board-remark__label">
+            {{ isOccupied(activeRow) ? t('gzBeanBoard.noteSessionLabel') : t('gzBeanBoard.noteSeatLabel') }}
+          </div>
+          <el-input
+            v-model="seatRemarkInput"
+            type="textarea"
+            :rows="3"
+            :maxlength="500"
+            show-word-limit
+            :placeholder="isOccupied(activeRow) ? t('gzBeanBoard.notePlaceholderSession') : t('gzBeanBoard.notePlaceholderSeat')"
+          />
+          <div class="board-remark__actions mt-2">
+            <el-button
+              v-if="activeRow.remark"
+              v-hasPermi="['gz:bean:booking:verify']"
+              type="danger"
+              plain
+              :icon="Delete"
+              :loading="savingRemark"
+              @click="handleDeleteRemark(activeRow)"
+            >
+              {{ t('gzBeanBoard.remarkDelete') }}
+            </el-button>
+            <el-button
+              v-hasPermi="['gz:bean:booking:verify']"
+              type="primary"
+              :icon="EditPen"
+              :loading="savingRemark"
+              :disabled="seatRemarkInput === (activeRow.remark || '')"
+              @click="handleSaveRemark(activeRow)"
+            >
+              {{ t('gzBeanBoard.remarkSave') }}
+            </el-button>
+          </div>
+          <div class="board-remark__hint">
+            {{ isOccupied(activeRow) ? t('gzBeanBoard.noteSessionHint') : t('gzBeanBoard.noteSeatHint') }}
+          </div>
+        </div>
       </template>
     </el-drawer>
 
@@ -380,7 +427,7 @@
 
 <script setup lang="ts" name="GzBeanBoard">
 import { ref, computed, onMounted, onActivated, onDeactivated, onBeforeUnmount } from 'vue';
-import { Search, Refresh, Timer, CircleClose, Bell, Select, Switch, WarningFilled } from '@element-plus/icons-vue';
+import { Search, Refresh, Timer, CircleClose, Bell, Select, Switch, WarningFilled, EditPen, Delete } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox, ElNotification } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { getGzBeanStoreOptions, type GzBeanStoreVO } from '@/api/gz-bean/store';
@@ -391,6 +438,7 @@ import {
   reassignGzBeanSeat,
   releaseGzBeanSeat,
   extendGzBeanBooking,
+  updateGzBeanBoardNote,
   getGzBeanExpiredUnsettled,
   batchSettleGzBeanBookings,
   type GzBeanBoardRowVO,
@@ -736,10 +784,44 @@ function playBeep() {
 // ============ 详情抽屉 ============
 const detailVisible = ref(false);
 const activeRow = ref<GzBeanBoardRowVO | null>(null);
+/** 备注编辑框（独立于 activeRow，避免 30s 自动重拉时冲掉未保存的输入） */
+const seatRemarkInput = ref('');
+const savingRemark = ref(false);
 
 function openDetail(row: GzBeanBoardRowVO) {
   activeRow.value = row;
+  seatRemarkInput.value = row.remark || '';
   detailVisible.value = true;
+}
+
+/**
+ * 备注写入（按占用状态双存储，见 board.ts updateGzBeanBoardNote）：
+ * - 占用中（isOccupied）→ 传 currentBookingId，挂本次占用单，放座后看板不再展示；
+ * - 空闲 → 不传 bookingId，挂座位永久备注。
+ * 成功后同步 activeRow（== rows 内同座对象引用），保存/删除按钮据此回到 disabled/隐藏，无需整体重拉看板。
+ */
+async function persistNote(row: GzBeanBoardRowVO, value: string, successMsg: string) {
+  savingRemark.value = true;
+  try {
+    const bookingId = isOccupied(row) ? row.currentBookingId : undefined;
+    await updateGzBeanBoardNote(row.seatId, bookingId, value);
+    ElMessage.success(successMsg);
+    seatRemarkInput.value = value;
+    row.remark = value || null;
+  } catch (e) {
+    console.error('[gz-bean-board] save board note failed', e);
+  } finally {
+    savingRemark.value = false;
+  }
+}
+
+function handleSaveRemark(row: GzBeanBoardRowVO) {
+  return persistNote(row, seatRemarkInput.value, t('gzBeanBoard.remarkSaveSuccess'));
+}
+
+/** 删除备注（清空 + 保存）；店员可随时删 */
+function handleDeleteRemark(row: GzBeanBoardRowVO) {
+  return persistNote(row, '', t('gzBeanBoard.remarkDeleteSuccess'));
 }
 
 // ============ 放座 ============
@@ -1157,6 +1239,31 @@ onBeforeUnmount(() => {
   top: 8px;
   right: 8px;
 }
+.board-seat__remark {
+  display: flex;
+  align-items: flex-start;
+  gap: 3px;
+  margin-top: 4px;
+  padding: 3px 6px;
+  background: #fdf6ec;
+  border: 1px solid #f5dab1;
+  border-radius: 4px;
+  color: #8a6d3b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.board-seat__remark-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  font-size: 12px;
+}
+.board-seat__remark-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
 .board-seat__continuous {
   margin-top: 4px;
   font-size: 12px;
@@ -1354,5 +1461,23 @@ onBeforeUnmount(() => {
 .board-actions-hint {
   color: #909399;
   font-size: 12px;
+}
+.board-remark {
+  border-top: 1px solid #ebeef5;
+  padding-top: 12px;
+}
+.board-remark__label {
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 8px;
+}
+.board-remark__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.board-remark__hint {
+  color: #909399;
+  font-size: 12px;
+  margin-top: 4px;
 }
 </style>

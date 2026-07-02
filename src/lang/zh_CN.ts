@@ -940,7 +940,18 @@ export default {
     markEndedConfirm: '确认将选中的 {n} 笔已超时单标记为「已结束」（放座）？',
     batchConfirm: '批量结单确认',
     batchResult: '处理完成：成功 {succeeded} / 跳过 {skipped} / 失败 {failed}',
-    batchFailed: '批量结单失败'
+    batchFailed: '批量结单失败',
+    // 看板备注（按占用状态双存储：空闲挂座位永久留存 / 占用挂本次单放座后消失）
+    noteSeatLabel: '座位备注',
+    noteSessionLabel: '本次占用备注',
+    notePlaceholderSeat: '给这个座位记点什么（如「椅子松动」），留空即清空',
+    notePlaceholderSession: '给这位客人本次占用记点什么（如「加时到 16:30」），留空即清空',
+    noteSeatHint: '座位空闲时的备注挂在座位上、长期留存；下次点开该座位仍可见。',
+    noteSessionHint: '仅与当前这位客人本次占用有关；一旦放座，该备注自动从看板消失。',
+    remarkSave: '保存',
+    remarkDelete: '删除',
+    remarkSaveSuccess: '备注已保存',
+    remarkDeleteSuccess: '备注已删除'
   },
   // 拼豆预约管理（D05 GZ-BEAN-008）
   gzBeanBooking: {

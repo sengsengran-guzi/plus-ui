@@ -31,6 +31,8 @@ export interface GzBeanBoardRowVO {
   typeName?: string | null;
   /** 订法 whole=整桌 / seat=按座 */
   bookMode?: string | null;
+  /** 座位备注（gz_bean_seat.remark；店员在看板上记录，与座位是否空闲无关）；可空 */
+  remark?: string | null;
   /** 看板状态（见 GzBeanBoardStatus） */
   boardStatus: GzBeanBoardStatus;
   /** 当前活跃单 id（string）；idle 时 null */
@@ -226,6 +228,23 @@ export function getGzBeanExpiredUnsettled(storeId: number | string, sessDate: st
     url: '/system/gz/bean/booking/board/expired-unsettled',
     method: 'get',
     params: { storeId, sessDate }
+  });
+}
+
+/**
+ * PUT /system/gz/bean/booking/board/seat/{seatId}/note — 看板备注（按占用状态双存储）
+ * - 座位占用中：传 bookingId → 备注挂本次占用单 gz_bean_booking.board_note，放座后看板不再展示；
+ * - 座位空闲：不传 bookingId → 备注挂座位 gz_bean_seat.remark，长期留存。
+ * remark 传空串 = 清空（删除备注）。复用 gz:bean:booking:verify 权限（店员可写）。
+ * @param seatId 座位单元 id
+ * @param bookingId 本次占用单 id（占用时传；空闲传 undefined/null）
+ * @param remark 备注内容（≤ 500；空串清空）
+ */
+export function updateGzBeanBoardNote(seatId: number | string, bookingId: number | string | null | undefined, remark: string): AxiosPromise<void> {
+  return request({
+    url: `/system/gz/bean/booking/board/seat/${seatId}/note`,
+    method: 'put',
+    data: { bookingId: bookingId ?? null, remark }
   });
 }
 

@@ -943,7 +943,18 @@ export default {
     markEndedConfirm: 'Mark the selected {n} overtime booking(s) as "ended" (release)?',
     batchConfirm: 'Batch settle confirm',
     batchResult: 'Done: succeeded {succeeded} / skipped {skipped} / failed {failed}',
-    batchFailed: 'Batch settle failed'
+    batchFailed: 'Batch settle failed',
+    // Board note (dual storage by occupancy: idle → on the seat, permanent / occupied → on this booking, gone after release)
+    noteSeatLabel: 'Seat note',
+    noteSessionLabel: 'Current-session note',
+    notePlaceholderSeat: 'Note anything about this seat (e.g. "wobbly chair"); leave empty to clear',
+    notePlaceholderSession: 'Note anything for this guest\'s current session (e.g. "extend to 16:30"); leave empty to clear',
+    noteSeatHint: 'A seat note (while idle) is attached to the seat and kept long-term; it stays visible next time you open this seat.',
+    noteSessionHint: 'Tied only to this guest\'s current session; once the seat is released, the note disappears from the board.',
+    remarkSave: 'Save',
+    remarkDelete: 'Delete',
+    remarkSaveSuccess: 'Note saved',
+    remarkDeleteSuccess: 'Note deleted'
   },
   // Pindou booking management (D05 GZ-BEAN-008)
   gzBeanBooking: {
