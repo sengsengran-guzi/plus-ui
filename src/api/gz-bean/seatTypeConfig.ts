@@ -29,6 +29,12 @@ export interface GzBeanSeatTypeConfigVO {
   priceCent: number;
   /** 单价（元，后端 priceCent/100 算） */
   priceYuan: number | string;
+  /** 包天名额（GZ-BEAN-042 / ADR-0017；0=不开放包天，上限为该桌型总座位数） */
+  dayPassQuota: number;
+  /** 包天固定价（分） */
+  dayPassPriceCent: number;
+  /** 包天固定价（元，后端 dayPassPriceCent/100 算） */
+  dayPassPriceYuan: number;
   /** 0=停用 / 1=启用 */
   enabled: number;
   /** 排序值 */
@@ -48,6 +54,10 @@ export interface GzBeanSeatTypeConfigForm {
   capacity?: number | null;
   quantity?: number | null;
   priceCent?: number | null;
+  /** 包天名额（GZ-BEAN-042 / ADR-0017；可空=0，后端校 0 ≤ dayPassQuota ≤ 桌型总座位数） */
+  dayPassQuota?: number;
+  /** 包天固定价（分；可空=0，后端校 ≥0） */
+  dayPassPriceCent?: number;
   enabled?: number;
   sortNo?: number;
   remark?: string | null;

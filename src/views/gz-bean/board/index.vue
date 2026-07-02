@@ -68,10 +68,18 @@
               {{ t('gzBeanBoard.consecutiveTag', { seat: p.suggestedSeatNo || '-' }) }}
             </el-tag>
             <div class="pending-card__main">
-              <div class="pending-card__no">{{ p.bookingNo }}</div>
+              <div class="pending-card__no">
+                {{ p.bookingNo }}
+                <el-tag v-if="p.isDayPass === 1" type="warning" size="small" effect="dark" class="pending-card__daypass">
+                  {{ t('gzBeanBoard.dayPassTag') }}
+                </el-tag>
+              </div>
               <div class="pending-card__line">
                 <el-tag size="small" type="info" effect="plain">{{ p.seatTypeSnapshot || p.seatType || t('gzBeanBoard.typeUnknown') }}</el-tag>
                 <span class="pending-card__slot">{{ hhmm(p.slotStart) }} - {{ hhmm(p.slotEnd) }}</span>
+              </div>
+              <div v-if="p.isDayPass === 1" class="pending-card__line pending-card__daypass-hint">
+                {{ t('gzBeanBoard.dayPassAssignHint') }}
               </div>
               <div v-if="p.mobileSnapshot" class="pending-card__line pending-card__mobile">
                 {{ t('gzBeanBoard.mobileTail') }} {{ mobileTail(p.mobileSnapshot) }}
@@ -1228,6 +1236,14 @@ onBeforeUnmount(() => {
 }
 .pending-card__mobile {
   color: #909399;
+}
+.pending-card__daypass {
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.pending-card__daypass-hint {
+  color: var(--el-color-warning);
+  font-weight: 600;
 }
 /* 过期待处理 panel */
 .expired-panel {

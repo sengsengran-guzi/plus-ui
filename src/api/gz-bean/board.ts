@@ -91,6 +91,8 @@ export interface GzBeanPendingAssignVO {
   slotEnd: string;
   /** 手机号 snapshot（店员看全量，前端展示尾号） */
   mobileSnapshot?: string | null;
+  /** 是否包天单（GZ-BEAN-042 / ADR-0017；1=包天单，后端 selectPendingAssignList 返回完整 GzBeanBookingVO 已携带） */
+  isDayPass?: number | null;
   /** GZ-BEAN-037：是否与同用户当前在店单时段相连（true → 高亮 + 一键提前核销，弹窗默认预选建议座） */
   consecutiveWithActive?: boolean | null;
   /** 建议沿用座位 id（string；consecutiveWithActive=true 时有值，分座弹窗默认预选） */

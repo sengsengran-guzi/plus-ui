@@ -43,6 +43,8 @@ export interface GzBeanBookingVO {
   payStatus?: string;
   /** 单一综合状态（后端派生，dict gz_bean_booking_status 翻译）：paid/used/cancelled/refunded/no_show/unpaid/closed */
   bizStatus?: string;
+  /** 是否包天单（GZ-BEAN-042 / ADR-0017；1=包天单 / 0=小时单） */
+  isDayPass?: number;
   /** 核销时间 */
   verifyTime?: string | null;
   /** 核销操作人 */

@@ -47,6 +47,18 @@
         <el-table-column :label="t('gzBeanSeatTypeConfig.colPriceYuan')" width="120" align="right">
           <template #default="{ row }">¥{{ formatYuan(row.priceCent) }}</template>
         </el-table-column>
+        <el-table-column :label="t('gzBeanSeatTypeConfig.colDayPassQuota')" width="100" align="center">
+          <template #default="{ row }">
+            <span v-if="(row.dayPassQuota || 0) > 0">{{ row.dayPassQuota }}</span>
+            <el-tag v-else type="info" size="small" effect="plain">{{ t('gzBeanSeatTypeConfig.dayPassOff') }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('gzBeanSeatTypeConfig.colDayPassPrice')" width="110" align="right">
+          <template #default="{ row }">
+            <span v-if="(row.dayPassQuota || 0) > 0">¥{{ formatYuan(row.dayPassPriceCent) }}</span>
+            <span v-else class="form-hint">-</span>
+          </template>
+        </el-table-column>
         <el-table-column :label="t('gzBeanSeatTypeConfig.colEnabled')" width="80" align="center">
           <template #default="{ row }">
             <el-switch
@@ -102,6 +114,14 @@
         <el-form-item :label="t('gzBeanSeatTypeConfig.colPriceYuan')" prop="priceYuan">
           <el-input-number v-model="form.priceYuan" :min="0" :precision="2" :step="1" />
           <span class="form-hint">{{ t('gzBeanSeatTypeConfig.priceHint') }}</span>
+        </el-form-item>
+        <el-form-item :label="t('gzBeanSeatTypeConfig.colDayPassQuota')">
+          <el-input-number v-model="form.dayPassQuota" :min="0" :max="9999" />
+          <span class="form-hint">{{ t('gzBeanSeatTypeConfig.dayPassQuotaHint') }}</span>
+        </el-form-item>
+        <el-form-item :label="t('gzBeanSeatTypeConfig.colDayPassPrice')">
+          <el-input-number v-model="form.dayPassPriceYuan" :min="0" :precision="2" :step="1" />
+          <span class="form-hint">{{ t('gzBeanSeatTypeConfig.dayPassPriceHint') }}</span>
         </el-form-item>
         <el-form-item :label="t('gzBeanSeatTypeConfig.colEnabled')">
           <el-switch
@@ -251,6 +271,10 @@ interface FormState {
   capacity: number;
   quantity: number;
   priceYuan: number;
+  /** 包天名额（GZ-BEAN-042 / ADR-0017；0=不开放包天） */
+  dayPassQuota: number;
+  /** 包天固定价（元；提交时 *100 转分） */
+  dayPassPriceYuan: number;
   enabled: number;
   sortNo: number;
   remark: string;
@@ -266,6 +290,8 @@ const form = reactive<FormState>({
   capacity: 1,
   quantity: 0,
   priceYuan: 0,
+  dayPassQuota: 0,
+  dayPassPriceYuan: 0,
   enabled: 1,
   sortNo: 0,
   remark: ''
@@ -488,6 +514,8 @@ function handleAdd() {
     capacity: 1,
     quantity: 0,
     priceYuan: 0,
+    dayPassQuota: 0,
+    dayPassPriceYuan: 0,
     enabled: 1,
     sortNo: 0,
     remark: ''
@@ -505,6 +533,8 @@ function handleEdit(row: GzBeanSeatTypeConfigVO) {
     capacity: row.capacity,
     quantity: row.quantity,
     priceYuan: (row.priceCent || 0) / 100,
+    dayPassQuota: row.dayPassQuota ?? 0,
+    dayPassPriceYuan: (row.dayPassPriceCent || 0) / 100,
     enabled: row.enabled,
     sortNo: row.sortNo,
     remark: row.remark || ''
@@ -529,6 +559,8 @@ async function handleSubmit() {
       capacity: form.capacity,
       quantity: form.quantity,
       priceCent: Math.round((form.priceYuan || 0) * 100),
+      dayPassQuota: form.dayPassQuota,
+      dayPassPriceCent: Math.round((form.dayPassPriceYuan || 0) * 100),
       enabled: form.enabled,
       sortNo: form.sortNo,
       remark: form.remark

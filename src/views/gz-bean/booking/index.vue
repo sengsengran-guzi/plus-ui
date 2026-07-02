@@ -80,6 +80,7 @@
         <el-table-column :label="t('gzBeanBooking.colSeat')" width="150" align="center">
           <template #default="{ row }">
             <span class="seat-no">{{ row.seatNoSnapshot || '-' }}</span>
+            <el-tag v-if="row.isDayPass === 1" type="warning" size="small" class="day-pass-tag">{{ t('gzBeanBooking.dayPassTag') }}</el-tag>
             <span v-if="row.seatTypeSnapshot" class="seat-type">{{ row.seatTypeSnapshot }}</span>
           </template>
         </el-table-column>
@@ -572,6 +573,10 @@ loadList();
 }
 .seat-no {
   font-weight: 600;
+}
+.day-pass-tag {
+  margin-left: 6px;
+  vertical-align: middle;
 }
 .seat-type {
   display: block;

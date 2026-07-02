@@ -109,6 +109,62 @@ export function listReconDaily(params: {
   });
 }
 
+/** 拼豆记账台账单月行（纯展示，不计 4% 分成） */
+export interface PindouBoardMonthRow {
+  month: string;
+  gmvCent: number;
+  refundCent: number;
+  channelFeeCent: number;
+  netCent: number;
+  paidCount: number;
+  refundCount: number;
+}
+
+/** 拼豆记账台账（收款/退款/通道费/净额 + 逐月，不计分成） */
+export interface PindouBoardVO {
+  gmvCent: number;
+  refundCent: number;
+  channelFeeCent: number;
+  netCent: number;
+  paidCount: number;
+  refundCount: number;
+  months: PindouBoardMonthRow[];
+}
+
+/** 回收反向打款台账单月行（按 transferred_time 归月） */
+export interface RecycleBoardMonthRow {
+  month: string;
+  payoutCent: number;
+  payoutCount: number;
+}
+
+/** 回收反向打款台账（成功打款金额/笔数 + 处理中/失败 + 逐月，独立核算不计分成） */
+export interface RecycleBoardVO {
+  payoutSuccessCent: number;
+  payoutSuccessCount: number;
+  processingCount: number;
+  failedCount: number;
+  months: RecycleBoardMonthRow[];
+}
+
+/** GET /reconcile/pindou-board — 拼豆记账台账（不计 4% 分成） */
+export function getPindouBoard(startMonth: string, endMonth: string): AxiosPromise<PindouBoardVO> {
+  return request({
+    url: '/system/gz/recon/reconcile/pindou-board',
+    method: 'get',
+    params: { startMonth, endMonth }
+  });
+}
+
+/** GET /reconcile/recycle-board — 回收反向打款台账（独立核算不计分成） */
+export function getRecycleBoard(startMonth: string, endMonth: string): AxiosPromise<RecycleBoardVO> {
+  return request({
+    url: '/system/gz/recon/reconcile/recycle-board',
+    method: 'get',
+    params: { startMonth, endMonth }
+  });
+}
+
 /** GET /settle/list — 季度结算列表（按季度倒序） */
 export function listReconSettle(): AxiosPromise<GzReconSettleVO[]> {
   return request({
