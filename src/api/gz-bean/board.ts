@@ -232,19 +232,17 @@ export function getGzBeanExpiredUnsettled(storeId: number | string, sessDate: st
 }
 
 /**
- * PUT /system/gz/bean/booking/board/seat/{seatId}/note — 看板备注（按占用状态双存储）
- * - 座位占用中：传 bookingId → 备注挂本次占用单 gz_bean_booking.board_note，放座后看板不再展示；
- * - 座位空闲：不传 bookingId → 备注挂座位 gz_bean_seat.remark，长期留存。
+ * PUT /system/gz/bean/booking/board/seat/{seatId}/note — 看板座位备注
+ * 备注纯挂座位（gz_bean_seat.remark）：与座位是否有人/空闲无关，店员手动填/清，座位状态变化不自动清。
  * remark 传空串 = 清空（删除备注）。复用 gz:bean:booking:verify 权限（店员可写）。
  * @param seatId 座位单元 id
- * @param bookingId 本次占用单 id（占用时传；空闲传 undefined/null）
  * @param remark 备注内容（≤ 500；空串清空）
  */
-export function updateGzBeanBoardNote(seatId: number | string, bookingId: number | string | null | undefined, remark: string): AxiosPromise<void> {
+export function updateGzBeanBoardNote(seatId: number | string, remark: string): AxiosPromise<void> {
   return request({
     url: `/system/gz/bean/booking/board/seat/${seatId}/note`,
     method: 'put',
-    data: { bookingId: bookingId ?? null, remark }
+    data: { remark }
   });
 }
 
@@ -260,5 +258,54 @@ export function batchSettleGzBeanBookings(
     url: '/system/gz/bean/booking/batch-settle',
     method: 'post',
     data: { bookingIds, action }
+  });
+}
+
+/**
+ * 看板代客预约（walk-in）一步「建单 + 核销 + 分座」入参（0702 反馈 #2）。
+ * 现金散客到店，店员点看板某具体空闲座位 → 填时长/手机号/免费/金额 → 提交即 used+paid+seat_id。
+ */
+export interface GzBeanWalkInBo {
+  /** 门店 id */
+  storeId: number | string;
+  /** 店员点的具体空闲座位 id（防超卖 + 计价 + 桌型档取自该座） */
+  seatId: number | string;
+  /** 预约日期 yyyy-MM-dd */
+  sessDate: string;
+  /** 区间起 HH:mm:ss（整点，含） */
+  slotStart: string;
+  /** 区间止 HH:mm:ss（整点，不含） */
+  slotEnd: string;
+  /** 顾客手机号（选填）：命中既有用户则关联，否则用「线下散客」占位 */
+  mobile?: string;
+  /** 免费标记：true=本单免费（amount=0，不计营业额 GMV） */
+  isFree: boolean;
+  /** 线下收款金额（分，选填）：默认逐格求和计价，非空则覆写（议价/抹零）；isFree=true 时忽略置 0 */
+  amountCent?: number | null;
+}
+
+/**
+ * POST /system/gz/bean/booking/board/walk-in — 看板代客预约一步建单核销分座（0702 反馈 #2）
+ * 现金到店客，座位立刻 in_use 起计时。复用 gz:bean:booking:verify 权限。
+ * 错误码：4002 SEAT_TAKEN（座被占/跨店）/ 4005 SEAT_DISABLED（座停用）/ 4012 SEAT_TYPE_NOT_CONFIGURED / 4013 SEAT_TYPE_DISABLED。
+ */
+export function walkInGzBeanBooking(data: GzBeanWalkInBo): AxiosPromise<GzBeanPendingAssignVO> {
+  return request({
+    url: '/system/gz/bean/booking/board/walk-in',
+    method: 'post',
+    data
+  });
+}
+
+/**
+ * POST /system/gz/bean/booking/{id}/mark-handled — 直接核销已处理（不分座）（0702 反馈 #3）
+ * 待分座单无法正常分座核销时（如客人买双人桌实际坐四人桌、钱一样不退款让其游玩），
+ * 标记 status pending→used 但不分配座位，单从待分座列表 / 看板消失。复用 gz:bean:booking:verify 权限。
+ * 前置：仅 pending + paid 单可处理（否则 4xx INVALID_STATUS / NOT_PAID）。
+ */
+export function markGzBeanBookingHandled(id: number | string): AxiosPromise<void> {
+  return request({
+    url: `/system/gz/bean/booking/${id}/mark-handled`,
+    method: 'post'
   });
 }

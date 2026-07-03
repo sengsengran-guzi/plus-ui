@@ -56,8 +56,9 @@
         </el-form-item>
       </el-form>
 
-      <!-- 工具栏：代客预定（扫码核销已下线，真机扫码走 mp 店员端） -->
-      <el-row :gutter="10" class="mb-2">
+      <!-- 工具栏：代客预定入口已下线（0702 反馈 #2）。现金到店客改走「店内计时看板」点空闲座位一步建单核销分座；
+           本页两步式代客预定（先 pending 再核销分座）不再展示。后端 /admin-create 端点保留（未来预约未来时段代客可复用）。 -->
+      <el-row v-if="false" :gutter="10" class="mb-2">
         <el-col :span="1.5">
           <el-button v-hasPermi="['gz:bean:booking:verify']" type="primary" plain :icon="Plus" @click="openProxyCreate">
             {{ t('gzBeanBooking.proxyCreate') }}

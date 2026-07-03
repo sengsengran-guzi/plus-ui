@@ -99,6 +99,15 @@
               <el-button v-else v-hasPermi="['gz:bean:booking:verify']" type="primary" size="small" :icon="Select" @click="openAssign(p)">
                 {{ t('gzBeanBoard.assignVerify') }}
               </el-button>
+              <!-- 直接核销已处理（不分座）（0702 反馈 #3）：桌型/座位对不上无法正常分座核销时，标记已处理让单从待分座消失 -->
+              <el-button
+                v-hasPermi="['gz:bean:booking:verify']"
+                size="small"
+                :loading="markHandlingId === p.id"
+                @click="handleMarkHandled(p)"
+              >
+                {{ t('gzBeanBoard.markHandled') }}
+              </el-button>
             </div>
           </div>
         </div>
@@ -276,7 +285,21 @@
           </el-descriptions-item>
         </el-descriptions>
 
-        <div v-else class="board-detail-idle mt-3">{{ t('gzBeanBoard.idleHint') }}</div>
+        <template v-else>
+          <div class="board-detail-idle mt-3">{{ t('gzBeanBoard.idleHint') }}</div>
+          <!-- 看板代客预约（0702 反馈 #2）：现金到店客，店员点空闲座位一步建单核销分座 -->
+          <div class="board-actions mt-4">
+            <el-button
+              v-hasPermi="['gz:bean:booking:verify']"
+              type="primary"
+              :icon="Plus"
+              @click="openWalkIn(activeRow)"
+            >
+              {{ t('gzBeanBoard.walkInCreate') }}
+            </el-button>
+          </div>
+          <div class="board-actions-hint mt-2">{{ t('gzBeanBoard.walkInHint') }}</div>
+        </template>
 
         <!-- 操作：仅 in_use / near_end / overtime（已核销在店）可放座 / 延时 -->
         <div v-if="canOperate(activeRow)" class="board-actions mt-4">
@@ -304,18 +327,16 @@
         </div>
         <div v-if="canOperate(activeRow)" class="board-actions-hint mt-2">{{ t('gzBeanBoard.actionsHint') }}</div>
 
-        <!-- 备注：占用中 → 本次占用备注（挂本单，放座后消失）；空闲 → 座位永久备注。店员可随时编辑/删除 -->
+        <!-- 座位备注：纯挂座位，与是否有人/空闲无关，店员手动填/清，状态变化不自动清 -->
         <div class="board-remark mt-4">
-          <div class="board-remark__label">
-            {{ isOccupied(activeRow) ? t('gzBeanBoard.noteSessionLabel') : t('gzBeanBoard.noteSeatLabel') }}
-          </div>
+          <div class="board-remark__label">{{ t('gzBeanBoard.noteSeatLabel') }}</div>
           <el-input
             v-model="seatRemarkInput"
             type="textarea"
             :rows="3"
             :maxlength="500"
             show-word-limit
-            :placeholder="isOccupied(activeRow) ? t('gzBeanBoard.notePlaceholderSession') : t('gzBeanBoard.notePlaceholderSeat')"
+            :placeholder="t('gzBeanBoard.notePlaceholderSeat')"
           />
           <div class="board-remark__actions mt-2">
             <el-button
@@ -340,9 +361,7 @@
               {{ t('gzBeanBoard.remarkSave') }}
             </el-button>
           </div>
-          <div class="board-remark__hint">
-            {{ isOccupied(activeRow) ? t('gzBeanBoard.noteSessionHint') : t('gzBeanBoard.noteSeatHint') }}
-          </div>
+          <div class="board-remark__hint">{{ t('gzBeanBoard.noteSeatHint') }}</div>
         </div>
       </template>
     </el-drawer>
@@ -361,6 +380,60 @@
         <el-button type="primary" :loading="extending" @click="handleExtend">{{ t('gzBeanBoard.confirm') }}</el-button>
       </template>
     </el-dialog>
+
+    <!-- 看板代客预约抽屉（0702 反馈 #2）：现金到店客一步「建单 + 核销 + 分座」 -->
+    <el-drawer v-model="walkInVisible" :title="t('gzBeanBoard.walkInTitle')" size="440px" direction="rtl" :close-on-click-modal="false">
+      <template v-if="walkInSeat">
+        <el-descriptions :column="1" border size="small" class="mb-3">
+          <el-descriptions-item :label="t('gzBeanBoard.colSeatNo')">
+            {{ walkInSeat.seatNo }}<span v-if="walkInSeat.tableNo"> / {{ walkInSeat.tableNo }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item :label="t('gzBeanBoard.colTypeName')">{{ walkInSeat.typeName || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('gzBeanBoard.colSessDate')">{{ sessDate }}</el-descriptions-item>
+        </el-descriptions>
+
+        <el-form label-width="92px" @submit.prevent>
+          <el-form-item :label="t('gzBeanBoard.walkInSlotStart')">
+            <el-select v-model="walkInForm.slotStart" style="width: 130px" @change="onWalkInStartChange">
+              <el-option v-for="h in hourOptions" :key="h" :label="hourLabel(h)" :value="h" />
+            </el-select>
+            <span class="form-hint">{{ t('gzBeanBoard.walkInSlotStartHint') }}</span>
+          </el-form-item>
+          <el-form-item :label="t('gzBeanBoard.walkInSlotEnd')">
+            <el-select v-model="walkInForm.slotEnd" style="width: 130px">
+              <el-option v-for="h in walkInEndOptions" :key="h" :label="hourLabel(h)" :value="h" />
+            </el-select>
+            <span class="form-hint">{{ t('gzBeanBoard.walkInHoursHint', { hours: walkInHours }) }}</span>
+          </el-form-item>
+          <el-form-item :label="t('gzBeanBoard.walkInMobile')">
+            <el-input v-model="walkInForm.mobile" maxlength="11" :placeholder="t('gzBeanBoard.walkInMobilePlaceholder')" style="width: 220px" />
+          </el-form-item>
+          <el-form-item :label="t('gzBeanBoard.walkInFree')">
+            <el-switch v-model="walkInForm.isFree" @change="onWalkInFreeChange" />
+            <span class="form-hint">{{ t('gzBeanBoard.walkInFreeHint') }}</span>
+          </el-form-item>
+          <el-form-item :label="t('gzBeanBoard.walkInAmount')">
+            <el-input-number
+              v-model="walkInForm.amountYuan"
+              :min="0"
+              :precision="2"
+              :step="1"
+              :disabled="walkInForm.isFree"
+              controls-position="right"
+              style="width: 160px"
+            />
+            <span class="form-hint">{{ t('gzBeanBoard.walkInAmountHint') }}</span>
+          </el-form-item>
+        </el-form>
+        <el-alert type="info" :closable="false" show-icon :description="t('gzBeanBoard.walkInAlert')" class="mt-2" />
+      </template>
+      <template #footer>
+        <el-button @click="walkInVisible = false">{{ t('gzBeanBoard.cancel') }}</el-button>
+        <el-button type="primary" :loading="walkInSubmitting" :disabled="!walkInValid" @click="handleWalkInSubmit">
+          {{ t('gzBeanBoard.walkInConfirm') }}
+        </el-button>
+      </template>
+    </el-drawer>
 
     <!-- 分配座位弹窗：核销分座（②待分座/提前核销）/ 改派座位（详情抽屉）两用 -->
     <el-dialog v-model="assignVisible" :title="assignMode === 'reassign' ? t('gzBeanBoard.reassignTitle') : t('gzBeanBoard.assignTitle')" width="480px">
@@ -427,7 +500,7 @@
 
 <script setup lang="ts" name="GzBeanBoard">
 import { ref, computed, onMounted, onActivated, onDeactivated, onBeforeUnmount } from 'vue';
-import { Search, Refresh, Timer, CircleClose, Bell, Select, Switch, WarningFilled, EditPen, Delete } from '@element-plus/icons-vue';
+import { Search, Refresh, Timer, CircleClose, Bell, Select, Switch, WarningFilled, EditPen, Delete, Plus } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox, ElNotification } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { getGzBeanStoreOptions, type GzBeanStoreVO } from '@/api/gz-bean/store';
@@ -441,11 +514,14 @@ import {
   updateGzBeanBoardNote,
   getGzBeanExpiredUnsettled,
   batchSettleGzBeanBookings,
+  walkInGzBeanBooking,
+  markGzBeanBookingHandled,
   type GzBeanBoardRowVO,
   type GzBeanBoardStatus,
   type GzBeanPendingAssignVO,
   type GzBeanExpiredUnsettledVO,
-  type GzBeanSettleAction
+  type GzBeanSettleAction,
+  type GzBeanWalkInBo
 } from '@/api/gz-bean/board';
 
 const { t } = useI18n();
@@ -577,15 +653,19 @@ function showCanExtend(row: GzBeanBoardRowVO): boolean {
 }
 
 /**
- * 倒计时文案：以后端计划 slot_end 为准，结合 sessDate + 本地时钟实时刷新到分秒。
+ * 倒计时文案：以「续坐完成时刻 continuousUntil（若有）否则计划 slot_end」为准，结合 sessDate + 本地时钟实时刷新到分秒。
  * 已过界（< 0）→ 显「即将结束」兜底（后端会在下次重拉时转 overtime）。
+ * 0702 续坐显示重设计：同人已核销 back-to-back 续坐 → 倒计时算到续坐完成时刻，与后端 fillCurrentBooking 的 effectiveEnd 同口径。
  */
 function countdownLabel(row: GzBeanBoardRowVO): string {
-  const endMs = slotEndMs(row);
+  const endMs = effectiveEndMs(row);
   if (endMs == null) {
-    // 无法解析时回退后端粗粒度分钟
+    // 无法解析时回退后端粗粒度分钟（≥ 60 分同样走「剩 X 时 X 分」）
     if (row.remainingMinutes != null && row.remainingMinutes > 0) {
-      return t('gzBeanBoard.remainMinutes', { n: row.remainingMinutes });
+      const n = row.remainingMinutes;
+      return n >= 60
+        ? t('gzBeanBoard.remainCountdownHm', { h: Math.floor(n / 60), m: n % 60 })
+        : t('gzBeanBoard.remainMinutes', { n });
     }
     return t('gzBeanBoard.endingSoon');
   }
@@ -597,6 +677,13 @@ function countdownLabel(row: GzBeanBoardRowVO): string {
   const diff = endMs - anchor;
   if (diff <= 0) return t('gzBeanBoard.endingSoon');
   const totalSec = Math.floor(diff / 1000);
+  // ≥ 60 分 → 「剩 X 时 X 分」（续坐链可长达数小时，秒级跳动无意义、也更好读）；
+  // < 60 分 → 「剩 X 分 X 秒」（临近结束保留秒级精确倒计）。
+  if (totalSec >= 3600) {
+    const h = Math.floor(totalSec / 3600);
+    const mm = Math.floor((totalSec % 3600) / 60);
+    return t('gzBeanBoard.remainCountdownHm', { h, m: mm });
+  }
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
   return t('gzBeanBoard.remainCountdown', { m, s: String(s).padStart(2, '0') });
@@ -610,6 +697,14 @@ function slotStartMs(row: GzBeanBoardRowVO): number | null {
 /** 由 sessDate + slotEnd(HH:mm:ss) 组装该单计划结束的本地时间戳 */
 function slotEndMs(row: GzBeanBoardRowVO): number | null {
   return hhmmsToMs(row.slotEnd);
+}
+
+/**
+ * 倒计时/状态锚定的「有效结束时刻」（0702 续坐显示重设计）：有续坐（continuousUntil）→ 用续坐完成时刻，
+ * 否则退回当前子单 slot_end。与后端 fillCurrentBooking 的 effectiveEnd 同口径。
+ */
+function effectiveEndMs(row: GzBeanBoardRowVO): number | null {
+  return hhmmsToMs(row.continuousUntil || row.slotEnd);
 }
 
 /** sessDate（当日）+ "HH:mm[:ss]" → 本地时间戳；解析失败返回 null。 */
@@ -694,6 +789,30 @@ async function loadPending() {
     // 待分座区失败不打断主看板，控制台标记即可
   } finally {
     pendingLoading.value = false;
+  }
+}
+
+/** 直接核销已处理（不分座）（0702 反馈 #3）：桌型/座位对不上无法正常分座核销的单，二次确认后标记 used、从待分座消失 */
+const markHandlingId = ref<string | number | null>(null);
+async function handleMarkHandled(p: GzBeanPendingAssignVO) {
+  try {
+    await ElMessageBox.confirm(
+      t('gzBeanBoard.markHandledConfirm', { no: p.bookingNo }),
+      t('gzBeanBoard.markHandledConfirmTitle'),
+      { type: 'warning', confirmButtonText: t('gzBeanBoard.markHandled'), cancelButtonText: t('gzBeanBoard.cancel') }
+    );
+  } catch {
+    return; // 取消
+  }
+  markHandlingId.value = p.id;
+  try {
+    await markGzBeanBookingHandled(p.id);
+    ElMessage.success(t('gzBeanBoard.markHandledSuccess'));
+    await loadBoard(); // 刷新看板 + 待分座区（本单已 used，自动离开待分座）
+  } catch (e) {
+    console.error('[gz-bean-board] mark-handled failed', e);
+  } finally {
+    markHandlingId.value = null;
   }
 }
 
@@ -794,17 +913,107 @@ function openDetail(row: GzBeanBoardRowVO) {
   detailVisible.value = true;
 }
 
+// ============ 看板代客预约 walk-in（0702 反馈 #2）：现金到店客一步建单核销分座 ============
+const walkInVisible = ref(false);
+const walkInSubmitting = ref(false);
+const walkInSeat = ref<GzBeanBoardRowVO | null>(null);
+const walkInForm = ref<{ slotStart: number; slotEnd: number; mobile: string; isFree: boolean; amountYuan: number }>({
+  slotStart: 14,
+  slotEnd: 15,
+  mobile: '',
+  isFree: false,
+  amountYuan: 0
+});
+
+/** 可选起整点小时（0-23）；结束整点必须 > 起整点（连续 1h 格，后端会再校验落在营业窗口内）。 */
+const hourOptions = Array.from({ length: 24 }, (_, i) => i);
+const walkInEndOptions = computed(() => hourOptions.filter((h) => h > walkInForm.value.slotStart));
+const walkInHours = computed(() => Math.max(0, walkInForm.value.slotEnd - walkInForm.value.slotStart));
+const walkInValid = computed(() => walkInForm.value.slotEnd > walkInForm.value.slotStart && (walkInForm.value.isFree || walkInForm.value.amountYuan >= 0));
+
+function hourLabel(h: number): string {
+  return `${String(h).padStart(2, '0')}:00`;
+}
+
+/** 起整点变更：结束整点自动跟到 start+1（若已 ≤ start），保证区间连续有效。 */
+function onWalkInStartChange() {
+  if (walkInForm.value.slotEnd <= walkInForm.value.slotStart) {
+    walkInForm.value.slotEnd = Math.min(24, walkInForm.value.slotStart + 1);
+  }
+}
+
+/** 免费开关：打开即金额置 0 并禁用输入（免费单不计营业额 GMV）。 */
+function onWalkInFreeChange(val: string | number | boolean) {
+  if (val === true) {
+    walkInForm.value.amountYuan = 0;
+  }
+}
+
+/** 打开代客预约抽屉：默认起整点 = 今天当前整点（非今天则 = 门店常见开场 14 点），结束 = 起 +1。 */
+function openWalkIn(row: GzBeanBoardRowVO) {
+  if (!row.seatTypeConfigId) {
+    ElMessage.warning(t('gzBeanBoard.walkInNoConfig'));
+    return;
+  }
+  walkInSeat.value = row;
+  const isToday = sessDate.value === todayStr();
+  const startHour = isToday ? new Date().getHours() : 14;
+  walkInForm.value = {
+    slotStart: startHour,
+    slotEnd: Math.min(24, startHour + 1),
+    mobile: '',
+    isFree: false,
+    amountYuan: 0
+  };
+  walkInVisible.value = true;
+}
+
+async function handleWalkInSubmit() {
+  const seat = walkInSeat.value;
+  if (!seat || currentStoreId.value == null) return;
+  if (walkInForm.value.slotEnd <= walkInForm.value.slotStart) {
+    ElMessage.warning(t('gzBeanBoard.walkInSlotInvalid'));
+    return;
+  }
+  // 手机号选填；若填必须 11 位数字（后端 mobileSnapshot 快照）
+  const mobile = walkInForm.value.mobile.trim();
+  if (mobile && !/^\d{11}$/.test(mobile)) {
+    ElMessage.warning(t('gzBeanBoard.walkInMobileInvalid'));
+    return;
+  }
+  walkInSubmitting.value = true;
+  try {
+    const payload: GzBeanWalkInBo = {
+      storeId: currentStoreId.value,
+      seatId: seat.seatId,
+      sessDate: sessDate.value,
+      slotStart: `${String(walkInForm.value.slotStart).padStart(2, '0')}:00:00`,
+      slotEnd: `${String(walkInForm.value.slotEnd).padStart(2, '0')}:00:00`,
+      mobile: mobile || undefined,
+      isFree: walkInForm.value.isFree,
+      // 金额（元）→ 分；免费单后端会置 0，此处传 null 让后端走逐格计价再置 0（isFree 优先）
+      amountCent: walkInForm.value.isFree ? null : Math.round(walkInForm.value.amountYuan * 100)
+    };
+    await walkInGzBeanBooking(payload);
+    ElMessage.success(t('gzBeanBoard.walkInSuccess', { no: seat.seatNo }));
+    walkInVisible.value = false;
+    detailVisible.value = false;
+    await loadBoard();
+  } catch (e) {
+    console.error('[gz-bean-board] walk-in create failed', e);
+  } finally {
+    walkInSubmitting.value = false;
+  }
+}
+
 /**
- * 备注写入（按占用状态双存储，见 board.ts updateGzBeanBoardNote）：
- * - 占用中（isOccupied）→ 传 currentBookingId，挂本次占用单，放座后看板不再展示；
- * - 空闲 → 不传 bookingId，挂座位永久备注。
+ * 备注写入：备注纯挂座位（gz_bean_seat.remark），与是否有人/空闲无关，店员手动填/清，状态变化不自动清。
  * 成功后同步 activeRow（== rows 内同座对象引用），保存/删除按钮据此回到 disabled/隐藏，无需整体重拉看板。
  */
 async function persistNote(row: GzBeanBoardRowVO, value: string, successMsg: string) {
   savingRemark.value = true;
   try {
-    const bookingId = isOccupied(row) ? row.currentBookingId : undefined;
-    await updateGzBeanBoardNote(row.seatId, bookingId, value);
+    await updateGzBeanBoardNote(row.seatId, value);
     ElMessage.success(successMsg);
     seatRemarkInput.value = value;
     row.remark = value || null;
@@ -1301,9 +1510,9 @@ onBeforeUnmount(() => {
 .pending-card {
   position: relative;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
   border: 1px solid #f3d19e;
   background: #fff;
   border-radius: 8px;
@@ -1321,9 +1530,14 @@ onBeforeUnmount(() => {
 }
 .pending-card__actions {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 6px;
-  flex-shrink: 0;
+  margin-top: 2px;
+}
+/* 卡内操作按钮全宽竖排（分配座位并核销 / 直接核销已处理），不再横向溢出卡片；
+   去掉 Element 相邻按钮默认左间距（竖排下会把按钮顶偏），用 gap 控距。 */
+.pending-card__actions .el-button + .el-button {
+  margin-left: 0;
 }
 .pending-card__no {
   font-weight: 700;

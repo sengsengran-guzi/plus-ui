@@ -215,7 +215,7 @@
       <template v-else>
         <el-form inline class="mb-2">
           <el-form-item :label="t('gzCouponTemplate.issueUserSearch')">
-            <el-input v-model="userQuery.nickname" :placeholder="t('gzCouponTemplate.issueUserSearchPlaceholder')" clearable style="width: 240px" @keyup.enter="loadUsers" />
+            <el-input v-model="userSearchKeyword" :placeholder="t('gzCouponTemplate.issueUserSearchPlaceholder')" clearable style="width: 240px" @keyup.enter="onUserSearch" />
           </el-form-item>
           <el-form-item>
             <el-button v-hasPermi="['gz:coupon:user:search']" type="primary" :icon="Search" @click="loadUsers">{{ t('gzCouponTemplate.search') }}</el-button>
@@ -611,7 +611,9 @@ const userTableRef = ref();
 const userList = ref<GzCouponUserOptionVO[]>([]);
 const userTotal = ref(0);
 const userLoading = ref(false);
-const userQuery = reactive<GzCouponUserOptionQuery>({ nickname: '', pageNum: 1, pageSize: 10 });
+const userQuery = reactive<GzCouponUserOptionQuery>({ nickname: '', mobile: '', pageNum: 1, pageSize: 10 });
+// 单搜索框关键词：纯数字按手机号查，否则按昵称查（后端条件 AND，同一关键词只能塞一个字段）
+const userSearchKeyword = ref('');
 // filtered 发放预览
 const issuePreviewing = ref(false);
 const issuePreviewCount = ref<number | null>(null);
@@ -634,7 +636,9 @@ function openIssue(row: GzCouponTemplateVO) {
   selectedUserIds.value = [];
   userList.value = [];
   userTotal.value = 0;
+  userSearchKeyword.value = '';
   userQuery.nickname = '';
+  userQuery.mobile = '';
   userQuery.pageNum = 1;
   issuePreviewCount.value = null;
   userTableRef.value?.clearSelection?.();
@@ -646,7 +650,22 @@ function resetIssue() {
   selectedUserIds.value = [];
 }
 
+/** 输入框回车 / 点搜索：重置到第一页后检索。 */
+function onUserSearch() {
+  userQuery.pageNum = 1;
+  loadUsers();
+}
+
 async function loadUsers() {
+  // 智能路由：纯数字关键词 → 手机号 LIKE，否则 → 昵称 LIKE（每次分页也按当前关键词重算，天然随分页保留）
+  const kw = userSearchKeyword.value.trim();
+  if (/^\d+$/.test(kw)) {
+    userQuery.mobile = kw;
+    userQuery.nickname = '';
+  } else {
+    userQuery.nickname = kw;
+    userQuery.mobile = '';
+  }
   userLoading.value = true;
   try {
     const resp = await listGzCouponUserOptions(userQuery);
