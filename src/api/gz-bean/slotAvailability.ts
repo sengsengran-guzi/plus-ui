@@ -6,7 +6,8 @@
  *   - GET  /system/gz/bean/slotQuotaClose/list           — 配额关闭配置列表（perm gz:bean:slotQuota:list）
  *   - POST /system/gz/bean/slotQuotaClose                — upsert 单格关闭数（perm gz:bean:slotQuota:edit）
  *
- * 口径：remaining = max(0, opened − booked − closedSeat − quotaClose)。表格改「关闭数」即回写 quotaClose。
+ * 口径：remaining = max(0, opened − booked − quotaClose)。表格改「关闭数」即回写 quotaClose。
+ * （ADR-0018 §3 客户 7.05：关闭统一走 quota_close，旧 seat_closure 已退休不再参与配额。）
  * id 一律 string（跨层契约 #1，防 JS long 精度丢失）。
  */
 import request from '@/utils/request';
@@ -30,11 +31,9 @@ export interface GzBeanSlotAvailabilityDetailVO {
   opened: number;
   /** 已约 */
   booked: number;
-  /** 老 seat_id 关闭折算数（周复发） */
-  closedSeat: number;
-  /** 新配额关闭数（本表格 stepper 改写目标） */
+  /** 配额关闭数（本表格 stepper 改写目标） */
   quotaClose: number;
-  /** 剩余 = max(0, opened − booked − closedSeat − quotaClose) */
+  /** 剩余 = max(0, opened − booked − quotaClose) */
   remaining: number;
 }
 
@@ -61,10 +60,7 @@ export interface GzBeanSlotQuotaCloseUpsert {
 }
 
 /** GET /system/gz/bean/booking/availability/detail — 实时余量明细 */
-export function getGzBeanAvailabilityDetail(query: {
-  storeId: number | string;
-  sessDate: string;
-}): AxiosPromise<GzBeanSlotAvailabilityDetailVO[]> {
+export function getGzBeanAvailabilityDetail(query: { storeId: number | string; sessDate: string }): AxiosPromise<GzBeanSlotAvailabilityDetailVO[]> {
   return request({
     url: '/system/gz/bean/booking/availability/detail',
     method: 'get',

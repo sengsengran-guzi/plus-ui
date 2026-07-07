@@ -68,6 +68,22 @@ export interface GzBeanBoardRowVO {
    * 仅存在续坐（> 当前 slotEnd）时回填 → 看板显「续坐 → HH:mm」角标；无续坐 / idle 时 null。
    */
   continuousUntil?: string | null;
+
+  // ---- 下一位待核销（reserved）维度（两层看板下栏，ADR-0018 §2；无 next 时全空） ----
+  /** 下一位待核销单 id（string）：该座已排位待核销中最早一笔 → 座位格下栏「待核销」+ 核销按钮目标；无则 null */
+  nextBookingId?: string | null;
+  /** 下一位待核销单业务码 BK...；无则 null */
+  nextBookingNo?: string | null;
+  /** 下一位待核销单计划区间起 HH:mm:ss；无则 null */
+  nextSlotStart?: string | null;
+  /** 下一位待核销单计划区间止 HH:mm:ss；无则 null */
+  nextSlotEnd?: string | null;
+  /** 下一位待核销单手机号快照（前端展示尾号）；无则 null */
+  nextMobileSnapshot?: string | null;
+  /** 下一位待核销单是否免费单（1=免费）；无则 null */
+  nextIsFree?: number | null;
+  /** 该座待核销单总数（>1 时下栏显「+N」）；无则 0 */
+  nextCount?: number | null;
 }
 
 /**
@@ -77,6 +93,8 @@ export interface GzBeanBoardRowVO {
 export interface GzBeanPendingAssignVO {
   /** 预约 id（string） */
   id: string;
+  /** 组单 id（string，ADR-0018 §1）；单笔单为 null。同 groupId 的多条 = 一组（组·N人 + 整组排位） */
+  groupId?: string | null;
   /** 业务码 BK... */
   bookingNo: string;
   /** 桌型 code（single/double/quad；可空） */
@@ -180,6 +198,33 @@ export function verifyGzBeanBookingWithSeat(id: number | string, seatId: number 
 }
 
 /**
+ * POST /system/gz/bean/booking/{id}/pre-assign?seatId= — 排位（ADR-0018 §2）
+ * 客人到店前把待核销单提前排到某物理座位，状态仍 pending、激活看板 reserved 态、单离开「未排位客人」列表。
+ * 错误码：4002 SEAT_TAKEN（座该区间被占）/ 4022 SEAT_TYPE_MISMATCH / 4005 SEAT_DISABLED / 4023 SEAT_CLOSED / 4008 INVALID_STATUS / 4015 NOT_PAID。
+ * @param id 预约 id
+ * @param seatId 排位到的物理座位 id
+ */
+export function preAssignGzBeanSeat(id: number | string, seatId: number | string): AxiosPromise<GzBeanBoardRowVO> {
+  return request({
+    url: `/system/gz/bean/booking/${id}/pre-assign`,
+    method: 'post',
+    params: { seatId }
+  });
+}
+
+/**
+ * POST /system/gz/bean/booking/{id}/unassign — 取消排位（ADR-0018 §2）
+ * 把已排位待核销单的座位清回，单回到「未排位客人」列表。仅 reserved（pending + 已排位 + 未核销）单可取消。
+ * @param id 预约 id
+ */
+export function unassignGzBeanSeat(id: number | string): AxiosPromise<GzBeanBoardRowVO> {
+  return request({
+    url: `/system/gz/bean/booking/${id}/unassign`,
+    method: 'post'
+  });
+}
+
+/**
  * POST /system/gz/bean/booking/{id}/release-seat — 放座
  * 对在店使用中（used）单写 actual_end_time/slot，该座剩余格立即可再约（不改 status）。
  * @param id 预约 id
@@ -250,10 +295,7 @@ export function updateGzBeanBoardNote(seatId: number | string, remark: string): 
  * POST /system/gz/bean/booking/batch-settle — 批量结单（GZ-BEAN-041 / kevin-test §6）
  * action: completed（补核销为已完成，pending|no_show→used，无座历史结算）/ no_show（标爽约）/ released（已超时标已结束=放座）。
  */
-export function batchSettleGzBeanBookings(
-  bookingIds: (number | string)[],
-  action: GzBeanSettleAction
-): AxiosPromise<GzBeanBatchSettleResult> {
+export function batchSettleGzBeanBookings(bookingIds: (number | string)[], action: GzBeanSettleAction): AxiosPromise<GzBeanBatchSettleResult> {
   return request({
     url: '/system/gz/bean/booking/batch-settle',
     method: 'post',
@@ -272,15 +314,15 @@ export interface GzBeanWalkInBo {
   seatId: number | string;
   /** 预约日期 yyyy-MM-dd */
   sessDate: string;
-  /** 区间起 HH:mm:ss（整点，含） */
+  /** 区间起 HH:mm:ss（分钟精度，含）—— GZ-BEAN-046 松绑，店员自由设 */
   slotStart: string;
-  /** 区间止 HH:mm:ss（整点，不含） */
+  /** 区间止 HH:mm:ss（分钟精度，不含）—— 仅要求 > slotStart */
   slotEnd: string;
   /** 顾客手机号（选填）：命中既有用户则关联，否则用「线下散客」占位 */
   mobile?: string;
   /** 免费标记：true=本单免费（amount=0，不计营业额 GMV） */
   isFree: boolean;
-  /** 线下收款金额（分，选填）：默认逐格求和计价，非空则覆写（议价/抹零）；isFree=true 时忽略置 0 */
+  /** 线下收款金额（分，选填）：留空/null=按桌型逐格计价（跨越整点格数），非空则覆写（议价/抹零）；isFree=true 时忽略置 0 */
   amountCent?: number | null;
 }
 

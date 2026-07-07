@@ -121,6 +121,18 @@ export function getGzBeanAssignableSeats(id: number | string): AxiosPromise<GzBe
   });
 }
 
+/**
+ * GET /system/gz/bean/booking/{id}/preassign-candidates — 排位弹窗候选座（ADR-0018 §2 客户 7.07）。
+ * 区间重叠口径（面向未到店单，非当下物理占用）；返回全部同桌型启用座 + 每座 assignable / occupiedUntil，
+ * 被目标时段占用的座前端显示但置灰标「占用至 HH:mm」，其余可排。
+ */
+export function getGzBeanPreAssignCandidates(id: number | string): AxiosPromise<GzBeanSeatVO[]> {
+  return request({
+    url: `/system/gz/bean/booking/${id}/preassign-candidates`,
+    method: 'get'
+  });
+}
+
 /** POST /system/gz/bean/booking/verify-scan — 扫码核销（解析 payload + 校签 + pending → used） */
 export function verifyGzBeanBookingByScan(qrPayload: string): AxiosPromise<GzBeanBookingVO> {
   return request({

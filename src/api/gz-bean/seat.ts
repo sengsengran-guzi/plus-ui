@@ -41,6 +41,10 @@ export interface GzBeanSeatVO {
   typeName?: string | null;
   /** 订法 whole=整桌 / seat=按座（Service 由 config.book_mode 回填；legacy 座为空） */
   bookMode?: string | null;
+  /** 排位候选专用（preassign-candidates，ADR-0018 §2）：本座在目标单时段是否可排位（区间重叠口径）。其它查询为 undefined。 */
+  assignable?: boolean | null;
+  /** 排位候选专用：assignable=false 时的占用止界 HH:mm，前端拼「占用至 HH:mm」。可排 / 非候选查询为空。 */
+  occupiedUntil?: string | null;
 }
 
 /** 新增 / 编辑 BO（与 GzBeanSeatBo.java 对齐；编辑禁改 storeId / seatNo，service 内部忽略） */

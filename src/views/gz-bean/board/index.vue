@@ -58,13 +58,7 @@
         <el-empty v-if="!pendingLoading && pendingRows.length === 0" :description="t('gzBeanBoard.pendingEmpty')" :image-size="60" />
         <div v-else v-loading="pendingLoading" class="pending-grid">
           <div v-for="p in pendingRows" :key="p.id" class="pending-card" :class="{ 'is-consecutive': p.consecutiveWithActive === true }">
-            <el-tag
-              v-if="p.consecutiveWithActive === true"
-              type="danger"
-              size="small"
-              effect="dark"
-              class="pending-card__badge"
-            >
+            <el-tag v-if="p.consecutiveWithActive === true" type="danger" size="small" effect="dark" class="pending-card__badge">
               {{ t('gzBeanBoard.consecutiveTag', { seat: p.suggestedSeatNo || '-' }) }}
             </el-tag>
             <div class="pending-card__main">
@@ -76,6 +70,9 @@
               </div>
               <div class="pending-card__line">
                 <el-tag size="small" type="info" effect="plain">{{ p.seatTypeSnapshot || p.seatType || t('gzBeanBoard.typeUnknown') }}</el-tag>
+                <el-tag v-if="p.groupId" size="small" type="warning" effect="dark">{{
+                  t('gzBeanBoard.groupTag', { n: groupCount(p.groupId) })
+                }}</el-tag>
                 <span class="pending-card__slot">{{ hhmm(p.slotStart) }} - {{ hhmm(p.slotEnd) }}</span>
               </div>
               <div v-if="p.isDayPass === 1" class="pending-card__line pending-card__daypass-hint">
@@ -99,13 +96,24 @@
               <el-button v-else v-hasPermi="['gz:bean:booking:verify']" type="primary" size="small" :icon="Select" @click="openAssign(p)">
                 {{ t('gzBeanBoard.assignVerify') }}
               </el-button>
-              <!-- 直接核销已处理（不分座）（0702 反馈 #3）：桌型/座位对不上无法正常分座核销时，标记已处理让单从待分座消失 -->
+              <!-- 排位（ADR-0018 §2）：客人未到，先把该单排到一个空闲座 → 座位下栏「待核销」，客人到店后在看板下栏点核销落座 -->
+              <el-button v-hasPermi="['gz:bean:booking:verify']" size="small" :icon="Switch" @click="openPreAssign(p)">
+                {{ t('gzBeanBoard.preAssign') }}
+              </el-button>
+              <!-- 整组排位（ADR-0018 §1）：一家 N 口，一键把本组待排位子单排到 N 个同桌型相邻空闲座 -->
               <el-button
+                v-if="p.groupId"
                 v-hasPermi="['gz:bean:booking:verify']"
+                type="warning"
                 size="small"
-                :loading="markHandlingId === p.id"
-                @click="handleMarkHandled(p)"
+                :icon="Switch"
+                :loading="groupAssigningId === p.groupId"
+                @click="handleGroupPreAssign(p)"
               >
+                {{ t('gzBeanBoard.groupPreAssign') }}
+              </el-button>
+              <!-- 直接核销已处理（不分座）（0702 反馈 #3）：桌型/座位对不上无法正常分座核销时，标记已处理让单从待分座消失 -->
+              <el-button v-hasPermi="['gz:bean:booking:verify']" size="small" :loading="markHandlingId === p.id" @click="handleMarkHandled(p)">
                 {{ t('gzBeanBoard.markHandled') }}
               </el-button>
             </div>
@@ -189,13 +197,20 @@
         </el-collapse-item>
       </el-collapse>
 
-      <!-- 状态图例 + 统计 -->
-      <div class="board-legend mb-3">
-        <el-tag v-for="st in legendStatuses" :key="st" :type="statusTagType(st)" effect="plain" size="small" class="legend-item">
-          {{ t(`gzBeanBoard.status.${st}`) }}
-          <span class="legend-count">{{ statusCount(st) }}</span>
-        </el-tag>
+      <!-- 统计条（c1 分层双栏格）：已排位待核销 / 在座中 / 临近结束 / 已超时 / 空闲座位 -->
+      <div class="board-metrics">
+        <div v-for="st in legendStatuses" :key="st" class="board-metric" :class="`is-${st}`">
+          <b class="board-metric__num">{{ statusCount(st) }}</b>
+          <span class="board-metric__lbl">{{ t(`gzBeanBoard.status.${st}`) }}</span>
+        </div>
         <span class="board-clock">{{ t('gzBeanBoard.now') }}：{{ nowLabel }}</span>
+      </div>
+      <!-- 图例 + 动线说明 -->
+      <div class="board-legend mb-3">
+        <span v-for="st in legendStatuses" :key="st" class="board-legend__item">
+          <i class="board-legend__dot" :class="`is-${st}`"></i>{{ t(`gzBeanBoard.status.${st}`) }}
+        </span>
+        <span class="board-legend__hint">{{ t('gzBeanBoard.laneHint') }}</span>
       </div>
 
       <!-- 看板：按分区 → 桌型 分组渲染座位单元卡片 -->
@@ -210,34 +225,106 @@
             </el-tag>
           </div>
           <div class="board-seat-grid">
-            <div v-for="row in group.seats" :key="row.seatId" class="board-seat" :class="[`is-${row.boardStatus}`]" @click="openDetail(row)">
-              <div class="board-seat__no">
-                {{ row.seatNo }}
-                <span v-if="row.tableNo" class="board-seat__table">{{ row.tableNo }}</span>
+            <!-- 分层双栏格（ADR-0018 §2 / c1 mockup）：座位号/状态胶囊 + 上栏在座(放座/延时/改派) + 下栏待核销(核销/取消排位) / 空闲代客预约 -->
+            <div v-for="row in group.seats" :key="row.seatId" class="board-seat" :class="[`is-${row.boardStatus}`]">
+              <div class="board-seat__head" @click="openDetail(row)">
+                <span class="board-seat__no">
+                  {{ row.seatNo }}<span v-if="row.tableNo" class="board-seat__table">{{ row.tableNo }}</span>
+                </span>
+                <el-tag :type="statusTagType(row.boardStatus)" size="small" effect="plain" class="board-seat__pill">
+                  {{ t(`gzBeanBoard.status.${row.boardStatus}`) }}
+                </el-tag>
               </div>
-              <div class="board-seat__status">{{ t(`gzBeanBoard.status.${row.boardStatus}`) }}</div>
-              <!-- 座位/本次备注：店员提醒，直接显示在卡片上（长文 2 行截断，hover 看全文） -->
+              <!-- 座位备注：店员提醒，斜体 + 「备注」角标（长文 2 行截断，hover 看全文） -->
               <div v-if="row.remark" class="board-seat__remark" :title="row.remark">
-                <el-icon class="board-seat__remark-icon"><EditPen /></el-icon>
                 <span class="board-seat__remark-text">{{ row.remark }}</span>
               </div>
-              <div v-if="isOccupied(row)" class="board-seat__meta">
-                <div v-if="row.bookingNo" class="board-seat__line">{{ row.bookingNo }}</div>
-                <div v-if="row.mobileSnapshot" class="board-seat__line">{{ t('gzBeanBoard.mobileTail') }} {{ mobileTail(row.mobileSnapshot) }}</div>
-                <div v-if="row.slotStart && row.slotEnd" class="board-seat__line">{{ hhmm(row.slotStart) }} - {{ hhmm(row.slotEnd) }}</div>
+
+              <!-- 上栏：在座（放座 / 延时 / 改派）；空 = 当前无人在座 -->
+              <div class="board-lane board-lane--top" :class="hasCurrent(row) ? `is-${countdownKind(row)}` : 'is-empty'">
+                <span class="board-lane__label">{{ t('gzBeanBoard.laneTop') }}</span>
+                <template v-if="hasCurrent(row)">
+                  <div class="board-lane__body" @click="openDetail(row)">
+                    <div class="board-lane__cd-row">
+                      <span class="board-lane__start c-num">{{ hhmm(row.slotStart) }}-{{ hhmm(row.slotEnd) }}</span>
+                      <span v-if="showCountdown(row)" class="board-lane__cd c-num" :class="`is-${countdownKind(row)}`">{{
+                        countdownLabel(row)
+                      }}</span>
+                    </div>
+                    <div class="board-lane__id c-num">
+                      {{ row.bookingNo }}<template v-if="row.mobileSnapshot"> · {{ mobileTail(row.mobileSnapshot) }}</template>
+                    </div>
+                    <div v-if="row.continuousUntil || row.isFree === 1" class="board-lane__chips">
+                      <span v-if="row.continuousUntil" class="board-chip is-cont">{{
+                        t('gzBeanBoard.continuousTag', { time: hhmm(row.continuousUntil) })
+                      }}</span>
+                      <span v-if="row.isFree === 1" class="board-chip is-free">{{ t('gzBeanBoard.freeTag') }}</span>
+                    </div>
+                  </div>
+                  <div class="board-lane__acts">
+                    <el-button
+                      v-hasPermi="['gz:bean:booking:verify']"
+                      class="board-lane__cta"
+                      :type="countdownKind(row) === 'use' ? 'success' : 'danger'"
+                      size="small"
+                      :loading="releasing"
+                      @click.stop="handleRelease(row)"
+                    >
+                      {{ t('gzBeanBoard.releaseSeat') }}
+                    </el-button>
+                    <el-button class="board-lane__act" size="small" @click.stop="openExtend(row)">{{ t('gzBeanBoard.extend') }}</el-button>
+                    <el-button class="board-lane__act" size="small" @click.stop="openReassign(row)">{{ t('gzBeanBoard.reassignShort') }}</el-button>
+                  </div>
+                </template>
+                <div v-else class="board-lane__empty" @click="openDetail(row)">{{ t('gzBeanBoard.laneEmptyCurrent') }}</div>
               </div>
-              <div v-if="showCountdown(row)" class="board-seat__countdown" :class="{ 'is-near': row.boardStatus === 'near_end' }">
-                {{ countdownLabel(row) }}
+
+              <!-- 下栏：待核销（核销 / 取消排位）；空闲 = 代客预约；在座无下一位 = 暂无下一位 -->
+              <div class="board-lane board-lane--bottom" :class="hasNext(row) ? 'is-res' : 'is-empty'">
+                <span class="board-lane__label is-next">
+                  {{ t('gzBeanBoard.laneNext')
+                  }}<span v-if="hasNext(row) && (row.nextCount || 0) > 1" class="board-lane__more">{{
+                    t('gzBeanBoard.nextMore', { n: (row.nextCount || 1) - 1 })
+                  }}</span>
+                </span>
+                <template v-if="hasNext(row)">
+                  <div class="board-lane__body">
+                    <div class="board-lane__cd-row">
+                      <span class="board-lane__start c-num">{{ hhmm(row.nextSlotStart) }}-{{ hhmm(row.nextSlotEnd) }}</span>
+                    </div>
+                    <div class="board-lane__id c-num">
+                      {{ row.nextBookingNo }}<template v-if="row.nextMobileSnapshot"> · {{ mobileTail(row.nextMobileSnapshot) }}</template>
+                    </div>
+                    <div v-if="row.nextIsFree === 1" class="board-lane__chips">
+                      <span class="board-chip is-free">{{ t('gzBeanBoard.freeTag') }}</span>
+                    </div>
+                  </div>
+                  <div class="board-lane__acts">
+                    <el-button
+                      v-hasPermi="['gz:bean:booking:verify']"
+                      class="board-lane__cta"
+                      type="primary"
+                      size="small"
+                      :loading="verifyingNextId === row.nextBookingId"
+                      @click.stop="handleVerifyNext(row)"
+                    >
+                      {{ t('gzBeanBoard.verifyNext') }}
+                    </el-button>
+                    <el-button v-hasPermi="['gz:bean:booking:verify']" class="board-lane__act" size="small" @click.stop="handleUnassignNext(row)">
+                      {{ t('gzBeanBoard.unassignNext') }}
+                    </el-button>
+                  </div>
+                </template>
+                <template v-else>
+                  <div v-if="!hasCurrent(row)" class="board-lane__reserve-wrap">
+                    <span class="board-lane__empty">{{ t('gzBeanBoard.laneIdleReserve') }}</span>
+                    <el-button v-hasPermi="['gz:bean:booking:verify']" class="board-lane__reserve" size="small" @click.stop="openWalkIn(row)">
+                      {{ t('gzBeanBoard.proxyBook') }}
+                    </el-button>
+                  </div>
+                  <div v-else class="board-lane__empty">{{ t('gzBeanBoard.laneEmptyNext') }}</div>
+                </template>
               </div>
-              <div v-if="row.continuousUntil" class="board-seat__continuous">
-                {{ t('gzBeanBoard.continuousTag', { time: hhmm(row.continuousUntil) }) }}
-              </div>
-              <el-tag v-if="showCanExtend(row)" :type="row.canExtend ? 'success' : 'danger'" size="small" effect="plain" class="board-seat__extend">
-                {{ row.canExtend ? t('gzBeanBoard.canExtendYes') : t('gzBeanBoard.canExtendNo') }}
-              </el-tag>
-              <el-tag v-if="row.isFree === 1" type="danger" size="small" effect="plain" class="board-seat__free">
-                {{ t('gzBeanBoard.freeTag') }}
-              </el-tag>
             </div>
           </div>
         </div>
@@ -285,16 +372,11 @@
           </el-descriptions-item>
         </el-descriptions>
 
-        <template v-else>
+        <template v-else-if="!hasNext(activeRow)">
           <div class="board-detail-idle mt-3">{{ t('gzBeanBoard.idleHint') }}</div>
           <!-- 看板代客预约（0702 反馈 #2）：现金到店客，店员点空闲座位一步建单核销分座 -->
           <div class="board-actions mt-4">
-            <el-button
-              v-hasPermi="['gz:bean:booking:verify']"
-              type="primary"
-              :icon="Plus"
-              @click="openWalkIn(activeRow)"
-            >
+            <el-button v-hasPermi="['gz:bean:booking:verify']" type="primary" :icon="Plus" @click="openWalkIn(activeRow)">
               {{ t('gzBeanBoard.walkInCreate') }}
             </el-button>
           </div>
@@ -394,16 +476,12 @@
 
         <el-form label-width="92px" @submit.prevent>
           <el-form-item :label="t('gzBeanBoard.walkInSlotStart')">
-            <el-select v-model="walkInForm.slotStart" style="width: 130px" @change="onWalkInStartChange">
-              <el-option v-for="h in hourOptions" :key="h" :label="hourLabel(h)" :value="h" />
-            </el-select>
-            <span class="form-hint">{{ t('gzBeanBoard.walkInSlotStartHint') }}</span>
+            <el-time-picker v-model="walkInForm.slotStart" format="HH:mm" value-format="HH:mm:ss" :clearable="false" style="width: 130px" />
+            <span class="form-hint">{{ t('gzBeanBoard.walkInTimeHint') }}</span>
           </el-form-item>
           <el-form-item :label="t('gzBeanBoard.walkInSlotEnd')">
-            <el-select v-model="walkInForm.slotEnd" style="width: 130px">
-              <el-option v-for="h in walkInEndOptions" :key="h" :label="hourLabel(h)" :value="h" />
-            </el-select>
-            <span class="form-hint">{{ t('gzBeanBoard.walkInHoursHint', { hours: walkInHours }) }}</span>
+            <el-time-picker v-model="walkInForm.slotEnd" format="HH:mm" value-format="HH:mm:ss" :clearable="false" style="width: 130px" />
+            <span class="form-hint">{{ walkInRangeHint }}</span>
           </el-form-item>
           <el-form-item :label="t('gzBeanBoard.walkInMobile')">
             <el-input v-model="walkInForm.mobile" maxlength="11" :placeholder="t('gzBeanBoard.walkInMobilePlaceholder')" style="width: 220px" />
@@ -419,6 +497,7 @@
               :precision="2"
               :step="1"
               :disabled="walkInForm.isFree"
+              :placeholder="t('gzBeanBoard.walkInAmountPlaceholder')"
               controls-position="right"
               style="width: 160px"
             />
@@ -436,7 +515,7 @@
     </el-drawer>
 
     <!-- 分配座位弹窗：核销分座（②待分座/提前核销）/ 改派座位（详情抽屉）两用 -->
-    <el-dialog v-model="assignVisible" :title="assignMode === 'reassign' ? t('gzBeanBoard.reassignTitle') : t('gzBeanBoard.assignTitle')" width="480px">
+    <el-dialog v-model="assignVisible" :title="assignDialogTitle" width="480px">
       <template v-if="assignSummary">
         <el-descriptions :column="1" border size="small" class="mb-3">
           <el-descriptions-item :label="t('gzBeanBoard.colBookingNo')">{{ assignSummary.bookingNo }}</el-descriptions-item>
@@ -445,7 +524,7 @@
         </el-descriptions>
 
         <div class="assign-seat-label">
-          {{ assignMode === 'reassign' ? t('gzBeanBoard.reassignPickSeat') : t('gzBeanBoard.assignPickSeat') }}
+          {{ assignPickSeatLabel }}
         </div>
         <el-alert
           v-if="suggestedSeatId"
@@ -461,22 +540,24 @@
             v-for="seat in assignSeatOptions"
             :key="seat.seatId"
             class="assign-seat"
-            :class="{ 'is-selected': selectedSeatId === seat.seatId, 'is-suggested': seat.seatId === suggestedSeatId }"
-            @click="selectedSeatId = seat.seatId"
+            :class="{
+              'is-selected': selectedSeatId === seat.seatId,
+              'is-suggested': seat.seatId === suggestedSeatId,
+              'is-disabled': !seat.assignable
+            }"
+            @click="seat.assignable && (selectedSeatId = seat.seatId)"
           >
-            <el-tag
-              v-if="seat.seatId === suggestedSeatId"
-              type="danger"
-              size="small"
-              effect="dark"
-              class="assign-seat__suggest"
-            >
+            <el-tag v-if="seat.seatId === suggestedSeatId" type="danger" size="small" effect="dark" class="assign-seat__suggest">
               {{ t('gzBeanBoard.assignSuggestedTag') }}
             </el-tag>
             <div class="assign-seat__no">
               {{ seat.seatNo }}<span v-if="seat.tableNo" class="assign-seat__table">{{ seat.tableNo }}</span>
             </div>
             <div class="assign-seat__type">{{ seat.typeName || '-' }}</div>
+            <!-- 排位候选：被目标时段占用的座置灰给理由（ADR-0018 §2 客户 7.07），店员不再困惑「D4 去哪了」 -->
+            <div v-if="!seat.assignable" class="assign-seat__occupied">
+              {{ seat.occupiedUntil ? t('gzBeanBoard.seatOccupiedUntil', { time: seat.occupiedUntil }) : t('gzBeanBoard.seatUnavailable') }}
+            </div>
           </div>
         </div>
         <el-alert
@@ -491,7 +572,7 @@
       <template #footer>
         <el-button @click="assignVisible = false">{{ t('gzBeanBoard.cancel') }}</el-button>
         <el-button type="primary" :loading="assigning" :disabled="!selectedSeatId" @click="handleAssignConfirm">
-          {{ assignMode === 'reassign' ? t('gzBeanBoard.reassignConfirm') : t('gzBeanBoard.assignConfirm') }}
+          {{ assignConfirmText }}
         </el-button>
       </template>
     </el-dialog>
@@ -508,6 +589,8 @@ import {
   getGzBeanBoard,
   getGzBeanPendingAssign,
   verifyGzBeanBookingWithSeat,
+  preAssignGzBeanSeat,
+  unassignGzBeanSeat,
   reassignGzBeanSeat,
   releaseGzBeanSeat,
   extendGzBeanBooking,
@@ -523,6 +606,8 @@ import {
   type GzBeanSettleAction,
   type GzBeanWalkInBo
 } from '@/api/gz-bean/board';
+import { getGzBeanPreAssignCandidates } from '@/api/gz-bean/booking';
+import type { GzBeanSeatVO } from '@/api/gz-bean/seat';
 
 const { t } = useI18n();
 
@@ -547,7 +632,7 @@ const soundEnabled = ref(false);
 /** 已弹过 near_end 提醒的 bookingId 集合（去重：同一单只弹一次，转出 near_end 后清除以便下轮再约可再弹） */
 const notifiedNearEnd = new Set<string>();
 
-const legendStatuses: GzBeanBoardStatus[] = ['idle', 'reserved', 'in_use', 'near_end', 'overtime'];
+const legendStatuses: GzBeanBoardStatus[] = ['reserved', 'in_use', 'near_end', 'overtime', 'idle'];
 
 // ============ 本地时钟（驱动倒计时刷新 + 看板自动重拉） ============
 const autoRefresh = ref(true);
@@ -571,8 +656,9 @@ function formatClock(ts: number): string {
   return `${hh}:${mm}:${ss}`;
 }
 
-/** HH:mm:ss → HH:mm 显示 */
-function hhmm(t: string): string {
+/** HH:mm:ss → HH:mm 显示（null/空安全，两层看板 next* 字段可能为空时不抛错） */
+function hhmm(t?: string | null): string {
+  if (!t) return '';
   return t.length >= 5 ? t.slice(0, 5) : t;
 }
 
@@ -632,6 +718,16 @@ function isOccupied(row: GzBeanBoardRowVO): boolean {
   return row.boardStatus !== 'idle' && !!row.currentBookingId;
 }
 
+/** 上栏在座（ADR-0018 §2）：有在座使用中单（currentBookingId 非空）。 */
+function hasCurrent(row: GzBeanBoardRowVO): boolean {
+  return !!row.currentBookingId;
+}
+
+/** 下栏待核销（ADR-0018 §2）：有已排位待核销单（nextBookingId 非空）。 */
+function hasNext(row: GzBeanBoardRowVO): boolean {
+  return !!row.nextBookingId;
+}
+
 /** 已核销在店（in_use / near_end / overtime）→ 可放座 / 延时 */
 function canOperate(row: GzBeanBoardRowVO): boolean {
   return row.boardStatus === 'in_use' || row.boardStatus === 'near_end' || row.boardStatus === 'overtime';
@@ -642,9 +738,16 @@ function canReassign(row: GzBeanBoardRowVO): boolean {
   return canOperate(row) && !!row.currentBookingId && !row.actualEndTime;
 }
 
-/** 显示倒计时：in_use / near_end（后端回填 remainingMinutes），本地按秒细化 */
+/** 显示倒计时：in_use / near_end 剩 X（绿/黄），overtime 超 X（红，倒计上翻）。均需 slotEnd。 */
 function showCountdown(row: GzBeanBoardRowVO): boolean {
-  return (row.boardStatus === 'in_use' || row.boardStatus === 'near_end') && row.slotEnd != null;
+  return (row.boardStatus === 'in_use' || row.boardStatus === 'near_end' || row.boardStatus === 'overtime') && row.slotEnd != null;
+}
+
+/** 倒计时色彩 kind（驱动 c1 分层双栏格大数字 + 上栏底色）：in_use 绿 / near_end 黄 / overtime 红。 */
+function countdownKind(row: GzBeanBoardRowVO): 'use' | 'near' | 'over' {
+  if (row.boardStatus === 'overtime') return 'over';
+  if (row.boardStatus === 'near_end') return 'near';
+  return 'use';
 }
 
 /** 显示「可延时 / 请收尾」信号：后端仅 near_end / overtime 回填 canExtend（in_use 也可能回填但提前量未到，按 near_end/overtime 展示更聚焦） */
@@ -663,9 +766,7 @@ function countdownLabel(row: GzBeanBoardRowVO): string {
     // 无法解析时回退后端粗粒度分钟（≥ 60 分同样走「剩 X 时 X 分」）
     if (row.remainingMinutes != null && row.remainingMinutes > 0) {
       const n = row.remainingMinutes;
-      return n >= 60
-        ? t('gzBeanBoard.remainCountdownHm', { h: Math.floor(n / 60), m: n % 60 })
-        : t('gzBeanBoard.remainMinutes', { n });
+      return n >= 60 ? t('gzBeanBoard.remainCountdownHm', { h: Math.floor(n / 60), m: n % 60 }) : t('gzBeanBoard.remainMinutes', { n });
     }
     return t('gzBeanBoard.endingSoon');
   }
@@ -675,7 +776,17 @@ function countdownLabel(row: GzBeanBoardRowVO): string {
   const startMs = slotStartMs(row);
   const anchor = startMs != null ? Math.max(now.value, startMs) : now.value;
   const diff = endMs - anchor;
-  if (diff <= 0) return t('gzBeanBoard.endingSoon');
+  if (diff <= 0) {
+    // 超时：从有效结束时刻起「超 MM:SS」倒计上翻（红），与后端 overtime 同口径；非超时兜底「即将结束」。
+    if (row.boardStatus === 'overtime') {
+      const overSec = Math.floor((now.value - endMs) / 1000);
+      if (overSec >= 3600) {
+        return t('gzBeanBoard.overCountdownHm', { h: Math.floor(overSec / 3600), m: Math.floor((overSec % 3600) / 60) });
+      }
+      return t('gzBeanBoard.overCountdown', { m: Math.floor(overSec / 60), s: String(overSec % 60).padStart(2, '0') });
+    }
+    return t('gzBeanBoard.endingSoon');
+  }
   const totalSec = Math.floor(diff / 1000);
   // ≥ 60 分 → 「剩 X 时 X 分」（续坐链可长达数小时，秒级跳动无意义、也更好读）；
   // < 60 分 → 「剩 X 分 X 秒」（临近结束保留秒级精确倒计）。
@@ -796,11 +907,11 @@ async function loadPending() {
 const markHandlingId = ref<string | number | null>(null);
 async function handleMarkHandled(p: GzBeanPendingAssignVO) {
   try {
-    await ElMessageBox.confirm(
-      t('gzBeanBoard.markHandledConfirm', { no: p.bookingNo }),
-      t('gzBeanBoard.markHandledConfirmTitle'),
-      { type: 'warning', confirmButtonText: t('gzBeanBoard.markHandled'), cancelButtonText: t('gzBeanBoard.cancel') }
-    );
+    await ElMessageBox.confirm(t('gzBeanBoard.markHandledConfirm', { no: p.bookingNo }), t('gzBeanBoard.markHandledConfirmTitle'), {
+      type: 'warning',
+      confirmButtonText: t('gzBeanBoard.markHandled'),
+      cancelButtonText: t('gzBeanBoard.cancel')
+    });
   } catch {
     return; // 取消
   }
@@ -813,6 +924,41 @@ async function handleMarkHandled(p: GzBeanPendingAssignVO) {
     console.error('[gz-bean-board] mark-handled failed', e);
   } finally {
     markHandlingId.value = null;
+  }
+}
+
+// ============ 整组排位（ADR-0018 §1：一家 N 口坐一起）============
+const groupAssigningId = ref<string | null>(null);
+
+/** 本组在「未排位客人」列表里的待排位子单数（组·N人 标签 + 整组排位目标数）。 */
+function groupCount(groupId?: string | null): number {
+  if (!groupId) return 0;
+  return pendingRows.value.filter((x) => x.groupId === groupId).length;
+}
+
+/** 整组排位：把本组所有待排位子单排到 N 个同桌型空闲座（首 N 个 idle；不相邻可再单独改派微调）。 */
+async function handleGroupPreAssign(p: GzBeanPendingAssignVO) {
+  if (!p.groupId) return;
+  const members = pendingRows.value.filter((x) => x.groupId === p.groupId);
+  const wantType = p.seatTypeSnapshot || p.seatType;
+  const idle = rows.value.filter((r) => r.boardStatus === 'idle' && r.seatId && (!wantType || r.typeName === wantType));
+  if (idle.length < members.length) {
+    ElMessage.warning(t('gzBeanBoard.groupNoIdle', { n: members.length }));
+    return;
+  }
+  groupAssigningId.value = p.groupId;
+  try {
+    for (let i = 0; i < members.length; i++) {
+      await preAssignGzBeanSeat(members[i].id, idle[i].seatId);
+    }
+    ElMessage.success(t('gzBeanBoard.groupPreAssignSuccess', { n: members.length }));
+    await loadBoard();
+  } catch (e) {
+    // 逐个排位；中途失败（座被并发占）已 toast，重拉看板回正 + 已排的保留
+    console.error('[gz-bean-board] group pre-assign failed', e);
+    loadBoard();
+  } finally {
+    groupAssigningId.value = null;
   }
 }
 
@@ -913,43 +1059,55 @@ function openDetail(row: GzBeanBoardRowVO) {
   detailVisible.value = true;
 }
 
-// ============ 看板代客预约 walk-in（0702 反馈 #2）：现金到店客一步建单核销分座 ============
+// ============ 看板代客预约 walk-in（0702 #2；GZ-BEAN-046 松绑：分钟精度 + 座位只判当下空闲）============
 const walkInVisible = ref(false);
 const walkInSubmitting = ref(false);
 const walkInSeat = ref<GzBeanBoardRowVO | null>(null);
-const walkInForm = ref<{ slotStart: number; slotEnd: number; mobile: string; isFree: boolean; amountYuan: number }>({
-  slotStart: 14,
-  slotEnd: 15,
+// slotStart/slotEnd 存 'HH:mm:ss'（分钟精度，店员自由设）；amountYuan=null 表示「按桌型逐格计价」，填数则议价/抹零
+const walkInForm = ref<{ slotStart: string; slotEnd: string; mobile: string; isFree: boolean; amountYuan: number | null }>({
+  slotStart: '14:00:00',
+  slotEnd: '15:00:00',
   mobile: '',
   isFree: false,
-  amountYuan: 0
+  amountYuan: null
 });
 
-/** 可选起整点小时（0-23）；结束整点必须 > 起整点（连续 1h 格，后端会再校验落在营业窗口内）。 */
-const hourOptions = Array.from({ length: 24 }, (_, i) => i);
-const walkInEndOptions = computed(() => hourOptions.filter((h) => h > walkInForm.value.slotStart));
-const walkInHours = computed(() => Math.max(0, walkInForm.value.slotEnd - walkInForm.value.slotStart));
-const walkInValid = computed(() => walkInForm.value.slotEnd > walkInForm.value.slotStart && (walkInForm.value.isFree || walkInForm.value.amountYuan >= 0));
-
-function hourLabel(h: number): string {
-  return `${String(h).padStart(2, '0')}:00`;
+/** 'HH:mm:ss' → 当日分钟数（分钟精度比较 / 时长 / 整点格数）。非法串回退 0。 */
+function walkInTimeToMin(s: string): number {
+  if (!s) return 0;
+  const [h, m] = s.split(':').map((v) => Number(v) || 0);
+  return h * 60 + m;
 }
+const walkInStartMin = computed(() => walkInTimeToMin(walkInForm.value.slotStart));
+const walkInEndMin = computed(() => walkInTimeToMin(walkInForm.value.slotEnd));
+/** 跨越的整点格数（计价 / mp 线上余量占用口径）：ceil(end/60) − floor(start/60)。 */
+const walkInSlotCount = computed(() =>
+  walkInEndMin.value > walkInStartMin.value ? Math.ceil(walkInEndMin.value / 60) - Math.floor(walkInStartMin.value / 60) : 0
+);
+const walkInValid = computed(
+  () =>
+    walkInEndMin.value > walkInStartMin.value && (walkInForm.value.isFree || walkInForm.value.amountYuan == null || walkInForm.value.amountYuan >= 0)
+);
+/** 时长 + 计价格数提示（店员可见，透明化「按整点格计价」）。 */
+const walkInRangeHint = computed(() => {
+  const d = walkInEndMin.value - walkInStartMin.value;
+  if (d <= 0) return t('gzBeanBoard.walkInSlotInvalid');
+  return t('gzBeanBoard.walkInRangeHint', { mins: d, slots: walkInSlotCount.value });
+});
 
-/** 起整点变更：结束整点自动跟到 start+1（若已 ≤ start），保证区间连续有效。 */
-function onWalkInStartChange() {
-  if (walkInForm.value.slotEnd <= walkInForm.value.slotStart) {
-    walkInForm.value.slotEnd = Math.min(24, walkInForm.value.slotStart + 1);
-  }
-}
-
-/** 免费开关：打开即金额置 0 并禁用输入（免费单不计营业额 GMV）。 */
+/** 免费开关：打开即金额清空并禁用（免费单不计营业额 GMV）。 */
 function onWalkInFreeChange(val: string | number | boolean) {
   if (val === true) {
-    walkInForm.value.amountYuan = 0;
+    walkInForm.value.amountYuan = null;
   }
 }
 
-/** 打开代客预约抽屉：默认起整点 = 今天当前整点（非今天则 = 门店常见开场 14 点），结束 = 起 +1。 */
+/** 'HH:mm:ss'（分钟精度，秒补 00）。 */
+function toHmsMinute(d: Date): string {
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:00`;
+}
+
+/** 打开代客预约抽屉：今天默认 开始=此刻、结束=+1h（分钟精度）；非今天默认 14:00-15:00。店员随意改。 */
 function openWalkIn(row: GzBeanBoardRowVO) {
   if (!row.seatTypeConfigId) {
     ElMessage.warning(t('gzBeanBoard.walkInNoConfig'));
@@ -957,13 +1115,14 @@ function openWalkIn(row: GzBeanBoardRowVO) {
   }
   walkInSeat.value = row;
   const isToday = sessDate.value === todayStr();
-  const startHour = isToday ? new Date().getHours() : 14;
+  const start = isToday ? new Date() : new Date(new Date().setHours(14, 0, 0, 0));
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
   walkInForm.value = {
-    slotStart: startHour,
-    slotEnd: Math.min(24, startHour + 1),
+    slotStart: toHmsMinute(start),
+    slotEnd: toHmsMinute(end),
     mobile: '',
     isFree: false,
-    amountYuan: 0
+    amountYuan: null
   };
   walkInVisible.value = true;
 }
@@ -971,7 +1130,7 @@ function openWalkIn(row: GzBeanBoardRowVO) {
 async function handleWalkInSubmit() {
   const seat = walkInSeat.value;
   if (!seat || currentStoreId.value == null) return;
-  if (walkInForm.value.slotEnd <= walkInForm.value.slotStart) {
+  if (walkInEndMin.value <= walkInStartMin.value) {
     ElMessage.warning(t('gzBeanBoard.walkInSlotInvalid'));
     return;
   }
@@ -983,16 +1142,18 @@ async function handleWalkInSubmit() {
   }
   walkInSubmitting.value = true;
   try {
+    const yuan = walkInForm.value.amountYuan;
     const payload: GzBeanWalkInBo = {
       storeId: currentStoreId.value,
       seatId: seat.seatId,
       sessDate: sessDate.value,
-      slotStart: `${String(walkInForm.value.slotStart).padStart(2, '0')}:00:00`,
-      slotEnd: `${String(walkInForm.value.slotEnd).padStart(2, '0')}:00:00`,
+      // 分钟精度直接透传（后端不再要求整点）
+      slotStart: walkInForm.value.slotStart,
+      slotEnd: walkInForm.value.slotEnd,
       mobile: mobile || undefined,
       isFree: walkInForm.value.isFree,
-      // 金额（元）→ 分；免费单后端会置 0，此处传 null 让后端走逐格计价再置 0（isFree 优先）
-      amountCent: walkInForm.value.isFree ? null : Math.round(walkInForm.value.amountYuan * 100)
+      // 免费 → null（后端置 0）；留空 → null（后端按桌型逐格计价）；填数 → 议价/抹零覆盖
+      amountCent: walkInForm.value.isFree || yuan == null ? null : Math.round(yuan * 100)
     };
     await walkInGzBeanBooking(payload);
     ElMessage.success(t('gzBeanBoard.walkInSuccess', { no: seat.seatNo }));
@@ -1056,6 +1217,51 @@ async function handleRelease(row: GzBeanBoardRowVO) {
   }
 }
 
+// ============ 下栏待核销：核销（用已排座，不再弹选座）/ 取消排位（ADR-0018 §2）============
+const verifyingNextId = ref<string | null>(null);
+
+/** 核销下一位待核销单：该单已排到本座（seat_id = row.seatId）→ 直接核销落座，不弹选座弹窗。 */
+async function handleVerifyNext(row: GzBeanBoardRowVO) {
+  if (!row.nextBookingId || !row.seatId) return;
+  try {
+    await ElMessageBox.confirm(t('gzBeanBoard.verifyNextConfirm', { no: row.nextBookingNo || '', seat: row.seatNo }), t('gzBeanBoard.confirmTitle'), {
+      type: 'warning'
+    });
+  } catch {
+    return; // 取消
+  }
+  verifyingNextId.value = row.nextBookingId;
+  try {
+    await verifyGzBeanBookingWithSeat(row.nextBookingId, row.seatId);
+    ElMessage.success(t('gzBeanBoard.assignSuccess'));
+    await loadBoard();
+  } catch (e) {
+    // 业务错误码已由拦截器 toast（如别的店员先占了本座 / 该座被别单核销）→ 重拉看板回正
+    console.error('[gz-bean-board] verify-next failed', e);
+    loadBoard();
+  } finally {
+    verifyingNextId.value = null;
+  }
+}
+
+/** 取消排位：把下一位待核销单的座位清回，单回到「未排位客人」列表。 */
+async function handleUnassignNext(row: GzBeanBoardRowVO) {
+  if (!row.nextBookingId) return;
+  try {
+    await ElMessageBox.confirm(t('gzBeanBoard.unassignConfirm'), t('gzBeanBoard.confirmTitle'), { type: 'warning' });
+  } catch {
+    return; // 取消
+  }
+  try {
+    await unassignGzBeanSeat(row.nextBookingId);
+    ElMessage.success(t('gzBeanBoard.unassignSuccess'));
+    await loadBoard();
+  } catch (e) {
+    console.error('[gz-bean-board] unassign-next failed', e);
+    loadBoard();
+  }
+}
+
 // ============ 延时 ============
 const extendVisible = ref(false);
 const extendMinutes = ref(60);
@@ -1085,10 +1291,32 @@ async function handleExtend() {
 }
 
 // ============ 分配座位弹窗：核销分座（②待分座/提前核销）/ 改派座位 两用 ============
-type AssignMode = 'verify' | 'reassign';
+type AssignMode = 'verify' | 'reassign' | 'preassign';
 const assignVisible = ref(false);
 const assigning = ref(false);
 const assignMode = ref<AssignMode>('verify');
+/** 分座弹窗标题 / 选座提示 / 确认按钮文案（三模式：核销分座 / 改派 / 排位） */
+const assignDialogTitle = computed(() =>
+  assignMode.value === 'reassign'
+    ? t('gzBeanBoard.reassignTitle')
+    : assignMode.value === 'preassign'
+      ? t('gzBeanBoard.preAssignTitle')
+      : t('gzBeanBoard.assignTitle')
+);
+const assignPickSeatLabel = computed(() =>
+  assignMode.value === 'reassign'
+    ? t('gzBeanBoard.reassignPickSeat')
+    : assignMode.value === 'preassign'
+      ? t('gzBeanBoard.preAssignPickSeat')
+      : t('gzBeanBoard.assignPickSeat')
+);
+const assignConfirmText = computed(() =>
+  assignMode.value === 'reassign'
+    ? t('gzBeanBoard.reassignConfirm')
+    : assignMode.value === 'preassign'
+      ? t('gzBeanBoard.preAssignConfirm')
+      : t('gzBeanBoard.assignConfirm')
+);
 /** 核销分座的目标待分座单（verify 模式） */
 const assignTarget = ref<GzBeanPendingAssignVO | null>(null);
 /** 改派的目标看板行（reassign 模式） */
@@ -1122,9 +1350,7 @@ const assignSummary = computed<AssignSummary | null>(() => {
 });
 
 /** 当前 verify 弹窗的续坐建议座 id（reassign 模式无）；驱动续坐座入选项 + 角标 + 默认选中。 */
-const suggestedSeatId = computed<string | null>(() =>
-  assignMode.value === 'verify' ? assignTarget.value?.suggestedSeatId ?? null : null
-);
+const suggestedSeatId = computed<string | null>(() => (assignMode.value === 'verify' ? (assignTarget.value?.suggestedSeatId ?? null) : null));
 
 /**
  * 当前弹窗可选座：①区 boardStatus='idle' 空闲座，且桌型匹配（typeName === 目标桌型名）。
@@ -1133,10 +1359,35 @@ const suggestedSeatId = computed<string | null>(() =>
  * GZ-BEAN-037 续坐：建议座被同用户相邻在店单占用（非 idle，不在空闲列表里）→ 置顶并入选项，
  * 让店员看到并确认默认选中的续坐座（两段不重叠，后端区间互斥放行）。
  */
-const assignSeatOptions = computed<GzBeanBoardRowVO[]>(() => {
+/** 分座弹窗座位选项统一形态（verify/reassign 用板行；preassign 用区间重叠候选，含不可排的置灰座）。 */
+interface AssignSeatOption {
+  seatId: string;
+  seatNo?: string | null;
+  tableNo?: string | null;
+  typeName?: string | null;
+  /** 是否可选（preassign 区间重叠不冲突 = true；verify/reassign 恒 true） */
+  assignable: boolean;
+  /** 不可排时的占用止界 HH:mm（拼「占用至 HH:mm」告诉店员为何不可排） */
+  occupiedUntil?: string | null;
+}
+/** 排位候选座（ADR-0018 §2 客户 7.07，openPreAssign 时按目标单 slot 区间重叠拉取，含被占的置灰座）。 */
+const preAssignCandidates = ref<GzBeanSeatVO[]>([]);
+
+const assignSeatOptions = computed<AssignSeatOption[]>(() => {
+  // 排位模式（ADR-0018 §2 客户 7.07）：区间重叠候选（后端算），全部同桌型座含被占的——被占置灰给理由，不再凭空隐藏。
+  if (assignMode.value === 'preassign') {
+    return preAssignCandidates.value.map((c) => ({
+      seatId: c.id,
+      seatNo: c.seatNo,
+      tableNo: c.tableNo,
+      typeName: c.typeName,
+      assignable: c.assignable !== false,
+      occupiedUntil: c.occupiedUntil ?? null
+    }));
+  }
+  // verify / reassign 模式：沿用「整天 idle」板行（当下物理占用口径，逐字不动，避免回归核销分座 / 改派）。
   const idle = rows.value.filter((r) => r.boardStatus === 'idle' && r.seatId);
-  const wantType =
-    assignMode.value === 'reassign' ? reassignTargetRow.value?.typeName : assignTarget.value?.seatTypeSnapshot;
+  const wantType = assignMode.value === 'reassign' ? reassignTargetRow.value?.typeName : assignTarget.value?.seatTypeSnapshot;
   let options = idle;
   if (wantType) {
     const matched = idle.filter((r) => r.typeName === wantType);
@@ -1147,7 +1398,14 @@ const assignSeatOptions = computed<GzBeanBoardRowVO[]>(() => {
     const suggestedRow = rows.value.find((r) => r.seatId === sid);
     if (suggestedRow) options = [suggestedRow, ...options];
   }
-  return options;
+  return options.map((r) => ({
+    seatId: r.seatId as string,
+    seatNo: r.seatNo,
+    tableNo: r.tableNo,
+    typeName: r.typeName,
+    assignable: true,
+    occupiedUntil: null
+  }));
 });
 
 /**
@@ -1160,6 +1418,23 @@ function openAssign(p: GzBeanPendingAssignVO, preselectSuggested = false) {
   reassignTargetRow.value = null;
   selectedSeatId.value = preselectSuggested && p.suggestedSeatId ? p.suggestedSeatId : null;
   assignVisible.value = true;
+}
+
+/** 打开排位弹窗（ADR-0018 §2）：客人未到，先把该单排到一个空闲座（走 preAssign，不核销）。复用同一分座弹窗（preassign 模式）。
+ *  拉「区间重叠候选座」（客户 7.07）：同桌型全部座，被目标时段占用的显示但置灰标「占用至 HH:mm」，其余可排。 */
+async function openPreAssign(p: GzBeanPendingAssignVO) {
+  assignMode.value = 'preassign';
+  assignTarget.value = p;
+  reassignTargetRow.value = null;
+  selectedSeatId.value = null;
+  preAssignCandidates.value = [];
+  assignVisible.value = true;
+  try {
+    const res = await getGzBeanPreAssignCandidates(p.id);
+    preAssignCandidates.value = res.data || [];
+  } catch (e) {
+    console.error('[gz-bean-board] load preassign candidates failed', e);
+  }
 }
 
 /** 打开改派弹窗（GZ-BEAN-040）：从详情抽屉对已核销在店单改派到另一空闲座。 */
@@ -1175,8 +1450,30 @@ function openReassign(row: GzBeanBoardRowVO) {
 async function handleAssignConfirm() {
   if (assignMode.value === 'reassign') {
     await doReassign();
+  } else if (assignMode.value === 'preassign') {
+    await doPreAssign();
   } else {
     await doAssignVerify();
+  }
+}
+
+/** 排位（ADR-0018 §2）：把待核销单排到选中空闲座（不核销，状态仍 pending）；成功后单离开「未排位客人」列表、进座位下栏。 */
+async function doPreAssign() {
+  if (!assignTarget.value || !selectedSeatId.value) return;
+  assigning.value = true;
+  try {
+    await preAssignGzBeanSeat(assignTarget.value.id, selectedSeatId.value);
+    ElMessage.success(t('gzBeanBoard.preAssignSuccess'));
+    assignVisible.value = false;
+    assignTarget.value = null;
+    selectedSeatId.value = null;
+    await loadBoard();
+  } catch (e) {
+    // 业务错误码（4002 座被占 / 4022 桌型不符 / 4023 关闭 等）已由拦截器 toast；重拉看板回正空闲座。
+    console.error('[gz-bean-board] pre-assign failed', e);
+    loadBoard();
+  } finally {
+    assigning.value = false;
   }
 }
 
@@ -1357,15 +1654,80 @@ onBeforeUnmount(() => {
   color: #909399;
   font-size: 12px;
 }
-.board-legend {
+/* ── 统计条 + 图例（c1 分层双栏格）── */
+.board-metrics {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+  margin-bottom: 12px;
 }
-.legend-item .legend-count {
-  margin-left: 4px;
-  font-weight: 600;
+.board-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 92px;
+  padding: 8px 14px;
+  background: #fff;
+  border: 1px solid #e3e8ef;
+  border-radius: 8px;
+}
+.board-metric__num {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+  color: #1f2733;
+  font-variant-numeric: tabular-nums;
+}
+.board-metric__lbl {
+  font-size: 11px;
+  color: #8792a3;
+}
+.board-metric.is-reserved .board-metric__num {
+  color: #3b6ef5;
+}
+.board-metric.is-near_end .board-metric__num {
+  color: #c47f12;
+}
+.board-metric.is-overtime .board-metric__num {
+  color: #d3454b;
+}
+.board-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 12px;
+  color: #4b5666;
+}
+.board-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.board-legend__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: #dfe4ec;
+  display: inline-block;
+}
+.board-legend__dot.is-reserved {
+  background: #3b6ef5;
+}
+.board-legend__dot.is-in_use {
+  background: #1f9a63;
+}
+.board-legend__dot.is-near_end {
+  background: #c47f12;
+}
+.board-legend__dot.is-overtime {
+  background: #d3454b;
+}
+.board-legend__hint {
+  margin-left: auto;
+  color: #8792a3;
+  font-size: 11.5px;
 }
 .board-clock {
   margin-left: auto;
@@ -1393,78 +1755,73 @@ onBeforeUnmount(() => {
 }
 .board-seat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+  gap: 12px;
 }
 .board-seat {
   position: relative;
-  border: 1px solid #e4e7ed;
-  border-radius: 8px;
-  padding: 10px;
-  cursor: pointer;
-  transition:
-    box-shadow 0.15s,
-    transform 0.1s;
-  min-height: 84px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e3e8ef;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(20, 30, 50, 0.04);
+  transition: box-shadow 0.15s;
 }
 .board-seat:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(20, 30, 50, 0.1);
+}
+.board-seat.is-overtime {
+  border-color: #f4c2c4;
+  box-shadow: 0 0 0 1px #f4c2c4;
+}
+.board-seat__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid #eef1f6;
+  background: #fcfdfe;
+  cursor: pointer;
 }
 .board-seat__no {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
-  color: #303133;
+  color: #1f2733;
+  letter-spacing: 0.3px;
 }
 .board-seat__table {
   margin-left: 6px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 400;
-  color: #909399;
+  color: #8792a3;
 }
-.board-seat__status {
-  font-size: 12px;
-  margin: 2px 0;
+.board-seat__pill {
+  flex: none;
 }
-.board-seat__meta {
-  font-size: 12px;
-  color: #606266;
-}
-.board-seat__line {
-  line-height: 1.5;
-}
-.board-seat__countdown {
-  margin-top: 4px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #67c23a;
-  font-variant-numeric: tabular-nums;
-}
-.board-seat__countdown.is-near {
-  color: #e6a23c;
-}
-.board-seat__free {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-}
+/* 备注：斜体 + 「备注」角标（c1）；长文 2 行截断 */
 .board-seat__remark {
   display: flex;
   align-items: flex-start;
-  gap: 3px;
-  margin-top: 4px;
-  padding: 3px 6px;
-  background: #fdf6ec;
-  border: 1px solid #f5dab1;
-  border-radius: 4px;
-  color: #8a6d3b;
-  font-size: 12px;
-  line-height: 1.4;
+  gap: 5px;
+  padding: 5px 10px 2px;
+  color: #8792a3;
+  font-size: 11px;
+  font-style: italic;
+  line-height: 1.35;
 }
-.board-seat__remark-icon {
-  flex-shrink: 0;
-  margin-top: 2px;
-  font-size: 12px;
+.board-seat__remark::before {
+  content: '备注';
+  flex: none;
+  font-style: normal;
+  font-size: 9px;
+  line-height: 14px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: #eef1f6;
+  color: #4b5666;
 }
 .board-seat__remark-text {
   display: -webkit-box;
@@ -1473,14 +1830,149 @@ onBeforeUnmount(() => {
   overflow: hidden;
   word-break: break-word;
 }
-.board-seat__continuous {
-  margin-top: 4px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--el-color-primary);
+/* ── 分层双栏（上=在座 / 下=待核销）ADR-0018 §2 / c1 mockup ── */
+.board-lane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  min-height: 76px;
 }
-.board-seat__extend {
-  margin-top: 4px;
+.board-lane + .board-lane {
+  border-top: 1px dashed #e3e8ef;
+}
+/* 上栏底色随在座剩余时间：绿(在座)→黄(临近)→红(超时) */
+.board-lane--top.is-use {
+  background: #e9f7f0;
+}
+.board-lane--top.is-near {
+  background: #fbf2df;
+}
+.board-lane--top.is-over {
+  background: #fdecec;
+}
+/* 下栏：待核销恒蓝 / 空坍成极淡占位底 */
+.board-lane--bottom.is-res {
+  background: #eef3ff;
+}
+.board-lane--bottom.is-empty,
+.board-lane--top.is-empty {
+  background: #fafbfc;
+}
+/* 栏标签（在座 / 待核销）：绝对定位右上角小字，不与内容抢行 */
+.board-lane__label {
+  position: absolute;
+  top: 7px;
+  right: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: #8792a3;
+}
+.board-lane__label.is-next {
+  color: #3b6ef5;
+}
+.board-lane__more {
+  margin-left: 4px;
+  color: #8792a3;
+  font-weight: 600;
+}
+.board-lane__body {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 44px;
+}
+/* 倒计时行：起时刻 + 大数字倒计时（绿/黄/红） */
+.board-lane__cd-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.board-lane__start {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2733;
+}
+.board-lane__cd {
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.board-lane__cd.is-use {
+  color: #1f9a63;
+}
+.board-lane__cd.is-near {
+  color: #c47f12;
+}
+.board-lane__cd.is-over {
+  color: #d3454b;
+}
+.board-lane__id {
+  font-size: 11px;
+  color: #8792a3;
+}
+.board-lane__chips {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.board-chip {
+  font-size: 10px;
+  line-height: 16px;
+  padding: 0 6px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+}
+.board-chip.is-free {
+  background: #f2ecff;
+  color: #6b46c1;
+  border-color: #ddd0f7;
+}
+.board-chip.is-cont {
+  background: #e6f6ff;
+  color: #0f7bb0;
+  border-color: #bfe6f7;
+}
+/* 空栏占位文字（当前无人在座 / 暂无下一位 / 无排位） */
+.board-lane__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 34px;
+  color: #b3bcca;
+  font-size: 12px;
+  cursor: pointer;
+}
+.board-lane__reserve-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  justify-content: center;
+}
+.board-lane__reserve {
+  align-self: stretch;
+}
+/* 动作行：主按钮撑满 + 次按钮自适应，横排贴各自栏底 */
+.board-lane__acts {
+  display: flex;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 2px;
+}
+.board-lane__cta {
+  flex: 1;
+}
+.board-lane__act {
+  flex: 0 0 auto;
+}
+.board-lane__acts .el-button + .el-button {
+  margin-left: 0;
 }
 /* ②待分座区 */
 .pending-assign {
@@ -1643,6 +2135,25 @@ onBeforeUnmount(() => {
   font-size: 12px;
   color: #909399;
   margin-top: 2px;
+}
+/* 排位候选：被目标时段占用不可排的座（ADR-0018 §2 客户 7.07）——置灰 + 禁点 + 显「占用至 HH:mm」 */
+.assign-seat.is-disabled {
+  cursor: not-allowed;
+  background: #f5f7fa;
+  border-color: #ebeef5;
+  opacity: 0.75;
+}
+.assign-seat.is-disabled:hover {
+  border-color: #ebeef5;
+}
+.assign-seat.is-disabled .assign-seat__no {
+  color: #c0c4cc;
+}
+.assign-seat__occupied {
+  font-size: 11px;
+  color: #e6a23c;
+  margin-top: 4px;
+  line-height: 1.2;
 }
 /* 状态底色 */
 .board-seat.is-idle {
