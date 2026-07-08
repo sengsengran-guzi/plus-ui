@@ -1097,26 +1097,52 @@ export default {
   // Pindou daily revenue (customer feedback 0702 #5; pindou only)
   gzBeanRevenue: {
     title: 'Pindou Revenue',
-    alertTitle: 'Note',
-    alertDesc:
-      'Daily pindou revenue including mini-program online payments and staff cash walk-in orders; verified free-promo orders are excluded. Separate from the Reconciliation Center 4% share; this counts pindou only.',
-    date: 'Date',
-    datePlaceholder: 'Pick a date',
-    today: 'Today',
-    yesterday: 'Yesterday',
+    // filters
+    granularity: 'Granularity',
+    granDay: 'Day',
+    granWeek: 'Week',
+    granMonth: 'Month',
+    granQuarter: 'Quarter',
+    dateRange: 'Date range',
+    rangeStart: 'Start date',
+    rangeEnd: 'End date',
+    rangeSep: 'to',
+    presetToday: 'Today',
+    presetThisWeek: 'This week',
+    presetThisMonth: 'This month',
+    presetThisQuarter: 'This quarter',
+    presetThisYear: 'This year',
     store: 'Store',
     storeAll: 'All stores',
     query: 'Query',
     refresh: 'Refresh',
+    // summary cards
     totalRevenue: 'Revenue',
     orderCount: '{n} orders',
     cash: 'Cash',
     online: 'Online',
-    byTypeTitle: 'By table type',
-    noData: 'No data',
+    // table type × billing breakdown
+    breakdownTitle: 'Table type × billing breakdown',
+    colTableType: 'Table type',
+    colHourly: 'Hourly',
+    colDayPass: 'Day-pass',
+    colSubtotal: 'Subtotal',
+    rowTotal: 'Total',
+    seatTypeSingle: 'Single table',
+    seatTypeDouble: 'Double table',
+    seatTypeQuad: 'Quad table',
+    seatTypeUnknown: 'Unknown type',
+    billingHourly: 'Hourly',
+    billingDayPass: 'Day-pass',
+    // trend chart
+    trendTitle: 'Revenue trend',
+    chartEmpty: 'No revenue in the selected range',
+    // details
     detailTitle: 'Details',
     filterAll: 'All',
+    allTableTypes: 'All table types',
     colTime: 'Slot',
+    colDate: 'Date',
     colStore: 'Store',
     colType: 'Table type',
     colBookingNo: 'Booking No.',
@@ -1125,7 +1151,8 @@ export default {
     colPayMethod: 'Pay method',
     colWalkIn: 'Walk-in',
     walkInYes: 'Walk-in',
-    colVerifyTime: 'Verified at'
+    colVerifyTime: 'Verified at',
+    noData: 'No data'
   },
   // Pindou live availability grid + per-table quota close (customer 0702 feedback #4a)
   gzBeanSlotAvailability: {
