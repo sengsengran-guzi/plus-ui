@@ -100,18 +100,6 @@
               <el-button v-hasPermi="['gz:bean:booking:verify']" size="small" :icon="Switch" @click="openPreAssign(p)">
                 {{ t('gzBeanBoard.preAssign') }}
               </el-button>
-              <!-- 整组排位（ADR-0018 §1）：一家 N 口，一键把本组待排位子单排到 N 个同桌型相邻空闲座 -->
-              <el-button
-                v-if="p.groupId"
-                v-hasPermi="['gz:bean:booking:verify']"
-                type="warning"
-                size="small"
-                :icon="Switch"
-                :loading="groupAssigningId === p.groupId"
-                @click="handleGroupPreAssign(p)"
-              >
-                {{ t('gzBeanBoard.groupPreAssign') }}
-              </el-button>
               <!-- 直接核销已处理（不分座）（0702 反馈 #3）：桌型/座位对不上无法正常分座核销时，标记已处理让单从待分座消失 -->
               <el-button v-hasPermi="['gz:bean:booking:verify']" size="small" :loading="markHandlingId === p.id" @click="handleMarkHandled(p)">
                 {{ t('gzBeanBoard.markHandled') }}
@@ -927,39 +915,13 @@ async function handleMarkHandled(p: GzBeanPendingAssignVO) {
   }
 }
 
-// ============ 整组排位（ADR-0018 §1：一家 N 口坐一起）============
-const groupAssigningId = ref<string | null>(null);
-
-/** 本组在「未排位客人」列表里的待排位子单数（组·N人 标签 + 整组排位目标数）。 */
+// ============ 组·N人 标签（ADR-0018 §1）============
+// 「整组排位」一键功能已下线（mp 组单入口紧急下线，不再产生组单；组单遗留单由单排位/单核销逐个处理）。
+// 仅保留 groupCount 供 pending 卡片「组·N人」信息标签显示（标记该待排位单属于某组）。
+/** 本组在「未排位客人」列表里的待排位子单数（组·N人 标签用）。 */
 function groupCount(groupId?: string | null): number {
   if (!groupId) return 0;
   return pendingRows.value.filter((x) => x.groupId === groupId).length;
-}
-
-/** 整组排位：把本组所有待排位子单排到 N 个同桌型空闲座（首 N 个 idle；不相邻可再单独改派微调）。 */
-async function handleGroupPreAssign(p: GzBeanPendingAssignVO) {
-  if (!p.groupId) return;
-  const members = pendingRows.value.filter((x) => x.groupId === p.groupId);
-  const wantType = p.seatTypeSnapshot || p.seatType;
-  const idle = rows.value.filter((r) => r.boardStatus === 'idle' && r.seatId && (!wantType || r.typeName === wantType));
-  if (idle.length < members.length) {
-    ElMessage.warning(t('gzBeanBoard.groupNoIdle', { n: members.length }));
-    return;
-  }
-  groupAssigningId.value = p.groupId;
-  try {
-    for (let i = 0; i < members.length; i++) {
-      await preAssignGzBeanSeat(members[i].id, idle[i].seatId);
-    }
-    ElMessage.success(t('gzBeanBoard.groupPreAssignSuccess', { n: members.length }));
-    await loadBoard();
-  } catch (e) {
-    // 逐个排位；中途失败（座被并发占）已 toast，重拉看板回正 + 已排的保留
-    console.error('[gz-bean-board] group pre-assign failed', e);
-    loadBoard();
-  } finally {
-    groupAssigningId.value = null;
-  }
 }
 
 // ============ 主动弹窗：diff 新进入 near_end 的座位 ============
@@ -1063,7 +1025,7 @@ function openDetail(row: GzBeanBoardRowVO) {
 const walkInVisible = ref(false);
 const walkInSubmitting = ref(false);
 const walkInSeat = ref<GzBeanBoardRowVO | null>(null);
-// slotStart/slotEnd 存 'HH:mm:ss'（分钟精度，店员自由设）；amountYuan=null 表示「按桌型逐格计价」，填数则议价/抹零
+// slotStart/slotEnd 存 'HH:mm:ss'（分钟精度，店员自由设）；amountYuan=null（未录金额）→ 营业额 0，填数则为实收金额（议价/抹零）
 const walkInForm = ref<{ slotStart: string; slotEnd: string; mobile: string; isFree: boolean; amountYuan: number | null }>({
   slotStart: '14:00:00',
   slotEnd: '15:00:00',
@@ -1080,19 +1042,15 @@ function walkInTimeToMin(s: string): number {
 }
 const walkInStartMin = computed(() => walkInTimeToMin(walkInForm.value.slotStart));
 const walkInEndMin = computed(() => walkInTimeToMin(walkInForm.value.slotEnd));
-/** 跨越的整点格数（计价 / mp 线上余量占用口径）：ceil(end/60) − floor(start/60)。 */
-const walkInSlotCount = computed(() =>
-  walkInEndMin.value > walkInStartMin.value ? Math.ceil(walkInEndMin.value / 60) - Math.floor(walkInStartMin.value / 60) : 0
-);
 const walkInValid = computed(
   () =>
     walkInEndMin.value > walkInStartMin.value && (walkInForm.value.isFree || walkInForm.value.amountYuan == null || walkInForm.value.amountYuan >= 0)
 );
-/** 时长 + 计价格数提示（店员可见，透明化「按整点格计价」）。 */
+/** 时长提示（店员可见）。 */
 const walkInRangeHint = computed(() => {
   const d = walkInEndMin.value - walkInStartMin.value;
   if (d <= 0) return t('gzBeanBoard.walkInSlotInvalid');
-  return t('gzBeanBoard.walkInRangeHint', { mins: d, slots: walkInSlotCount.value });
+  return t('gzBeanBoard.walkInRangeHint', { mins: d });
 });
 
 /** 免费开关：打开即金额清空并禁用（免费单不计营业额 GMV）。 */
@@ -1152,7 +1110,7 @@ async function handleWalkInSubmit() {
       slotEnd: walkInForm.value.slotEnd,
       mobile: mobile || undefined,
       isFree: walkInForm.value.isFree,
-      // 免费 → null（后端置 0）；留空 → null（后端按桌型逐格计价）；填数 → 议价/抹零覆盖
+      // 免费 → null（后端置 0）；未录金额留空 → null（后端置 0，营业额 0）；填数 → 实收金额（议价/抹零）
       amountCent: walkInForm.value.isFree || yuan == null ? null : Math.round(yuan * 100)
     };
     await walkInGzBeanBooking(payload);

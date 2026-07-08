@@ -873,14 +873,14 @@ export default {
     walkInSlotStart: 'Start',
     walkInTimeHint: 'Minute precision; staff set freely',
     walkInSlotEnd: 'End',
-    walkInRangeHint: '{mins} min total · billed by {slots} hour slot(s)',
+    walkInRangeHint: '{mins} min total',
     walkInMobile: 'Mobile',
     walkInMobilePlaceholder: 'Optional, 11 digits; links to that user if provided',
     walkInFree: 'Free',
     walkInFreeHint: 'Free bookings are excluded from revenue',
     walkInAmount: 'Amount (CNY)',
-    walkInAmountPlaceholder: 'Empty = type pricing',
-    walkInAmountHint: 'Empty = per-slot type pricing; a number = bargain/round-off',
+    walkInAmountPlaceholder: 'Empty = ¥0',
+    walkInAmountHint: 'Empty = ¥0 revenue (nothing collected); a number = amount collected',
     walkInAlert:
       'Submitting creates a verified booking (used + paid); the seat starts timing immediately. Cash collected offline, not routed through WeChat reconciliation.',
     walkInConfirm: 'Create & verify',
@@ -946,11 +946,8 @@ export default {
     unassignConfirm: 'Undo pre-assign returns this guest to the Unseated guests list. Continue?',
     unassignSuccess: 'Pre-assign undone',
     nextMore: '+{n}',
-    // ADR-0018 §1 group booking
+    // ADR-0018 §1 group booking: keep only the "Group · N" info tag (one-click group pre-assign retired)
     groupTag: 'Group · {n}',
-    groupPreAssign: 'Pre-assign group',
-    groupPreAssignSuccess: 'Pre-assigned {n} guests (reassign individually if not adjacent)',
-    groupNoIdle: 'Not enough idle seats — need {n} idle seats of this table type',
     // 0702 feedback #3: mark handled without seat assignment
     markHandled: 'Mark handled (no seat)',
     markHandledConfirmTitle: 'Mark handled (no seat assignment)',
