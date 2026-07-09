@@ -1004,9 +1004,9 @@ export default {
     batchFailed: 'Batch settle failed',
     // Seat note (attached to the seat, independent of occupancy; staff fills/clears manually, never auto-cleared on state change)
     noteSeatLabel: 'Seat note',
-    notePlaceholderSeat: 'Note anything about this seat (e.g. "wobbly chair", "quiet by the window"); leave empty to clear',
+    notePlaceholderSeat: 'Note something for this seat today (e.g. "reserved for VIP", "guest back at 5pm"); leave empty to clear',
     noteSeatHint:
-      'The note is attached to the seat and kept long-term, regardless of whether the seat is occupied; it is never auto-cleared on state change — staff fill or delete it manually.',
+      'The note is valid for the current day only and is auto-cleared when the board is opened the next day; staff can edit or delete it anytime during the day.',
     remarkSave: 'Save',
     remarkDelete: 'Delete',
     remarkSaveSuccess: 'Note saved',
@@ -2030,6 +2030,18 @@ export default {
   // Recycle appointment management (GZ-RECYCLE-003)
   gzRecycleAppointment: {
     title: 'Recycle Appointments',
+    // GZ-RECYCLE-008 recycle board: today's arrivals overview + filterable records
+    boardTitle: "Today's Arrivals",
+    boardEmpty: 'No arrivals scheduled today',
+    boardUnit: '',
+    unknownSlot: 'No slot',
+    recordsTitle: 'Recycle Records',
+    refresh: 'Refresh',
+    qtyBucket: 'Points Tier',
+    qtyBucketPlaceholder: 'Select tier',
+    amountRange: 'Paid Amount',
+    amountMinPlaceholder: 'Min (¥)',
+    amountMaxPlaceholder: 'Max (¥)',
     alertDesc:
       'Staff verifies on-site + photos + adjusts final amount → triggers reverse payout (merchant transfer). The verify/trigger entry is on the mini-program staff side; owner views here + retries failed payouts. Reverse payout is settled separately, not counted in GMV.',
     store: 'Store',
@@ -2097,55 +2109,25 @@ export default {
     tip: 'Tip'
   },
   // Recycle IP master data management (GZ-RECYCLE-004)
-  gzRecycleIp: {
-    title: 'Recycle IP',
-    alertDesc:
-      'Maintain selectable recycle IPs / series; enabled items appear in the mini-program recycle form IP multi-select, others entered as custom text.',
-    colIpName: 'IP Name',
-    ipNamePlaceholder: 'IP / series name',
-    colEnabled: 'Status',
-    enabledPlaceholder: 'Status',
-    enabledOn: 'Enabled',
-    enabledOff: 'Disabled',
-    colSortNo: 'Sort',
-    colRemark: 'Remark',
-    colCreateTime: 'Created',
-    colAction: 'Action',
-    search: 'Search',
-    reset: 'Reset',
-    add: 'Add',
-    edit: 'Edit',
-    disable: 'Disable',
-    enable: 'Enable',
-    del: 'Delete',
-    empty: 'No recycle IPs',
-    addTitle: 'Add Recycle IP',
-    editTitle: 'Edit Recycle IP',
-    fieldIpName: 'IP Name',
-    fieldSortNo: 'Sort',
-    fieldEnabled: 'Enabled',
-    fieldRemark: 'Remark',
-    cancel: 'Cancel',
-    confirm: 'Confirm',
-    ruleIpName: 'IP name required',
-    addOk: 'Created',
-    editOk: 'Saved',
-    toggleOk: 'Status updated',
-    delOk: 'Deleted',
-    delConfirm: 'Delete recycle IP "{name}"?',
-    tip: 'Tip'
+  // Recycle config merged page (GZ-RECYCLE-008, mirrors bean seat-management: points-tier + time-slot tabs)
+  gzRecycleConfig: {
+    title: 'Recycle Config',
+    tabQtyRange: 'Points Tier & Duration',
+    tabTimeSlot: 'Time Slots'
   },
-  // Recycle quantity bucket + estimated duration (GZ-RECYCLE-004, business table not dict)
+  // Recycle points tier + estimated duration (GZ-RECYCLE-007, business table not dict)
   gzRecycleQtyRange: {
-    title: 'Qty Range & Duration',
+    title: 'Points Tier & Duration',
     alertDesc:
-      'Configure recycle quantity buckets (1-25 items...) and the estimated recycle duration per bucket; enabled buckets appear in the mini-program recycle form single-select. Users pick a bucket, no exact count.',
+      'Configure recycle points tiers (1-50 / 50-100 / 100-150 / 150-200 / 200+) and the estimated duration per tier (about 1h per 50 points); a tier with "Occupy Next Slot" on is a big order that also fully occupies the next arrival slot. Enabled tiers appear in the mini-program recycle form single-select.',
     colCode: 'Code',
-    codePlaceholder: 'Machine code, e.g. 25-50',
+    codePlaceholder: 'Machine code, e.g. pts-100-150',
     colLabel: 'Label',
-    labelPlaceholder: 'e.g. 25-50 items',
+    labelPlaceholder: 'e.g. 100-150 pts',
     colDuration: 'Est. Duration',
     minutes: 'min',
+    colOccupyNext: 'Occupy Next Slot',
+    occupyNextOn: 'Occupies next',
     colEnabled: 'Status',
     enabledPlaceholder: 'Status',
     enabledOn: 'Enabled',
@@ -2160,13 +2142,15 @@ export default {
     disable: 'Disable',
     enable: 'Enable',
     del: 'Delete',
-    empty: 'No quantity buckets',
-    addTitle: 'Add Quantity Bucket',
-    editTitle: 'Edit Quantity Bucket',
+    empty: 'No points tiers',
+    addTitle: 'Add Points Tier',
+    editTitle: 'Edit Points Tier',
     fieldCode: 'Code',
     codeHint: 'Machine code persisted by mp submit, immutable after creation',
     fieldLabel: 'Label',
     fieldDuration: 'Est. Recycle Duration',
+    fieldOccupyNext: 'Occupy Next Slot',
+    occupyNextHint: 'Big order: booking this tier also fully occupies the next arrival slot (only the top tier on)',
     fieldSortNo: 'Sort',
     fieldEnabled: 'Enabled',
     fieldRemark: 'Remark',
@@ -2179,7 +2163,7 @@ export default {
     editOk: 'Saved',
     toggleOk: 'Status updated',
     delOk: 'Deleted',
-    delConfirm: 'Delete quantity bucket "{code}"?',
+    delConfirm: 'Delete points tier "{code}"?',
     tip: 'Tip'
   },
   gzRecycleTimeSlot: {

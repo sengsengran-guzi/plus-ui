@@ -397,7 +397,7 @@
         </div>
         <div v-if="canOperate(activeRow)" class="board-actions-hint mt-2">{{ t('gzBeanBoard.actionsHint') }}</div>
 
-        <!-- 座位备注：纯挂座位，与是否有人/空闲无关，店员手动填/清，状态变化不自动清 -->
+        <!-- 座位备注：纯挂座位，与是否有人/空闲无关，店员手动填/清；每天自动清理（只当天有效，跨日打开看板自动清空） -->
         <div class="board-remark mt-4">
           <div class="board-remark__label">{{ t('gzBeanBoard.noteSeatLabel') }}</div>
           <el-input
@@ -1126,7 +1126,7 @@ async function handleWalkInSubmit() {
 }
 
 /**
- * 备注写入：备注纯挂座位（gz_bean_seat.remark），与是否有人/空闲无关，店员手动填/清，状态变化不自动清。
+ * 备注写入：备注纯挂座位（gz_bean_seat.remark），与是否有人/空闲无关，店员手动填/清；每天自动清理（只当天有效）。
  * 成功后同步 activeRow（== rows 内同座对象引用），保存/删除按钮据此回到 disabled/隐藏，无需整体重拉看板。
  */
 async function persistNote(row: GzBeanBoardRowVO, value: string, successMsg: string) {

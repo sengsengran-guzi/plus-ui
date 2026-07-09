@@ -96,6 +96,12 @@ export interface GzRecycleAppointmentQuery {
   appointmentNo?: string;
   apptDateStart?: string;
   apptDateEnd?: string;
+  /** 点数档编码（回收看板记录区按点数档筛选，GZ-RECYCLE-008） */
+  qtyBucketCode?: string;
+  /** 实付金额下限（分，含） */
+  finalAmountCentMin?: number;
+  /** 实付金额上限（分，含） */
+  finalAmountCentMax?: number;
 }
 
 /** 分页列表 */

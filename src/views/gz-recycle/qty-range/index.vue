@@ -34,6 +34,12 @@
         <el-table-column :label="t('gzRecycleQtyRange.colDuration')" width="120" align="center">
           <template #default="{ row }">{{ row.durationMinutes }} {{ t('gzRecycleQtyRange.minutes') }}</template>
         </el-table-column>
+        <el-table-column :label="t('gzRecycleQtyRange.colOccupyNext')" width="130" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.occupyNextSlot === 1" type="warning">{{ t('gzRecycleQtyRange.occupyNextOn') }}</el-tag>
+            <span v-else class="form-hint">—</span>
+          </template>
+        </el-table-column>
         <el-table-column :label="t('gzRecycleQtyRange.colEnabled')" width="90" align="center">
           <template #default="{ row }">
             <el-tag :type="row.enabled === 1 ? 'success' : 'info'">
@@ -71,6 +77,10 @@
         <el-form-item :label="t('gzRecycleQtyRange.fieldDuration')" prop="durationMinutes">
           <el-input-number v-model="form.durationMinutes" :min="0" :max="999999" />
           <span class="form-hint">{{ t('gzRecycleQtyRange.minutes') }}</span>
+        </el-form-item>
+        <el-form-item :label="t('gzRecycleQtyRange.fieldOccupyNext')">
+          <el-switch v-model="form.occupyNextSlot" :active-value="1" :inactive-value="0" />
+          <span class="form-hint">{{ t('gzRecycleQtyRange.occupyNextHint') }}</span>
         </el-form-item>
         <el-form-item :label="t('gzRecycleQtyRange.fieldSortNo')">
           <el-input-number v-model="form.sortNo" :min="0" :max="9999" />
@@ -121,6 +131,7 @@ interface QtyRangeFormState {
   code: string;
   label: string;
   durationMinutes: number | null;
+  occupyNextSlot: number;
   sortNo: number | null;
   enabled: number;
   remark: string | null;
@@ -131,7 +142,7 @@ const formTitle = ref('');
 const form = reactive<QtyRangeFormState>(emptyForm());
 
 function emptyForm(): QtyRangeFormState {
-  return { id: null, code: '', label: '', durationMinutes: 30, sortNo: 0, enabled: 1, remark: null };
+  return { id: null, code: '', label: '', durationMinutes: 60, occupyNextSlot: 0, sortNo: 0, enabled: 1, remark: null };
 }
 
 const rules: FormRules = {
@@ -171,6 +182,7 @@ async function handleEdit(row: GzRecycleQtyRangeVO) {
     code: data.code,
     label: data.label,
     durationMinutes: data.durationMinutes,
+    occupyNextSlot: data.occupyNextSlot ?? 0,
     sortNo: data.sortNo,
     enabled: data.enabled,
     remark: data.remark ?? null
@@ -193,6 +205,7 @@ async function handleSubmit() {
       code: form.code,
       label: form.label,
       durationMinutes: form.durationMinutes,
+      occupyNextSlot: form.occupyNextSlot,
       sortNo: form.sortNo,
       enabled: form.enabled,
       remark: form.remark

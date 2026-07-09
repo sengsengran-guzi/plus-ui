@@ -14,10 +14,12 @@ export interface GzRecycleQtyRangeVO {
   id: string;
   /** 桶机读码（mp 提交落 qtyBucketCode） */
   code: string;
-  /** 桶展示文案（如 1-25 件） */
+  /** 桶展示文案（如 100-150 点） */
   label: string;
   /** 该桶预计回收时长（分钟） */
   durationMinutes: number;
+  /** 大单占位：1=选此档下单额外整格占用下一个到店时段（仅最高档）；0=普通档（GZ-RECYCLE-007） */
+  occupyNextSlot: number;
   /** 0=停用 / 1=启用 */
   enabled: number;
   /** 展示排序（小在前） */
@@ -33,6 +35,7 @@ export interface GzRecycleQtyRangeForm {
   code?: string;
   label?: string;
   durationMinutes?: number | null;
+  occupyNextSlot?: number | null;
   enabled?: number | null;
   sortNo?: number | null;
   remark?: string | null;
