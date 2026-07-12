@@ -71,6 +71,8 @@ export interface GzRecycleAppointmentVO {
   verifiedBy?: string | null;
   /** 核对时间（留痕） */
   verifyTime?: string | null;
+  /** 核销备注（GZ-RECYCLE-009，店员核对时填） */
+  verifyRemark?: string | null;
   mobileSnapshot?: string | null;
   wechatIdSnapshot?: string | null;
 
@@ -117,4 +119,12 @@ export function getAppointment(id: string): AxiosPromise<GzRecycleAppointmentVO>
 /** 打款失败重试（owner，仅 payout_failed 单） */
 export function retryAppointmentPayout(id: string): AxiosPromise<GzRecycleAppointmentVO> {
   return request({ url: `/system/gz/recycle/appointment/${id}/retry-payout`, method: 'post' });
+}
+
+/** admin 核销确认 + 触发反向打款（GZ-RECYCLE-009；复用与 mp 店员同一 verifyAndPayout，仅 submitted 单可核销） */
+export function verifyAppointment(
+  id: string,
+  data: { verifyImageIds: number[]; finalAmountCent: number; remark?: string }
+): AxiosPromise<GzRecycleAppointmentVO> {
+  return request({ url: `/system/gz/recycle/appointment/${id}/verify`, method: 'post', data });
 }

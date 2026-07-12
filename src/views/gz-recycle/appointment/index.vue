@@ -21,6 +21,9 @@
                 </div>
                 <div class="board-card__mobile">{{ r.mobileSnapshot || '-' }}</div>
                 <div class="board-card__bucket">{{ r.product?.qtyBucketLabel || '-' }}</div>
+                <div v-if="r.status === 'submitted'" class="board-card__act">
+                  <el-button link type="success" size="small" @click.stop="openVerify(r)">{{ t('gzRecycleAppointment.verify') }}</el-button>
+                </div>
               </div>
             </div>
           </div>
@@ -106,6 +109,9 @@
         <el-table-column :label="t('gzRecycleAppointment.colAction')" width="180" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openDetail(row)">{{ t('gzRecycleAppointment.detail') }}</el-button>
+            <el-button v-if="row.status === 'submitted'" link type="success" @click="openVerify(row)">{{
+              t('gzRecycleAppointment.verify')
+            }}</el-button>
             <el-button v-if="row.status === 'payout_failed'" link type="warning" @click="onRetry(row)">{{
               t('gzRecycleAppointment.retryPayout')
             }}</el-button>
@@ -162,7 +168,8 @@
           <el-descriptions-item :label="t('gzRecycleAppointment.fieldVerifiedBy')">{{
             detail.verifiedBy || t('gzRecycleAppointment.notVerified')
           }}</el-descriptions-item>
-          <el-descriptions-item :label="t('gzRecycleAppointment.fieldVerifyTime')" :span="2">{{ detail.verifyTime || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('gzRecycleAppointment.fieldVerifyTime')">{{ detail.verifyTime || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('gzRecycleAppointment.verifyRemark')">{{ detail.verifyRemark || '-' }}</el-descriptions-item>
         </el-descriptions>
 
         <el-divider content-position="left">{{ t('gzRecycleAppointment.secTransfer') }}</el-divider>
@@ -224,6 +231,49 @@
         </div>
       </div>
     </el-drawer>
+
+    <!-- admin 核销弹窗（GZ-RECYCLE-009）：上传核对照 + 最终金额 + 备注 + 确认 → 触发反向打款 -->
+    <el-dialog v-model="verifyVisible" :title="t('gzRecycleAppointment.verifyTitle')" width="560px" append-to-body>
+      <div v-if="verifyRow" class="verify-body">
+        <el-alert :title="t('gzRecycleAppointment.verifyAlert')" type="warning" :closable="false" show-icon class="mb-3" />
+        <el-descriptions :column="2" border size="small" class="mb-3">
+          <el-descriptions-item :label="t('gzRecycleAppointment.colAppointmentNo')" :span="2">{{ verifyRow.appointmentNo }}</el-descriptions-item>
+          <el-descriptions-item :label="t('gzRecycleAppointment.colQtyBucket')">{{ verifyRow.product?.qtyBucketLabel || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('gzRecycleAppointment.fieldMobile')">{{ verifyRow.mobileSnapshot || '-' }}</el-descriptions-item>
+        </el-descriptions>
+
+        <el-form label-width="92px">
+          <el-form-item :label="t('gzRecycleAppointment.verifyPhotos')" required>
+            <div class="verify-photos">
+              <div v-for="fid in verifyImageIds" :key="fid" class="verify-photo">
+                <GzImageThumb :file-id="fid" :size="72" />
+                <el-icon class="verify-photo__del" @click="removeVerifyImage(fid)"><Delete /></el-icon>
+              </div>
+              <GzImageUpload v-if="verifyImageIds.length < 6" v-model="verifyPending" :usage-type="GZ_FILE_USAGE_TYPE.RECYCLE_VERIFY_IMAGE" />
+            </div>
+          </el-form-item>
+          <el-form-item :label="t('gzRecycleAppointment.verifyAmount')" required>
+            <el-input v-model="verifyAmount" type="number" style="width: 180px" :placeholder="t('gzRecycleAppointment.verifyAmountPlaceholder')">
+              <template #prepend>¥</template>
+            </el-input>
+          </el-form-item>
+          <el-form-item :label="t('gzRecycleAppointment.verifyRemark')">
+            <el-input
+              v-model="verifyRemark"
+              type="textarea"
+              :rows="2"
+              maxlength="500"
+              show-word-limit
+              :placeholder="t('gzRecycleAppointment.verifyRemarkPlaceholder')"
+            />
+          </el-form-item>
+        </el-form>
+      </div>
+      <template #footer>
+        <el-button @click="verifyVisible = false">{{ t('gzRecycleAppointment.cancel') }}</el-button>
+        <el-button type="primary" :loading="verifySubmitting" @click="submitVerify">{{ t('gzRecycleAppointment.verifyConfirm') }}</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -231,17 +281,21 @@
 import { ref, reactive, toRefs, watch, computed, getCurrentInstance, type ComponentInternalInstance } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import { Delete } from '@element-plus/icons-vue';
 import {
   listAppointment,
   getAppointment,
   retryAppointmentPayout,
+  verifyAppointment,
   type GzRecycleAppointmentVO,
   type GzRecycleAppointmentQuery,
   type RecycleProductVO
 } from '@/api/gz-recycle/appointment';
 import { listGzRecycleQtyRange, type GzRecycleQtyRangeVO } from '@/api/gz-recycle/qtyRange';
 import { getGzBeanStoreOptions, type GzBeanStoreVO } from '@/api/gz-bean/store';
-import { getGzFileUrl } from '@/api/gz-common/file';
+import { getGzFileUrl, GZ_FILE_USAGE_TYPE } from '@/api/gz-common/file';
+import GzImageUpload from '@/components/GzImageUpload/index.vue';
+import GzImageThumb from '@/components/GzImageThumb/index.vue';
 
 const { t } = useI18n();
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
@@ -432,6 +486,65 @@ async function openDetail(row: GzRecycleAppointmentVO) {
   }
 }
 
+/* ---------- admin 核销（GZ-RECYCLE-009，仅 submitted 单；复用后端 verifyAndPayout 触发反向打款） ---------- */
+const verifyVisible = ref(false);
+const verifyRow = ref<GzRecycleAppointmentVO | null>(null);
+const verifyImageIds = ref<string[]>([]);
+const verifyPending = ref<string | null>(null);
+const verifyAmount = ref<string>('');
+const verifyRemark = ref<string>('');
+const verifySubmitting = ref(false);
+
+// GzImageUpload 单图 emit → 累加进核对照数组（≤6，去重），随后清空待传槽复位上传按钮
+watch(verifyPending, (v) => {
+  if (v && !verifyImageIds.value.includes(v) && verifyImageIds.value.length < 6) {
+    verifyImageIds.value.push(v);
+  }
+  if (v) verifyPending.value = null;
+});
+
+function openVerify(row: GzRecycleAppointmentVO) {
+  verifyRow.value = row;
+  verifyImageIds.value = [];
+  verifyPending.value = null;
+  verifyAmount.value = row.finalAmountCent != null ? (row.finalAmountCent / 100).toFixed(2) : '';
+  verifyRemark.value = '';
+  verifyVisible.value = true;
+}
+
+function removeVerifyImage(id: string) {
+  verifyImageIds.value = verifyImageIds.value.filter((x) => x !== id);
+}
+
+async function submitVerify() {
+  if (!verifyRow.value) return;
+  if (verifyImageIds.value.length === 0) {
+    ElMessage.warning(t('gzRecycleAppointment.verifyNeedPhoto'));
+    return;
+  }
+  const amt = Number(verifyAmount.value);
+  if (verifyAmount.value === '' || !Number.isFinite(amt) || amt < 0) {
+    ElMessage.warning(t('gzRecycleAppointment.verifyNeedAmount'));
+    return;
+  }
+  verifySubmitting.value = true;
+  try {
+    await verifyAppointment(verifyRow.value.id, {
+      verifyImageIds: verifyImageIds.value.map(Number),
+      finalAmountCent: Math.round(amt * 100),
+      remark: verifyRemark.value.trim() || undefined
+    });
+    ElMessage.success(t('gzRecycleAppointment.verifyOk'));
+    verifyVisible.value = false;
+    loadList();
+    loadBoard();
+  } catch {
+    // http 拦截器已全局 toast 后端 msg（4104 不存在 / 4105 非可核对态 / 4106 openid 缺失 + 金额上限）
+  } finally {
+    verifySubmitting.value = false;
+  }
+}
+
 async function onRetry(row: GzRecycleAppointmentVO) {
   await ElMessageBox.confirm(t('gzRecycleAppointment.retryConfirm'), t('gzRecycleAppointment.tip'), { type: 'warning' });
   try {
@@ -514,9 +627,38 @@ loadList();
   font-size: 12px;
   color: #909399;
 }
+.board-card__act {
+  margin-top: 4px;
+  text-align: right;
+}
 .amount-sep {
   margin: 0 6px;
   color: #909399;
+}
+/* 核销弹窗核对照（GZ-RECYCLE-009） */
+.verify-photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.verify-photo {
+  position: relative;
+  line-height: 0;
+}
+.verify-photo__del {
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  padding: 2px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+}
+.verify-photo__del:hover {
+  background: var(--el-color-danger);
 }
 .img-block {
   margin-bottom: 12px;

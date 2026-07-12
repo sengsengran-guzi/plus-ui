@@ -214,8 +214,15 @@
           </div>
           <div class="board-seat-grid">
             <!-- 分层双栏格（ADR-0018 §2 / c1 mockup）：座位号/状态胶囊 + 上栏在座(放座/延时/改派) + 下栏待核销(核销/取消排位) / 空闲代客预约 -->
-            <div v-for="row in group.seats" :key="row.seatId" class="board-seat" :class="[`is-${row.boardStatus}`]">
-              <div class="board-seat__head" @click="openDetail(row)">
+            <!-- 点座位任意区域 → 开详情抽屉；卡片内快捷按钮均 @click.stop 走各自动作、不误触抽屉 -->
+            <div
+              v-for="row in group.seats"
+              :key="row.seatId"
+              class="board-seat"
+              :class="[`is-${row.boardStatus}`]"
+              @click="openDetail(row)"
+            >
+              <div class="board-seat__head">
                 <span class="board-seat__no">
                   {{ row.seatNo }}<span v-if="row.tableNo" class="board-seat__table">{{ row.tableNo }}</span>
                 </span>
@@ -223,7 +230,7 @@
                   {{ t(`gzBeanBoard.status.${row.boardStatus}`) }}
                 </el-tag>
               </div>
-              <!-- 座位备注：店员提醒，斜体 + 「备注」角标（长文 2 行截断，hover 看全文） -->
+              <!-- 座位备注：店员提醒，米黄便签高亮块 + 「备注」角标（长文 3 行截断，hover 看全文） -->
               <div v-if="row.remark" class="board-seat__remark" :title="row.remark">
                 <span class="board-seat__remark-text">{{ row.remark }}</span>
               </div>
@@ -232,7 +239,7 @@
               <div class="board-lane board-lane--top" :class="hasCurrent(row) ? `is-${countdownKind(row)}` : 'is-empty'">
                 <span class="board-lane__label">{{ t('gzBeanBoard.laneTop') }}</span>
                 <template v-if="hasCurrent(row)">
-                  <div class="board-lane__body" @click="openDetail(row)">
+                  <div class="board-lane__body">
                     <div class="board-lane__cd-row">
                       <span class="board-lane__start c-num">{{ hhmm(row.slotStart) }}-{{ hhmm(row.slotEnd) }}</span>
                       <span v-if="showCountdown(row)" class="board-lane__cd c-num" :class="`is-${countdownKind(row)}`">{{
@@ -264,7 +271,7 @@
                     <el-button class="board-lane__act" size="small" @click.stop="openReassign(row)">{{ t('gzBeanBoard.reassignShort') }}</el-button>
                   </div>
                 </template>
-                <div v-else class="board-lane__empty" @click="openDetail(row)">{{ t('gzBeanBoard.laneEmptyCurrent') }}</div>
+                <div v-else class="board-lane__empty">{{ t('gzBeanBoard.laneEmptyCurrent') }}</div>
               </div>
 
               <!-- 下栏：待核销（核销 / 取消排位）；空闲 = 代客预约；在座无下一位 = 暂无下一位 -->
@@ -304,12 +311,8 @@
                   </div>
                 </template>
                 <template v-else>
-                  <div v-if="!hasCurrent(row)" class="board-lane__reserve-wrap">
-                    <span class="board-lane__empty">{{ t('gzBeanBoard.laneIdleReserve') }}</span>
-                    <el-button v-hasPermi="['gz:bean:booking:verify']" class="board-lane__reserve" size="small" @click.stop="openWalkIn(row)">
-                      {{ t('gzBeanBoard.proxyBook') }}
-                    </el-button>
-                  </div>
+                  <!-- 空闲座不再显示内联代客按钮（客户 7.12）：代客统一进座位详情抽屉，点卡片打开 -->
+                  <div v-if="!hasCurrent(row)" class="board-lane__empty">{{ t('gzBeanBoard.laneIdleReserve') }}</div>
                   <div v-else class="board-lane__empty">{{ t('gzBeanBoard.laneEmptyNext') }}</div>
                 </template>
               </div>
@@ -360,9 +363,13 @@
           </el-descriptions-item>
         </el-descriptions>
 
-        <template v-else-if="!hasNext(activeRow)">
-          <div class="board-detail-idle mt-3">{{ t('gzBeanBoard.idleHint') }}</div>
-          <!-- 看板代客预约（0702 反馈 #2）：现金到店客，店员点空闲座位一步建单核销分座 -->
+        <!-- 当下无人在座（空闲 或 仅有未来排位）→ 可代客插空档（GZ-BEAN-047）。排位在时给出提示，
+             代客抽屉默认结束会自动截到排位开始前，超出会被后端拦（与排位重叠）。 -->
+        <template v-else-if="!isOccupied(activeRow)">
+          <div v-if="hasNext(activeRow)" class="board-detail-reserved mt-3">
+            {{ t('gzBeanBoard.walkInBeforeReserve', { start: hhmm(activeRow.nextSlotStart), end: hhmm(activeRow.nextSlotEnd) }) }}
+          </div>
+          <div v-else class="board-detail-idle mt-3">{{ t('gzBeanBoard.idleHint') }}</div>
           <div class="board-actions mt-4">
             <el-button v-hasPermi="['gz:bean:booking:verify']" type="primary" :icon="Plus" @click="openWalkIn(activeRow)">
               {{ t('gzBeanBoard.walkInCreate') }}
@@ -396,6 +403,18 @@
           </el-button>
         </div>
         <div v-if="canOperate(activeRow)" class="board-actions-hint mt-2">{{ t('gzBeanBoard.actionsHint') }}</div>
+
+        <!-- 占用座也能代客预约排位（GZ-BEAN-048）：临时来人时，排到当前在座单之后的空档，建一张待核销单，客人到点在下栏核销落座 -->
+        <template v-if="isOccupied(activeRow)">
+          <div class="board-detail-reserved mt-4">
+            {{ t('gzBeanBoard.walkInAfterCurrent', { end: hhmm(activeRow.slotEnd) }) }}
+          </div>
+          <div class="board-actions mt-2">
+            <el-button v-hasPermi="['gz:bean:booking:verify']" type="primary" plain :icon="Plus" @click="openWalkIn(activeRow)">
+              {{ t('gzBeanBoard.walkInCreate') }}
+            </el-button>
+          </div>
+        </template>
 
         <!-- 座位备注：纯挂座位，与是否有人/空闲无关，店员手动填/清；每天自动清理（只当天有效，跨日打开看板自动清空） -->
         <div class="board-remark mt-4">
@@ -452,7 +471,13 @@
     </el-dialog>
 
     <!-- 看板代客预约抽屉（0702 反馈 #2）：现金到店客一步「建单 + 核销 + 分座」 -->
-    <el-drawer v-model="walkInVisible" :title="t('gzBeanBoard.walkInTitle')" size="440px" direction="rtl" :close-on-click-modal="false">
+    <el-drawer
+      v-model="walkInVisible"
+      :title="t(walkInIsReserve ? 'gzBeanBoard.walkInTitleReserve' : 'gzBeanBoard.walkInTitle')"
+      size="440px"
+      direction="rtl"
+      :close-on-click-modal="false"
+    >
       <template v-if="walkInSeat">
         <el-descriptions :column="1" border size="small" class="mb-3">
           <el-descriptions-item :label="t('gzBeanBoard.colSeatNo')">
@@ -463,9 +488,20 @@
         </el-descriptions>
 
         <el-form label-width="92px" @submit.prevent>
+          <!-- 核销 = 客人现在就坐（立即落座 used）；排位 = 占座待客（建待核销单 pending）。占用座只能排位 -->
+          <el-form-item :label="t('gzBeanBoard.walkInModeLabel')">
+            <el-radio-group v-model="walkInForm.mode" @change="onWalkInModeChange">
+              <el-radio-button value="verify" :disabled="walkInModeVerifyDisabled">{{ t('gzBeanBoard.walkInModeVerify') }}</el-radio-button>
+              <el-radio-button value="reserve">{{ t('gzBeanBoard.walkInModeReserve') }}</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <div v-if="walkInModeVerifyDisabled" class="walkin-mode-hint">{{ walkInModeDisabledHint }}</div>
           <el-form-item :label="t('gzBeanBoard.walkInSlotStart')">
-            <el-time-picker v-model="walkInForm.slotStart" format="HH:mm" value-format="HH:mm:ss" :clearable="false" style="width: 130px" />
-            <span class="form-hint">{{ t('gzBeanBoard.walkInTimeHint') }}</span>
+            <template v-if="walkInForm.mode === 'reserve'">
+              <el-time-picker v-model="walkInForm.slotStart" format="HH:mm" value-format="HH:mm:ss" :clearable="false" style="width: 130px" />
+              <span class="form-hint">{{ t('gzBeanBoard.walkInTimeHint') }}</span>
+            </template>
+            <span v-else class="walkin-now">{{ t('gzBeanBoard.walkInStartNow') }}</span>
           </el-form-item>
           <el-form-item :label="t('gzBeanBoard.walkInSlotEnd')">
             <el-time-picker v-model="walkInForm.slotEnd" format="HH:mm" value-format="HH:mm:ss" :clearable="false" style="width: 130px" />
@@ -492,12 +528,18 @@
             <span class="form-hint">{{ t('gzBeanBoard.walkInAmountHint') }}</span>
           </el-form-item>
         </el-form>
-        <el-alert type="info" :closable="false" show-icon :description="t('gzBeanBoard.walkInAlert')" class="mt-2" />
+        <el-alert
+          :type="walkInIsReserve ? 'warning' : 'info'"
+          :closable="false"
+          show-icon
+          :description="t(walkInIsReserve ? 'gzBeanBoard.walkInAlertReserve' : 'gzBeanBoard.walkInAlert')"
+          class="mt-2"
+        />
       </template>
       <template #footer>
         <el-button @click="walkInVisible = false">{{ t('gzBeanBoard.cancel') }}</el-button>
         <el-button type="primary" :loading="walkInSubmitting" :disabled="!walkInValid" @click="handleWalkInSubmit">
-          {{ t('gzBeanBoard.walkInConfirm') }}
+          {{ t(walkInIsReserve ? 'gzBeanBoard.walkInConfirmReserve' : 'gzBeanBoard.walkInConfirm') }}
         </el-button>
       </template>
     </el-drawer>
@@ -1025,14 +1067,26 @@ function openDetail(row: GzBeanBoardRowVO) {
 const walkInVisible = ref(false);
 const walkInSubmitting = ref(false);
 const walkInSeat = ref<GzBeanBoardRowVO | null>(null);
+// mode: 'verify'=核销立即落座（used）/ 'reserve'=排位占座待客（pending，客人到点核销）——店员显式二选一，驱动开始时间与后端 used/pending 判定一致
 // slotStart/slotEnd 存 'HH:mm:ss'（分钟精度，店员自由设）；amountYuan=null（未录金额）→ 营业额 0，填数则为实收金额（议价/抹零）
-const walkInForm = ref<{ slotStart: string; slotEnd: string; mobile: string; isFree: boolean; amountYuan: number | null }>({
+const walkInForm = ref<{ mode: 'verify' | 'reserve'; slotStart: string; slotEnd: string; mobile: string; isFree: boolean; amountYuan: number | null }>({
+  mode: 'verify',
   slotStart: '14:00:00',
   slotEnd: '15:00:00',
   mobile: '',
   isFree: false,
   amountYuan: null
 });
+/** 核销（立即落座）不可用 = 座位当前有人在坐 或 看板不是今天（非当天无法此刻落座，只能排位/占座待客）。 */
+const walkInModeVerifyDisabled = computed(
+  () => !!walkInSeat.value && (hasCurrent(walkInSeat.value) || sessDate.value !== todayStr())
+);
+/** 置灰核销的原因文案：占用座 vs 非当天。 */
+const walkInModeDisabledHint = computed(() =>
+  walkInSeat.value && hasCurrent(walkInSeat.value)
+    ? t('gzBeanBoard.walkInModeVerifyDisabledHint')
+    : t('gzBeanBoard.walkInModeVerifyDisabledHintDate')
+);
 
 /** 'HH:mm:ss' → 当日分钟数（分钟精度比较 / 时长 / 整点格数）。非法串回退 0。 */
 function walkInTimeToMin(s: string): number {
@@ -1046,6 +1100,12 @@ const walkInValid = computed(
   () =>
     walkInEndMin.value > walkInStartMin.value && (walkInForm.value.isFree || walkInForm.value.amountYuan == null || walkInForm.value.amountYuan >= 0)
 );
+/**
+ * 本次代客走「排位 pending 待核销」还是「立刻 used 核销」——由店员显式选的 mode 决定（取代旧的按开始时间自动猜）。
+ * mode 与后端 future 口径保持一致：核销 → 开始=此刻（≤now）→ 后端判 used；排位 → 开始晚于此刻（>now）→ 后端判 pending。
+ * 抽屉标题/说明/按钮/成功提示据此切换。
+ */
+const walkInIsReserve = computed(() => walkInForm.value.mode === 'reserve');
 /** 时长提示（店员可见）。 */
 const walkInRangeHint = computed(() => {
   const d = walkInEndMin.value - walkInStartMin.value;
@@ -1065,7 +1125,48 @@ function toHmsMinute(d: Date): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:00`;
 }
 
-/** 打开代客预约抽屉：今天默认 开始=此刻、结束=+1h（分钟精度）；非今天默认 14:00-15:00。店员随意改。 */
+/** 'HH:mm:ss' → 今天该时刻的 Date（分钟精度）。 */
+function hmsToTodayDate(hms: string): Date {
+  const [h, m] = hms.split(':').map((v) => Number(v) || 0);
+  const d = new Date();
+  d.setHours(h, m, 0, 0);
+  return d;
+}
+
+/**
+ * 代客默认时段：核销=此刻起 1h；排位=占用座接当前单之后 / 其余今天取此刻(不足则 now+1min) / 非今天取 14:00。
+ * 有未来排位（GZ-BEAN-047）→ 默认结束自动截到排位开始前，避免与排位重叠（店员仍可手动改，重叠会被后端拦）。
+ * 'HH:mm:ss' 零填充可直接字符串比大小 = 时间先后。
+ */
+function defaultWalkInTimes(row: GzBeanBoardRowVO, mode: 'verify' | 'reserve'): { slotStart: string; slotEnd: string } {
+  const isToday = sessDate.value === todayStr();
+  let start: Date;
+  if (mode === 'reserve' && isToday && hasCurrent(row) && row.slotEnd) {
+    // 占用座排位：从当前在座单结束起（排其后空档）；若该结束已过（超时单）退回此刻
+    const afterCurrent = hmsToTodayDate(row.slotEnd);
+    start = afterCurrent.getTime() > Date.now() ? afterCurrent : new Date();
+  } else if (!isToday) {
+    start = new Date(new Date().setHours(14, 0, 0, 0));
+  } else {
+    start = new Date();
+  }
+  // 今天排位：开始须晚于此刻，否则后端会按 used 处理（与「排位」语义不符）→ 至少 now+1min
+  if (mode === 'reserve' && isToday && start.getTime() <= Date.now()) {
+    start = new Date(Date.now() + 60 * 1000);
+  }
+  const startStr = toHmsMinute(start);
+  let endStr = toHmsMinute(new Date(start.getTime() + 60 * 60 * 1000));
+  const reserveStart = row.nextBookingId ? row.nextSlotStart || null : null;
+  if (reserveStart && reserveStart > startStr && reserveStart < endStr) {
+    endStr = reserveStart;
+  }
+  return { slotStart: startStr, slotEnd: endStr };
+}
+
+/**
+ * 打开代客抽屉。默认 mode：占用座（有人在坐）或非今天 → 排位；空闲/排位座（今天）→ 核销（客人就在眼前，一步落座）。
+ * 店员可在抽屉里切 mode（占用座核销置灰）；切 mode 时按 defaultWalkInTimes 重设时段。
+ */
 function openWalkIn(row: GzBeanBoardRowVO) {
   if (!row.seatTypeConfigId) {
     ElMessage.warning(t('gzBeanBoard.walkInNoConfig'));
@@ -1073,24 +1174,39 @@ function openWalkIn(row: GzBeanBoardRowVO) {
   }
   walkInSeat.value = row;
   const isToday = sessDate.value === todayStr();
-  const start = isToday ? new Date() : new Date(new Date().setHours(14, 0, 0, 0));
-  const end = new Date(start.getTime() + 60 * 60 * 1000);
-  walkInForm.value = {
-    slotStart: toHmsMinute(start),
-    slotEnd: toHmsMinute(end),
-    mobile: '',
-    isFree: false,
-    amountYuan: null
-  };
+  const mode: 'verify' | 'reserve' = hasCurrent(row) || !isToday ? 'reserve' : 'verify';
+  const { slotStart, slotEnd } = defaultWalkInTimes(row, mode);
+  walkInForm.value = { mode, slotStart, slotEnd, mobile: '', isFree: false, amountYuan: null };
   walkInVisible.value = true;
+}
+
+/** 切换核销/排位：按新 mode 重设默认时段（核销回此刻起、排位回未来）。 */
+function onWalkInModeChange() {
+  const row = walkInSeat.value;
+  if (!row) return;
+  const { slotStart, slotEnd } = defaultWalkInTimes(row, walkInForm.value.mode);
+  walkInForm.value.slotStart = slotStart;
+  walkInForm.value.slotEnd = slotEnd;
 }
 
 async function handleWalkInSubmit() {
   const seat = walkInSeat.value;
   if (!seat || currentStoreId.value == null) return;
+  // 核销=此刻落座：提交时把开始刷成当前时间（抽屉久开也不偏移，避免开始晚于此刻被后端误判成排位）
+  if (walkInForm.value.mode === 'verify') {
+    walkInForm.value.slotStart = toHmsMinute(new Date());
+  }
   if (walkInEndMin.value <= walkInStartMin.value) {
     ElMessage.warning(t('gzBeanBoard.walkInSlotInvalid'));
     return;
+  }
+  // 排位=占座待客：今天的排位开始须晚于此刻，否则后端会当立即 used 处理（与「排位」不符）
+  if (walkInForm.value.mode === 'reserve' && sessDate.value === todayStr()) {
+    const nowN = new Date();
+    if (walkInStartMin.value <= nowN.getHours() * 60 + nowN.getMinutes()) {
+      ElMessage.warning(t('gzBeanBoard.walkInReserveStartPast'));
+      return;
+    }
   }
   // 手机号选填；若填必须 11 位数字（后端 mobileSnapshot 快照）
   const mobile = walkInForm.value.mobile.trim();
@@ -1099,6 +1215,7 @@ async function handleWalkInSubmit() {
     return;
   }
   walkInSubmitting.value = true;
+  const isReserve = walkInIsReserve.value; // await 前定格（成功提示据此区分「已排位待核销」/「已核销起计时」）
   try {
     const yuan = walkInForm.value.amountYuan;
     const payload: GzBeanWalkInBo = {
@@ -1114,7 +1231,7 @@ async function handleWalkInSubmit() {
       amountCent: walkInForm.value.isFree || yuan == null ? null : Math.round(yuan * 100)
     };
     await walkInGzBeanBooking(payload);
-    ElMessage.success(t('gzBeanBoard.walkInSuccess', { no: seat.seatNo }));
+    ElMessage.success(t(isReserve ? 'gzBeanBoard.walkInSuccessReserve' : 'gzBeanBoard.walkInSuccess', { no: seat.seatNo }));
     walkInVisible.value = false;
     detailVisible.value = false;
     await loadBoard();
@@ -1759,31 +1876,33 @@ onBeforeUnmount(() => {
 .board-seat__pill {
   flex: none;
 }
-/* 备注：斜体 + 「备注」角标（c1）；长文 2 行截断 */
+/* 备注：米黄便签高亮块 + 左侧琥珀竖条 + 「备注」角标；长文 3 行截断，hover 看全文 */
 .board-seat__remark {
   display: flex;
   align-items: flex-start;
-  gap: 5px;
-  padding: 5px 10px 2px;
-  color: #8792a3;
-  font-size: 11px;
-  font-style: italic;
-  line-height: 1.35;
+  gap: 6px;
+  padding: 7px 10px 7px 8px;
+  border-left: 3px solid #f5a623;
+  background: #fff7e0;
+  color: #8a6410;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
 }
 .board-seat__remark::before {
   content: '备注';
   flex: none;
-  font-style: normal;
-  font-size: 9px;
-  line-height: 14px;
-  padding: 0 4px;
+  font-weight: 700;
+  font-size: 10px;
+  line-height: 16px;
+  padding: 0 5px;
   border-radius: 3px;
-  background: #eef1f6;
-  color: #4b5666;
+  background: #f5a623;
+  color: #fff;
 }
 .board-seat__remark-text {
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
   word-break: break-word;
@@ -1905,16 +2024,17 @@ onBeforeUnmount(() => {
   font-size: 12px;
   cursor: pointer;
 }
-.board-lane__reserve-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  flex: 1;
-  justify-content: center;
+/* 代客抽屉：占用座禁核销提示 + 核销模式「现在起」静态开始 */
+.walkin-mode-hint {
+  margin: -6px 0 8px 92px;
+  color: #e6a23c;
+  font-size: 12px;
+  line-height: 1.4;
 }
-.board-lane__reserve {
-  align-self: stretch;
+.walkin-now {
+  color: #67c23a;
+  font-weight: 600;
+  font-size: 13px;
 }
 /* 动作行：主按钮撑满 + 次按钮自适应，横排贴各自栏底 */
 .board-lane__acts {
