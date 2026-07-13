@@ -1697,11 +1697,14 @@ function stopTick() {
 
 onMounted(() => {
   loadStoreOptions();
+  // 直接刷新本页（硬加载）时，keep-alive 的 cachedViews 首帧仍是空的（TagsView 的 onMounted 之后才 push 本页名），
+  // KeepAlive 首挂 include 不匹配 → onActivated 不触发。若 startTick 只放 onActivated，刷新后时钟不走、所有倒计时冻结。
+  // → tick 在 onMounted 起一份保底；tab 切换启停仍交给 onActivated/onDeactivated。startTick 幂等（先 stopTick）不会重叠。
+  startTick();
 });
 
-// 本页在 ruoyi tabsView 下被 keep-alive 缓存：必须仅在「激活（当前 tab）」时轮询，切走即停。
-// 否则 startTick 的 setInterval 会在后台持续打 board/pending-assign/expired 三接口（切到别的 tab 也在跑），
-// 接口异常时更会刷屏。onActivated 在首次挂载后也会触发一次，故 startTick 只放这里、不放 onMounted。
+// 本页在 ruoyi tabsView 下被 keep-alive 缓存：切走(onDeactivated)即停 tick，切回(onActivated)再起，
+// 避免 setInterval 在后台持续打 board/pending-assign/expired 三接口刷屏。
 onActivated(() => {
   if (currentStoreId.value != null) loadBoard();
   startTick();
