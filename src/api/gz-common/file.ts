@@ -39,7 +39,8 @@ export const GZ_FILE_USAGE_TYPE = {
   GACHA_PRIZE_IMAGE: 'gacha_prize_image',
   PREORDER_PRODUCT_IMAGE: 'preorder_product_image',
   STORE_IMAGE: 'store_image',
-  RECYCLE_VERIFY_IMAGE: 'recycle_verify_image'
+  RECYCLE_VERIFY_IMAGE: 'recycle_verify_image',
+  JP_EVENT_IMAGE: 'jp_event_image'
 } as const;
 
 export type GzFileUsageType = (typeof GZ_FILE_USAGE_TYPE)[keyof typeof GZ_FILE_USAGE_TYPE];
