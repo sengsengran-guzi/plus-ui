@@ -30,3 +30,7 @@ components.d.ts
 
 # codebase-memory-mcp index artifact (local bootstrap; do not commit)
 .codebase-memory/
+
+# Playwright E2E 运行产物（失败截图 / trace），不入库
+/test-results/
+/playwright-report/
