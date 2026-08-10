@@ -3,12 +3,23 @@
     <el-card v-loading="loading" shadow="hover">
       <template #header>
         <div class="flex items-center justify-between">
-          <span class="text-base font-medium">{{ t('gzHomeBanner.title') }}</span>
+          <span class="text-base font-medium"> {{ t('gzHomeBanner.title') }} · {{ t(`gzHomeBanner.app.${currentApp}`) }} </span>
           <el-button type="primary" :icon="Refresh" link @click="loadList">
             {{ t('gzHomeBanner.refresh') }}
           </el-button>
         </div>
       </template>
+
+      <!-- 两个小程序各配一套 banner（同一后端同一张 sys_config，key 分家）—— 切换即切 config_key -->
+      <div class="app-switch">
+        <span class="app-switch__label">{{ t('gzHomeBanner.appLabel') }}</span>
+        <el-radio-group :model-value="currentApp" @change="onAppChange">
+          <el-radio-button v-for="a in HOME_BANNER_APPS" :key="a.app" :value="a.app">
+            {{ t(`gzHomeBanner.app.${a.app}`) }}
+          </el-radio-button>
+        </el-radio-group>
+        <el-tag type="info" effect="plain" class="app-switch__key">{{ currentConfigKey }}</el-tag>
+      </div>
 
       <el-alert
         :title="t('gzHomeBanner.alertTitle')"
@@ -33,12 +44,7 @@
             <el-input v-model="b.link" :placeholder="t('gzHomeBanner.linkPlaceholder')" clearable maxlength="200" />
           </el-form-item>
           <div class="banner-row__ctl">
-            <el-switch
-              v-model="b.enabled"
-              :active-text="t('gzHomeBanner.enabled')"
-              :inactive-text="t('gzHomeBanner.disabled')"
-              inline-prompt
-            />
+            <el-switch v-model="b.enabled" :active-text="t('gzHomeBanner.enabled')" :inactive-text="t('gzHomeBanner.disabled')" inline-prompt />
             <div>
               <el-button link :disabled="i === 0" @click="move(i, -1)">{{ t('gzHomeBanner.moveUp') }}</el-button>
               <el-button link :disabled="i === list.length - 1" @click="move(i, 1)">{{ t('gzHomeBanner.moveDown') }}</el-button>
@@ -63,29 +69,68 @@
 </template>
 
 <script setup lang="ts" name="GzHomeBannerConfig">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { Refresh, Plus } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import ImageUpload from '@/components/ImageUpload/index.vue';
-import { getHomeBanners, saveHomeBanners, type HomeBannerItem } from '@/api/gz-common/home-banner';
+import {
+  getHomeBanners,
+  saveHomeBanners,
+  homeBannerConfigKey,
+  HOME_BANNER_APPS,
+  type HomeBannerApp,
+  type HomeBannerItem
+} from '@/api/gz-common/home-banner';
 
 const { t } = useI18n();
 
 const loading = ref<boolean>(false);
 const saving = ref<boolean>(false);
 const list = ref<HomeBannerItem[]>([]);
+/** 当前正在编辑哪个小程序的 banner（默认谷子宇宙 = 打开页面即改造前的那份，不改运营习惯） */
+const currentApp = ref<HomeBannerApp>('guzi');
+/** 最近一次加载 / 保存后的快照，用于判断是否有未保存改动（切换小程序前提醒） */
+const savedSnapshot = ref<string>('[]');
+
+const currentConfigKey = computed(() => homeBannerConfigKey(currentApp.value));
+const dirty = computed(() => JSON.stringify(list.value) !== savedSnapshot.value);
 
 async function loadList() {
   loading.value = true;
   try {
-    list.value = await getHomeBanners();
+    list.value = await getHomeBanners(currentApp.value);
+    savedSnapshot.value = JSON.stringify(list.value);
   } catch (e) {
     console.error('[gz-home-banner] load failed', e);
     ElMessage.error(t('gzHomeBanner.loadFailed'));
   } finally {
     loading.value = false;
   }
+}
+
+/**
+ * 切换小程序 = 切 config_key 重新加载。
+ *
+ * radio-group 用 :model-value 受控（非 v-model）：确认框取消时不改 currentApp，UI 自动回弹到原选项，
+ * 避免「选项已跳过去但内容还是上一个小程序的」这种误配置。
+ */
+async function onAppChange(next: string | number | boolean | undefined) {
+  const nextApp = next as HomeBannerApp;
+  if (nextApp === currentApp.value) return;
+  if (dirty.value) {
+    try {
+      await ElMessageBox.confirm(t('gzHomeBanner.switchConfirm'), t('gzHomeBanner.switchConfirmTitle'), {
+        confirmButtonText: t('gzHomeBanner.switchConfirmOk'),
+        cancelButtonText: t('gzHomeBanner.switchConfirmCancel'),
+        type: 'warning'
+      });
+    } catch {
+      return; // 取消切换：currentApp 不变 → radio 回弹
+    }
+  }
+  currentApp.value = nextApp;
+  await loadList();
 }
 
 function addRow() {
@@ -108,8 +153,9 @@ async function handleSave() {
   const cleaned = list.value.filter((b) => !!b.imageUrl);
   saving.value = true;
   try {
-    await saveHomeBanners(cleaned);
+    await saveHomeBanners(currentApp.value, cleaned);
     list.value = cleaned;
+    savedSnapshot.value = JSON.stringify(cleaned);
     ElMessage.success(t('gzHomeBanner.saveSuccess'));
   } catch (e) {
     console.error('[gz-home-banner] save failed', e);
@@ -123,6 +169,18 @@ loadList();
 </script>
 
 <style lang="scss" scoped>
+.app-switch {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.app-switch__label {
+  color: var(--el-text-color-regular);
+}
+.app-switch__key {
+  font-family: var(--el-font-family-monospace, monospace);
+}
 .empty-tip {
   padding: 24px 0;
   text-align: center;

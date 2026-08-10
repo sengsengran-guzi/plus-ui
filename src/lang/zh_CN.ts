@@ -130,6 +130,16 @@ export default {
   // 首页轮播 banner 配置（GZ-HOME-001）
   gzHomeBanner: {
     title: '首页 Banner 配置',
+    appLabel: '小程序',
+    // 两个小程序各一套 banner（后端 config_key 分家），切换即切编辑对象
+    app: {
+      guzi: '谷子宇宙（拼豆）',
+      jp: '谷子宇宙拼团'
+    },
+    switchConfirmTitle: '尚未保存',
+    switchConfirm: '当前小程序的 banner 有未保存的修改，切换后将丢弃。确定切换？',
+    switchConfirmOk: '丢弃并切换',
+    switchConfirmCancel: '留在当前',
     alertTitle: '说明',
     alertDesc:
       '配置小程序首页顶部轮播 banner（即首页主视觉位）。图片上传到 OSS；跳转链接填站内小程序路由（如 /pages/bean/index），留空则该图不可点；可拖动上移/下移调整顺序，关闭「启用」可临时下线不删除。空配置时小程序首页降级展示「去拼豆预约」占位图。',

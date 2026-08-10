@@ -130,6 +130,16 @@ export default {
   // Home carousel banner config (GZ-HOME-001)
   gzHomeBanner: {
     title: 'Home Banner Config',
+    appLabel: 'Miniapp',
+    // Each miniapp has its own banner config_key; switching changes which one you edit
+    app: {
+      guzi: 'Guzi Universe (Bean)',
+      jp: 'Guzi Group Buy'
+    },
+    switchConfirmTitle: 'Unsaved changes',
+    switchConfirm: 'This miniapp has unsaved banner changes; they will be discarded. Switch anyway?',
+    switchConfirmOk: 'Discard & switch',
+    switchConfirmCancel: 'Stay here',
     alertTitle: 'Note',
     alertDesc:
       'Configure the miniapp home top carousel banner (the home hero slot). Images upload to OSS; link is an in-app route (e.g. /pages/bean/index), leave blank to make it non-clickable; reorder with up/down, toggle off to take offline without deleting. When empty, the home shows a "Go to bean booking" placeholder.',
