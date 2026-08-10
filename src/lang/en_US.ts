@@ -1504,6 +1504,8 @@ export default {
     refundConfirm: 'Confirm Refund',
     refundDoubleConfirm: 'Confirm full refund of ¥{amount} for this order? This cannot be undone.',
     refundSuccess: 'Refund request submitted',
+    refundJpNotHere:
+      'Group-buy (JP) orders must be refunded per line item on the JP Fulfillment board. Whole-order refund here bypasses the already-refunded check, so it is disabled.',
     refundOnlyPaid: 'Only paid orders can be refunded',
     refundAlready: 'Order already refunded / refunding'
   },

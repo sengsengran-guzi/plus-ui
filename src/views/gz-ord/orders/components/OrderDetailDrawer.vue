@@ -183,9 +183,15 @@ const rollbackDialogVisible = ref(false);
 const rollbackReason = ref('');
 
 // 仅 paid 态可申请退款（已退款 / 未支付 / test 单不可）
-const canRefund = computed(() => vo.value?.payStatus === 'paid');
+// ★ 拼团（businessType='jp'）一律禁用：拼团走行级退款、写的是 gz_jp_refund，
+//   而本入口的「一笔支付只允许一条退款单」闸只查 gz_pay_refund，两张表互盲；
+//   且拼团行级退款后 gz_pay_transaction.status 仍停在 'paid'，
+//   ⇒ 已部分/全额行级退款的拼团单在这里仍会被判为可退，点下去就是重复退款。
+//   拼团退款的唯一正确入口是「拼团履约看板」（gz-jp/fulfill），那里有 SUM(refund_amount_cent) 超退闸。
+const canRefund = computed(() => vo.value?.payStatus === 'paid' && vo.value?.businessType !== 'jp');
 const refundDisabledTip = computed(() => {
   if (!vo.value) return '';
+  if (vo.value.businessType === 'jp') return t('gzOrdOrders.refundJpNotHere');
   if (vo.value.payStatus === 'refunded' || vo.value.payStatus === 'refunding') return t('gzOrdOrders.refundAlready');
   return t('gzOrdOrders.refundOnlyPaid');
 });

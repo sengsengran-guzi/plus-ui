@@ -1494,6 +1494,7 @@ export default {
     refundConfirm: '确认退款',
     refundDoubleConfirm: '确认对该订单发起全额退款 ¥{amount}？此操作不可撤销。',
     refundSuccess: '退款申请已提交',
+    refundJpNotHere: '拼团订单请到「拼团履约看板」按商品行退款（支持部分退）；此处的整单退款会绕开拼团已退金额的校验，故禁用',
     refundOnlyPaid: '仅已支付订单可申请退款',
     refundAlready: '该订单已退款 / 退款中'
   },
