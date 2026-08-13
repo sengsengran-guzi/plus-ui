@@ -150,6 +150,9 @@
         <template #default>
           <div>{{ t('gzBeanSeatTypeConfig.gridDescBase', { base: formatYuan(wpBaseCent) }) }}</div>
           <div class="grid-rule-hint">{{ t('gzBeanSeatTypeConfig.gridDescRule') }}</div>
+          <div v-if="wpDayPassOpen" class="grid-rule-hint">
+            {{ t('gzBeanSeatTypeConfig.gridDescDayPass', { base: formatYuan(wpDayPassBaseCent) }) }}
+          </div>
         </template>
       </el-alert>
 
@@ -187,6 +190,21 @@
           </div>
           <el-table :data="gridRows" border size="small" class="wp-grid">
             <el-table-column :label="t('gzBeanSeatTypeConfig.gridColWeekday')" prop="weekdayLabel" width="84" align="center" fixed="left" />
+            <!-- 包天列（GZ-BEAN-053：该星期的包天固定价；仅开放包天的桌型显示） -->
+            <el-table-column v-if="wpDayPassOpen" :label="t('gzBeanSeatTypeConfig.gridColDayPass')" width="130" align="center">
+              <template #default="{ row }">
+                <el-input-number
+                  v-model="row.dayPass"
+                  :min="0"
+                  :precision="2"
+                  :step="1"
+                  :controls="false"
+                  size="small"
+                  :placeholder="formatYuan(wpDayPassBaseCent)"
+                  class="wp-cell"
+                />
+              </template>
+            </el-table-column>
             <!-- 整天默认列（slotStart = null） -->
             <el-table-column :label="t('gzBeanSeatTypeConfig.gridColAllDay')" width="130" align="center">
               <template #default="{ row }">
@@ -245,10 +263,14 @@ import {
   delGzBeanSeatTypeConfig,
   getGzBeanWeekdayPrices,
   saveGzBeanWeekdayPrices,
+  getGzBeanDayPassPrices,
+  saveGzBeanDayPassPrices,
   type GzBeanSeatTypeConfigVO,
   type GzBeanSeatTypeConfigForm,
   type GzBeanSeatTypePriceVO,
-  type GzBeanSeatTypePriceForm
+  type GzBeanSeatTypePriceForm,
+  type GzBeanDayPassPriceVO,
+  type GzBeanDayPassPriceForm
 } from '@/api/gz-bean/seatTypeConfig';
 import { listGzBeanSlotByStore, type GzBeanTimeSlotTemplateVO } from '@/api/gz-bean/slot';
 
@@ -313,6 +335,10 @@ const wpSubmitting = ref(false);
 const wpConfigId = ref<number | null>(null);
 const wpName = ref('');
 const wpBaseCent = ref(0);
+/** 该桌型的基础包天价（分）— 包天列未填时的回退值，用作 placeholder */
+const wpDayPassBaseCent = ref(0);
+/** 该桌型是否开放包天（day_pass_quota > 0）；否则网格不显示「包天」列 */
+const wpDayPassOpen = ref(false);
 
 /** 该门店营业 1h 格的起整点小时集合（0-23），从启用时段模板按 1h 切推导 */
 const hourSlots = ref<number[]>([]);
@@ -323,6 +349,8 @@ interface GridRow {
   weekdayLabel: string;
   /** 整天默认价（元）；undefined/null = 未配（回退基础价） */
   allDay: number | undefined;
+  /** 该星期的包天固定价（元，GZ-BEAN-053）；undefined/null = 未配（回退基础包天价） */
+  dayPass: number | undefined;
   /** 小时(0-23) → 该 1h 格覆盖价（元）；undefined/null = 未配（回退整天默认 → 基础价） */
   hours: Record<number, number | undefined>;
 }
@@ -605,7 +633,10 @@ async function handleDel(row: GzBeanSeatTypeConfigVO) {
 
 // ============ 星期 × 1h 格价格网格 ============
 /** 按当前 hourSlots + 已配覆盖价构建 7 行网格 */
-function buildGridRows(priceRows: GzBeanSeatTypePriceVO[]): GridRow[] {
+function buildGridRows(priceRows: GzBeanSeatTypePriceVO[], dayPassRows: GzBeanDayPassPriceVO[]): GridRow[] {
+  // 包天按星期价（GZ-BEAN-053）：weekday → 元
+  const dayPassByWeekday = new Map<number, number>();
+  dayPassRows.forEach((p) => dayPassByWeekday.set(p.weekday, (p.priceCent || 0) / 100));
   // 索引：weekday → { allDay, hours }
   const byWeekday = new Map<number, { allDay?: number; hours: Record<number, number | undefined> }>();
   weekdays.forEach((d) => byWeekday.set(d, { allDay: undefined, hours: {} }));
@@ -628,6 +659,7 @@ function buildGridRows(priceRows: GzBeanSeatTypePriceVO[]): GridRow[] {
       weekday: d,
       weekdayLabel: t('gzBeanSeatTypeConfig.week' + d),
       allDay: bucket.allDay,
+      dayPass: dayPassByWeekday.get(d),
       hours
     };
   });
@@ -637,6 +669,8 @@ async function handleWeekdayPrice(row: GzBeanSeatTypeConfigVO) {
   wpConfigId.value = row.id;
   wpName.value = row.name;
   wpBaseCent.value = row.priceCent || 0;
+  wpDayPassBaseCent.value = row.dayPassPriceCent || 0;
+  wpDayPassOpen.value = (row.dayPassQuota || 0) > 0;
   hourSlots.value = [];
   gridRows.value = [];
   resetBulkFill();
@@ -645,9 +679,10 @@ async function handleWeekdayPrice(row: GzBeanSeatTypeConfigVO) {
   try {
     // 并行取门店营业时段（推 1h 格列）+ 已配覆盖价
     const storeId = row.storeId ?? currentStoreId.value;
-    const [slotResp, priceResp] = await Promise.all([
+    const [slotResp, priceResp, dayPassResp] = await Promise.all([
       storeId ? listGzBeanSlotByStore(storeId) : Promise.resolve(null),
-      getGzBeanWeekdayPrices(row.id)
+      getGzBeanWeekdayPrices(row.id),
+      getGzBeanDayPassPrices(row.id)
     ]);
     const slotR = slotResp as any;
     const slots = (slotR?.data || slotR || []) as GzBeanTimeSlotTemplateVO[];
@@ -655,7 +690,9 @@ async function handleWeekdayPrice(row: GzBeanSeatTypeConfigVO) {
 
     const priceR = priceResp as any;
     const priceRows = (priceR.data || priceR || []) as GzBeanSeatTypePriceVO[];
-    gridRows.value = buildGridRows(priceRows);
+    const dayPassR = dayPassResp as any;
+    const dayPassRows = (dayPassR.data || dayPassR || []) as GzBeanDayPassPriceVO[];
+    gridRows.value = buildGridRows(priceRows, dayPassRows);
   } catch (e) {
     console.error('[gz-bean-seat-type-config] load weekday/hour prices failed', e);
     ElMessage.error(t('gzBeanSeatTypeConfig.loadFailed'));
@@ -683,6 +720,16 @@ async function handleWeekdayPriceSave() {
       });
     });
     await saveGzBeanWeekdayPrices(wpConfigId.value, { items });
+    // 包天按星期价（GZ-BEAN-053）：只在该桌型开放包天时保存，否则不动库里的行
+    if (wpDayPassOpen.value) {
+      const dayPassItems: GzBeanDayPassPriceForm['items'] = [];
+      gridRows.value.forEach((row) => {
+        if (row.dayPass !== undefined && row.dayPass !== null) {
+          dayPassItems.push({ weekday: row.weekday, priceCent: Math.round(row.dayPass * 100) });
+        }
+      });
+      await saveGzBeanDayPassPrices(wpConfigId.value, { items: dayPassItems });
+    }
     ElMessage.success(t('gzBeanSeatTypeConfig.weekdayPriceSaveSuccess'));
     wpVisible.value = false;
   } catch (e) {

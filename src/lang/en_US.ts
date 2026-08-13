@@ -595,7 +595,7 @@ export default {
     quantityHint: 'Number of tables/units for this type',
     priceHint: 'Base price (Yuan/hour); can be overridden per "weekday × slot"',
     dayPassQuotaHint: '0 = day pass disabled; max = total seats of this type (whole = quantity, per-seat = quantity × seats per table)',
-    dayPassPriceHint: 'Fixed day-pass price (Yuan/day), not charged hourly',
+    dayPassPriceHint: 'Base day-pass price (Yuan/day), not charged hourly; set weekday / weekend prices in "Weekday prices"',
     dayPassOff: 'Disabled',
     delConfirm: 'Delete "{type}"? (soft delete; existing bookings unaffected; its weekday prices are cleared)',
     addSuccess: 'Added',
@@ -614,7 +614,7 @@ export default {
     colQuantity: 'Quantity',
     colPriceYuan: 'Base Price(Yuan)',
     colDayPassQuota: 'Day Pass Quota',
-    colDayPassPrice: 'Day Pass Price',
+    colDayPassPrice: 'Day Pass Base Price',
     colEnabled: 'Enabled',
     colSortNo: 'Sort',
     colCreateTime: 'Create Time',
@@ -642,7 +642,10 @@ export default {
       "Rows = Mon–Sun, columns = the store's 1h business slots; fill the per-slot unit price (Yuan), blank falls back upward. Base price ¥{base} (fallback).",
     gridDescRule:
       'Fallback: slot price → weekday "All-day default" → base price. Interval total = sum of selected per-hour slot prices (hours may differ).',
+    gridDescDayPass:
+      'The "Day pass" column is the fixed day-pass price for that weekday (Yuan/day, independent of hourly slots); blank falls back to the base day-pass price ¥{base}. Set different values on different weekdays for weekday / weekend pricing.',
     gridColWeekday: 'Weekday',
+    gridColDayPass: 'Day pass',
     gridColAllDay: 'All-day default',
     gridNoSlot: 'No business slots configured for this store. Please configure them in "Slot Templates" first, then set per-slot pricing here.',
     gridPhDefault: 'Default ¥{v}',

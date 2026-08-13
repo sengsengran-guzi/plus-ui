@@ -87,6 +87,27 @@ export interface GzBeanSeatTypePriceForm {
   items: Array<{ weekday: number; slotStart: string | null; priceCent: number }>;
 }
 
+/**
+ * 包天按星期价 VO（与 GzBeanDayPassPriceVO.java 对齐；GZ-BEAN-053）。
+ * 未覆盖的星期不返回（下单回退 config.dayPassPriceCent 基础包天价）。
+ */
+export interface GzBeanDayPassPriceVO {
+  /** ISO 8601 星期 1=Mon..7=Sun */
+  weekday: number;
+  /** 该星期的包天固定价（分） */
+  priceCent: number;
+  /** 该星期的包天固定价（元） */
+  priceYuan: number | string;
+}
+
+/**
+ * 包天按星期价保存 BO（与 GzBeanDayPassPriceBo.java 对齐；GZ-BEAN-053）。
+ * 覆盖式：未传的星期删除回退基础包天价。
+ */
+export interface GzBeanDayPassPriceForm {
+  items: Array<{ weekday: number; priceCent: number }>;
+}
+
 /** 查询参数（与 GzBeanSeatTypeConfigQueryBo.java 对齐） */
 export interface GzBeanSeatTypeConfigQuery {
   storeId?: number | null;
@@ -97,9 +118,7 @@ export interface GzBeanSeatTypeConfigQuery {
 }
 
 /** GET /system/gz/bean/seatTypeConfig/list — 分页查询 */
-export function listGzBeanSeatTypeConfig(
-  query: GzBeanSeatTypeConfigQuery
-): AxiosPromise<{ total: number; rows: GzBeanSeatTypeConfigVO[] }> {
+export function listGzBeanSeatTypeConfig(query: GzBeanSeatTypeConfigQuery): AxiosPromise<{ total: number; rows: GzBeanSeatTypeConfigVO[] }> {
   return request({
     url: '/system/gz/bean/seatTypeConfig/list',
     method: 'get',
@@ -174,6 +193,26 @@ export function getGzBeanWeekdayPrices(id: number | string): AxiosPromise<GzBean
 export function saveGzBeanWeekdayPrices(id: number | string, data: GzBeanSeatTypePriceForm) {
   return request({
     url: `/system/gz/bean/seatTypeConfig/${id}/weekday-prices`,
+    method: 'put',
+    data
+  });
+}
+
+/**
+ * GET /system/gz/bean/seatTypeConfig/{id}/day-pass-prices — 读某桌型「包天按星期价」覆盖（GZ-BEAN-053）。
+ * 返回行 {weekday, priceCent, priceYuan}；未覆盖的星期不返回（下单回退基础包天价）。
+ */
+export function getGzBeanDayPassPrices(id: number | string): AxiosPromise<GzBeanDayPassPriceVO[]> {
+  return request({
+    url: `/system/gz/bean/seatTypeConfig/${id}/day-pass-prices`,
+    method: 'get'
+  });
+}
+
+/** PUT /system/gz/bean/seatTypeConfig/{id}/day-pass-prices — 覆盖式保存「包天按星期价」（未传的星期删除回退基础包天价） */
+export function saveGzBeanDayPassPrices(id: number | string, data: GzBeanDayPassPriceForm) {
+  return request({
+    url: `/system/gz/bean/seatTypeConfig/${id}/day-pass-prices`,
     method: 'put',
     data
   });
