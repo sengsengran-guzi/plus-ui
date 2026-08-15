@@ -1,35 +1,7 @@
 <template>
   <div class="p-2">
-    <!-- 今日到店预约看板（GZ-RECYCLE-008）：店员一目了然，按到店时段分组 -->
-    <el-card shadow="never" class="mb-3">
-      <template #header>
-        <div class="flex items-center justify-between">
-          <span class="text-base font-medium">{{ t('gzRecycleAppointment.boardTitle') }} · {{ today }}</span>
-          <el-button link type="primary" @click="loadBoard">{{ t('gzRecycleAppointment.refresh') }}</el-button>
-        </div>
-      </template>
-      <div v-loading="boardLoading">
-        <div v-if="boardGroups.length === 0" class="board-empty">{{ t('gzRecycleAppointment.boardEmpty') }}</div>
-        <div v-else class="board-grid">
-          <div v-for="g in boardGroups" :key="g.key" class="board-col">
-            <div class="board-col__head">{{ g.label }} · {{ g.rows.length }} {{ t('gzRecycleAppointment.boardUnit') }}</div>
-            <div class="board-col__body">
-              <div v-for="r in g.rows" :key="r.id" class="board-card" @click="openDetail(r)">
-                <div class="board-card__top">
-                  <span class="board-card__store">{{ r.storeName || r.storeId }}</span>
-                  <dict-tag :options="gz_recycle_status" :value="r.status" />
-                </div>
-                <div class="board-card__mobile">{{ r.mobileSnapshot || '-' }}</div>
-                <div class="board-card__bucket">{{ r.product?.qtyBucketLabel || '-' }}</div>
-                <div v-if="r.status === 'submitted'" class="board-card__act">
-                  <el-button link type="success" size="small" @click.stop="openVerify(r)">{{ t('gzRecycleAppointment.verify') }}</el-button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </el-card>
+    <!-- 回收看板周视图（GZ-RECYCLE-011，ADR-0021 §3）：门店 × 周切换的时段格矩阵，占用/改期/释放都在格上做 -->
+    <WeekBoard ref="weekBoardRef" :store-options="storeOptions" :status-dict="gz_recycle_status" @detail="onBoardDetail" />
 
     <!-- 回收记录：按 时间 / 点数 / 金额 / 门店 / 状态 / 单号 筛选（GZ-RECYCLE-008） -->
     <el-card v-loading="loading" shadow="never">
@@ -278,7 +250,7 @@
 </template>
 
 <script setup lang="ts" name="GzRecycleAppointment">
-import { ref, reactive, toRefs, watch, computed, getCurrentInstance, type ComponentInternalInstance } from 'vue';
+import { ref, reactive, toRefs, watch, getCurrentInstance, type ComponentInternalInstance } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Delete } from '@element-plus/icons-vue';
@@ -296,6 +268,7 @@ import { getGzBeanStoreOptions, type GzBeanStoreVO } from '@/api/gz-bean/store';
 import { getGzFileUrl, GZ_FILE_USAGE_TYPE } from '@/api/gz-common/file';
 import GzImageUpload from '@/components/GzImageUpload/index.vue';
 import GzImageThumb from '@/components/GzImageThumb/index.vue';
+import WeekBoard from './components/WeekBoard.vue';
 
 const { t } = useI18n();
 const { proxy } = getCurrentInstance() as ComponentInternalInstance;
@@ -325,28 +298,8 @@ const detail = ref<GzRecycleAppointmentVO | null>(null);
 const submitUrls = ref<string[]>([]);
 const verifyUrls = ref<string[]>([]);
 
-// 今日到店预约看板（GZ-RECYCLE-008）：店员一目了然，按到店时段分组
-const today = computed(() => {
-  const d = new Date();
-  const m = `${d.getMonth() + 1}`.padStart(2, '0');
-  const day = `${d.getDate()}`.padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${day}`;
-});
-const boardRows = ref<GzRecycleAppointmentVO[]>([]);
-const boardLoading = ref(false);
-/** 今日预约按到店时段（slotStart）分组，供看板分列展示 */
-const boardGroups = computed(() => {
-  const map = new Map<string, { key: string; label: string; slotStart: string; rows: GzRecycleAppointmentVO[] }>();
-  for (const r of boardRows.value) {
-    const key = shortTime(r.slotStart) || '—';
-    if (!map.has(key)) {
-      const label = r.slotStart ? `${shortTime(r.slotStart)} - ${shortTime(r.slotEnd)}` : t('gzRecycleAppointment.unknownSlot');
-      map.set(key, { key, label, slotStart: r.slotStart || '', rows: [] });
-    }
-    map.get(key)!.rows.push(r);
-  }
-  return [...map.values()].sort((a, b) => a.slotStart.localeCompare(b.slotStart));
-});
+// 回收看板周视图（GZ-RECYCLE-011）：矩阵渲染/占用/改期/释放全部下沉 WeekBoard 子组件，index.vue 仅持有 ref 转发详情
+const weekBoardRef = ref<InstanceType<typeof WeekBoard>>();
 
 // 记录区「点数档」筛选下拉源
 const qtyRangeOptions = ref<GzRecycleQtyRangeVO[]>([]);
@@ -401,17 +354,9 @@ async function loadQtyRanges() {
   }
 }
 
-/** 今日到店预约看板：拉今天全部预约（不分页，上限 200），前端按到店时段分组。 */
-async function loadBoard() {
-  boardLoading.value = true;
-  try {
-    const res = await listAppointment({ pageNum: 1, pageSize: 200, apptDateStart: today.value, apptDateEnd: today.value });
-    boardRows.value = res.rows ?? [];
-  } catch {
-    boardRows.value = [];
-  } finally {
-    boardLoading.value = false;
-  }
+/** 看板顾客单格点击（WeekBoard emit）：复用现有详情 drawer，不新写详情（AC4）。 */
+function onBoardDetail(id: string) {
+  openDetail({ id });
 }
 
 /** 金额区间（元）→ query 分；空则清（记录区筛选）。 */
@@ -469,7 +414,7 @@ async function resolveUrls(fileIds: string[]): Promise<string[]> {
   return urls;
 }
 
-async function openDetail(row: GzRecycleAppointmentVO) {
+async function openDetail(row: Pick<GzRecycleAppointmentVO, 'id'>) {
   detailVisible.value = true;
   detailLoading.value = true;
   submitUrls.value = [];
@@ -537,7 +482,7 @@ async function submitVerify() {
     ElMessage.success(t('gzRecycleAppointment.verifyOk'));
     verifyVisible.value = false;
     loadList();
-    loadBoard();
+    weekBoardRef.value?.reload();
   } catch {
     // http 拦截器已全局 toast 后端 msg（4104 不存在 / 4105 非可核对态 / 4106 openid 缺失 + 金额上限）
   } finally {
@@ -558,7 +503,6 @@ async function onRetry(row: GzRecycleAppointmentVO) {
 
 loadStores();
 loadQtyRanges();
-loadBoard();
 loadList();
 </script>
 
@@ -566,70 +510,6 @@ loadList();
 .ticket-tag {
   font-size: 12px;
   color: #909399;
-}
-/* 今日到店预约看板（GZ-RECYCLE-008） */
-.board-empty {
-  padding: 24px 0;
-  text-align: center;
-  font-size: 13px;
-  color: #909399;
-}
-.board-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 12px;
-}
-.board-col {
-  border: 1px solid #ebeef5;
-  border-radius: 6px;
-  overflow: hidden;
-}
-.board-col__head {
-  padding: 8px 12px;
-  background: #f5f7fa;
-  font-size: 13px;
-  font-weight: 600;
-  color: #303133;
-  border-bottom: 1px solid #ebeef5;
-}
-.board-col__body {
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.board-card {
-  padding: 8px 10px;
-  border: 1px solid #ebeef5;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: box-shadow 0.12s ease;
-}
-.board-card:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
-.board-card__top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 4px;
-}
-.board-card__store {
-  font-size: 13px;
-  font-weight: 600;
-  color: #303133;
-}
-.board-card__mobile {
-  font-size: 13px;
-  color: #606266;
-}
-.board-card__bucket {
-  font-size: 12px;
-  color: #909399;
-}
-.board-card__act {
-  margin-top: 4px;
-  text-align: right;
 }
 .amount-sep {
   margin: 0 6px;
