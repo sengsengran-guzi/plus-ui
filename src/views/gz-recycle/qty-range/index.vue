@@ -13,7 +13,13 @@
       <!-- 查询条 -->
       <el-form inline class="mb-2">
         <el-form-item :label="t('gzRecycleQtyRange.colCode')">
-          <el-input v-model="query.code" :placeholder="t('gzRecycleQtyRange.codePlaceholder')" clearable style="width: 160px" @keyup.enter="loadList" />
+          <el-input
+            v-model="query.code"
+            :placeholder="t('gzRecycleQtyRange.codePlaceholder')"
+            clearable
+            style="width: 160px"
+            @keyup.enter="loadList"
+          />
         </el-form-item>
         <el-form-item :label="t('gzRecycleQtyRange.colEnabled')">
           <el-select v-model="query.enabled" :placeholder="t('gzRecycleQtyRange.enabledPlaceholder')" clearable style="width: 120px">
@@ -24,20 +30,19 @@
         <el-form-item>
           <el-button type="primary" :icon="Search" @click="loadList">{{ t('gzRecycleQtyRange.search') }}</el-button>
           <el-button :icon="Refresh" @click="resetQuery">{{ t('gzRecycleQtyRange.reset') }}</el-button>
-          <el-button v-hasPermi="['gz:recycle:qtyRange:add']" type="success" plain :icon="Plus" @click="handleAdd">{{ t('gzRecycleQtyRange.add') }}</el-button>
+          <el-button v-hasPermi="['gz:recycle:qtyRange:add']" type="success" plain :icon="Plus" @click="handleAdd">{{
+            t('gzRecycleQtyRange.add')
+          }}</el-button>
         </el-form-item>
       </el-form>
 
       <el-table v-loading="listLoading" :data="list" border stripe size="small">
         <el-table-column :label="t('gzRecycleQtyRange.colCode')" prop="code" width="140" show-overflow-tooltip />
         <el-table-column :label="t('gzRecycleQtyRange.colLabel')" prop="label" min-width="140" show-overflow-tooltip />
-        <el-table-column :label="t('gzRecycleQtyRange.colDuration')" width="120" align="center">
-          <template #default="{ row }">{{ row.durationMinutes }} {{ t('gzRecycleQtyRange.minutes') }}</template>
-        </el-table-column>
-        <el-table-column :label="t('gzRecycleQtyRange.colOccupyNext')" width="130" align="center">
+        <el-table-column :label="t('gzRecycleQtyRange.colDuration')" width="150" align="center">
           <template #default="{ row }">
-            <el-tag v-if="row.occupyNextSlot === 1" type="warning">{{ t('gzRecycleQtyRange.occupyNextOn') }}</el-tag>
-            <span v-else class="form-hint">—</span>
+            <span>{{ t('gzRecycleQtyRange.hoursN', { n: toHours(row.durationMinutes) }) }}</span>
+            <span class="form-hint">（{{ row.durationMinutes }} {{ t('gzRecycleQtyRange.minutes') }}）</span>
           </template>
         </el-table-column>
         <el-table-column :label="t('gzRecycleQtyRange.colEnabled')" width="90" align="center">
@@ -51,11 +56,21 @@
         <el-table-column :label="t('gzRecycleQtyRange.colRemark')" prop="remark" min-width="140" show-overflow-tooltip />
         <el-table-column :label="t('gzRecycleQtyRange.colAction')" fixed="right" width="200" align="center">
           <template #default="{ row }">
-            <el-button v-hasPermi="['gz:recycle:qtyRange:edit']" type="success" link size="small" @click="handleEdit(row)">{{ t('gzRecycleQtyRange.edit') }}</el-button>
-            <el-button v-hasPermi="['gz:recycle:qtyRange:edit']" :type="row.enabled === 1 ? 'warning' : 'primary'" link size="small" @click="handleToggle(row)">
+            <el-button v-hasPermi="['gz:recycle:qtyRange:edit']" type="success" link size="small" @click="handleEdit(row)">{{
+              t('gzRecycleQtyRange.edit')
+            }}</el-button>
+            <el-button
+              v-hasPermi="['gz:recycle:qtyRange:edit']"
+              :type="row.enabled === 1 ? 'warning' : 'primary'"
+              link
+              size="small"
+              @click="handleToggle(row)"
+            >
               {{ row.enabled === 1 ? t('gzRecycleQtyRange.disable') : t('gzRecycleQtyRange.enable') }}
             </el-button>
-            <el-button v-hasPermi="['gz:recycle:qtyRange:remove']" type="danger" link size="small" @click="handleDel(row)">{{ t('gzRecycleQtyRange.del') }}</el-button>
+            <el-button v-hasPermi="['gz:recycle:qtyRange:remove']" type="danger" link size="small" @click="handleDel(row)">{{
+              t('gzRecycleQtyRange.del')
+            }}</el-button>
           </template>
         </el-table-column>
         <template #empty><el-empty :description="t('gzRecycleQtyRange.empty')" /></template>
@@ -74,13 +89,13 @@
         <el-form-item :label="t('gzRecycleQtyRange.fieldLabel')" prop="label">
           <el-input v-model="form.label" maxlength="64" show-word-limit :placeholder="t('gzRecycleQtyRange.labelPlaceholder')" />
         </el-form-item>
-        <el-form-item :label="t('gzRecycleQtyRange.fieldDuration')" prop="durationMinutes">
-          <el-input-number v-model="form.durationMinutes" :min="0" :max="999999" />
-          <span class="form-hint">{{ t('gzRecycleQtyRange.minutes') }}</span>
-        </el-form-item>
-        <el-form-item :label="t('gzRecycleQtyRange.fieldOccupyNext')">
-          <el-switch v-model="form.occupyNextSlot" :active-value="1" :inactive-value="0" />
-          <span class="form-hint">{{ t('gzRecycleQtyRange.occupyNextHint') }}</span>
+        <el-form-item :label="t('gzRecycleQtyRange.fieldDuration')" prop="durationHours">
+          <el-input-number v-model="form.durationHours" :min="1" :max="12" :step="1" />
+          <span class="form-hint">{{ t('gzRecycleQtyRange.durationHint', { m: (form.durationHours || 1) * 60, n: form.durationHours || 1 }) }}</span>
+          <!-- 旧数据非 60 倍数：诚实提示会按向上取整算，不静默改数 -->
+          <el-tag v-if="legacyMinutes !== null" type="warning" size="small" effect="plain">
+            {{ t('gzRecycleQtyRange.legacyMinutesWarn', { n: legacyMinutes, m: toHours(legacyMinutes) }) }}
+          </el-tag>
         </el-form-item>
         <el-form-item :label="t('gzRecycleQtyRange.fieldSortNo')">
           <el-input-number v-model="form.sortNo" :min="0" :max="9999" />
@@ -130,8 +145,8 @@ interface QtyRangeFormState {
   id: string | null;
   code: string;
   label: string;
-  durationMinutes: number | null;
-  occupyNextSlot: number;
+  /** UI 层用「占用小时数」；提交时 ×60 转分钟（DB 列不变，历史单快照口径不变） */
+  durationHours: number;
   sortNo: number | null;
   enabled: number;
   remark: string | null;
@@ -141,14 +156,26 @@ const formVisible = ref(false);
 const formTitle = ref('');
 const form = reactive<QtyRangeFormState>(emptyForm());
 
+/** 分钟 → 占用小时数（向上取整，与后端 spanHoursOf 同口径） */
+function toHours(minutes?: number | null): number {
+  if (!minutes || minutes <= 0) return 1;
+  return Math.max(1, Math.ceil(minutes / 60));
+}
+
+/**
+ * 编辑打开时若该档时长不是 60 的整数倍 → 记下原值，表单里挂 warning。
+ * 不静默改数：让店主自己看到「旧数据 90 分钟，保存后按 2 小时计」再决定。
+ */
+const legacyMinutes = ref<number | null>(null);
+
 function emptyForm(): QtyRangeFormState {
-  return { id: null, code: '', label: '', durationMinutes: 60, occupyNextSlot: 0, sortNo: 0, enabled: 1, remark: null };
+  return { id: null, code: '', label: '', durationHours: 1, sortNo: 0, enabled: 1, remark: null };
 }
 
 const rules: FormRules = {
   code: [{ required: true, message: t('gzRecycleQtyRange.ruleCode'), trigger: 'blur' }],
   label: [{ required: true, message: t('gzRecycleQtyRange.ruleLabel'), trigger: 'blur' }],
-  durationMinutes: [{ required: true, message: t('gzRecycleQtyRange.ruleDuration'), trigger: 'blur' }]
+  durationHours: [{ required: true, message: t('gzRecycleQtyRange.ruleDuration'), trigger: 'blur' }]
 };
 
 async function loadList() {
@@ -170,6 +197,7 @@ function resetQuery() {
 }
 
 function handleAdd() {
+  legacyMinutes.value = null;
   Object.assign(form, emptyForm());
   formTitle.value = t('gzRecycleQtyRange.addTitle');
   formVisible.value = true;
@@ -177,12 +205,13 @@ function handleAdd() {
 
 async function handleEdit(row: GzRecycleQtyRangeVO) {
   const { data } = await getGzRecycleQtyRange(row.id);
+  // 非 60 倍数的旧数据：挂 warning 而不是静默改数（GZ-RECYCLE-012 归一迁移只跑一次，之后仍可能被手改）
+  legacyMinutes.value = data.durationMinutes && data.durationMinutes % 60 !== 0 ? data.durationMinutes : null;
   Object.assign(form, {
     id: data.id,
     code: data.code,
     label: data.label,
-    durationMinutes: data.durationMinutes,
-    occupyNextSlot: data.occupyNextSlot ?? 0,
+    durationHours: toHours(data.durationMinutes),
     sortNo: data.sortNo,
     enabled: data.enabled,
     remark: data.remark ?? null
@@ -204,8 +233,10 @@ async function handleSubmit() {
       id: form.id,
       code: form.code,
       label: form.label,
-      durationMinutes: form.durationMinutes,
-      occupyNextSlot: form.occupyNextSlot,
+      durationMinutes: (form.durationHours || 1) * 60,
+      // occupy_next_slot 已随 GZ-RECYCLE-012 退休（占几格由 duration_minutes 决定）；
+      // 后端 BO 若仍非空则恒传 0，绝不再让它影响占用面
+      occupyNextSlot: 0,
       sortNo: form.sortNo,
       enabled: form.enabled,
       remark: form.remark

@@ -35,6 +35,8 @@ export interface GzBeanSeatTypeConfigVO {
   dayPassPriceCent: number;
   /** 包天固定价（元，后端 dayPassPriceCent/100 算） */
   dayPassPriceYuan: number;
+  /** 是否对小程序开放：1=正常桌型可订 / 0=仅后台看板可见的临时桌（GZ-BEAN-054 / ADR-0023） */
+  mpVisible: number;
   /** 0=停用 / 1=启用 */
   enabled: number;
   /** 排序值 */
@@ -58,6 +60,8 @@ export interface GzBeanSeatTypeConfigForm {
   dayPassQuota?: number;
   /** 包天固定价（分；可空=0，后端校 ≥0） */
   dayPassPriceCent?: number;
+  /** 1=小程序可订 / 0=仅后台临时桌（GZ-BEAN-054）；可空 → 后端视作 1 */
+  mpVisible?: number;
   enabled?: number;
   sortNo?: number;
   remark?: string | null;

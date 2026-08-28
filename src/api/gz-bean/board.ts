@@ -31,6 +31,11 @@ export interface GzBeanBoardRowVO {
   typeName?: string | null;
   /** 订法 whole=整桌 / seat=按座 */
   bookMode?: string | null;
+  /**
+   * 本座所属桌型是否对小程序开放：1=正常桌型 / 0=临时桌（GZ-BEAN-054 / ADR-0023）。
+   * 取自**座位所属**桌型档（不是 booking 自身桌型 —— 跨桌型分座后二者分叉，看板是座位视角）。
+   */
+  mpVisible?: number | null;
   /** 座位备注（gz_bean_seat.remark；店员在看板上记录，与座位是否空闲无关）；可空 */
   remark?: string | null;
   /** 看板状态（见 GzBeanBoardStatus） */

@@ -7,6 +7,9 @@
       </el-descriptions-item>
       <el-descriptions-item :label="t('gzRecycleAppointment.rescheduleCurrentDate')">{{ current.apptDate }}</el-descriptions-item>
       <el-descriptions-item :label="t('gzRecycleAppointment.rescheduleCurrentSlot')">{{ current.slotLabel }}</el-descriptions-item>
+      <el-descriptions-item :label="t('gzRecycleAppointment.rescheduleSpan')">
+        {{ t('gzRecycleAppointment.rescheduleSpanHours', { n: current.spanHours }) }}
+      </el-descriptions-item>
     </el-descriptions>
 
     <el-form label-width="92px">
@@ -15,10 +18,15 @@
              手动占用是店员台账，允许挪到过去（后端同样放行）。 -->
         <el-date-picker v-model="form.apptDate" type="date" value-format="YYYY-MM-DD" style="width: 100%" :disabled-date="disabledDate" />
       </el-form-item>
-      <el-form-item :label="t('gzRecycleAppointment.rescheduleNewSlot')" required>
-        <el-select v-model="form.timeSlotId" :placeholder="t('gzRecycleAppointment.rescheduleNewSlotPlaceholder')" style="width: 100%">
-          <el-option v-for="s in slotOptions" :key="s.id" :label="s.label" :value="s.id" />
-        </el-select>
+      <el-form-item :label="t('gzRecycleAppointment.rescheduleNewStart')" required>
+        <!-- excludeAppointmentId 传自身：不排除的话本单原区间会把自己挡住，相邻起点永远选不了 -->
+        <HourSlotPicker
+          v-model="form.slotStart"
+          :store-id="current.storeId"
+          :date="form.apptDate || ''"
+          :span-hours="current.spanHours"
+          :exclude-appointment-id="appointmentId"
+        />
       </el-form-item>
     </el-form>
 
@@ -33,7 +41,8 @@
 import { ref, reactive } from 'vue';
 import { ElMessage } from 'element-plus';
 import { useI18n } from 'vue-i18n';
-import { rescheduleAppointment, type RecycleBoardSlotVO } from '@/api/gz-recycle/appointment';
+import { rescheduleAppointment } from '@/api/gz-recycle/appointment';
+import HourSlotPicker from './HourSlotPicker.vue';
 
 const { t } = useI18n();
 
@@ -42,46 +51,58 @@ const emit = defineEmits<{ (e: 'success'): void; (e: 'fail'): void }>();
 const visible = ref(false);
 const submitting = ref(false);
 const appointmentId = ref('');
-const slotOptions = ref<RecycleBoardSlotVO[]>([]);
 /** 是否允许选过去日期（手动占用 = true 店员台账；顾客单 = false，后端 4130 兜底） */
 const allowPastDate = ref(false);
 
-const current = reactive<{ appointmentNo: string; storeName?: string; apptDate: string; slotLabel: string }>({
+const current = reactive<{
+  appointmentNo: string;
+  storeId: string | number | undefined;
+  storeName?: string;
+  apptDate: string;
+  slotLabel: string;
+  /** 本单占几小时 —— 前端自算，不需要后端多给字段（顾客单 ceil(matched/60)，手动占用 = 区间宽度） */
+  spanHours: number;
+}>({
   appointmentNo: '',
+  storeId: undefined,
   storeName: '',
   apptDate: '',
-  slotLabel: ''
+  slotLabel: '',
+  spanHours: 1
 });
 
-const form = reactive<{ apptDate: string | undefined; timeSlotId: string | undefined }>({
+const form = reactive<{ apptDate: string | undefined; slotStart: string }>({
   apptDate: undefined,
-  timeSlotId: undefined
+  slotStart: ''
 });
 
 function open(payload: {
   id: string;
   appointmentNo: string;
+  storeId: string | number | undefined;
   storeName?: string;
   apptDate: string;
   slotLabel: string;
-  slotOptions: RecycleBoardSlotVO[];
+  spanHours: number;
   allowPastDate?: boolean;
 }) {
   appointmentId.value = payload.id;
   allowPastDate.value = payload.allowPastDate === true;
   current.appointmentNo = payload.appointmentNo;
+  current.storeId = payload.storeId;
   current.storeName = payload.storeName;
   current.apptDate = payload.apptDate;
   current.slotLabel = payload.slotLabel;
-  slotOptions.value = payload.slotOptions;
-  form.apptDate = undefined;
-  form.timeSlotId = undefined;
+  current.spanHours = Math.max(1, payload.spanHours || 1);
+  // 默认选原日期，让店员只改时间就能提交（跨天改期再自己换日期）
+  form.apptDate = payload.apptDate;
+  form.slotStart = '';
   visible.value = true;
 }
 
 function onClosed() {
   form.apptDate = undefined;
-  form.timeSlotId = undefined;
+  form.slotStart = '';
 }
 
 /** 顾客单禁选今天之前的日期（手动占用不限） */
@@ -98,13 +119,13 @@ async function handleConfirm() {
     ElMessage.warning(t('gzRecycleAppointment.rescheduleNeedDate'));
     return;
   }
-  if (!form.timeSlotId) {
-    ElMessage.warning(t('gzRecycleAppointment.rescheduleNeedSlot'));
+  if (!form.slotStart) {
+    ElMessage.warning(t('gzRecycleAppointment.rescheduleNeedStart'));
     return;
   }
   submitting.value = true;
   try {
-    await rescheduleAppointment(appointmentId.value, { apptDate: form.apptDate, timeSlotId: form.timeSlotId });
+    await rescheduleAppointment(appointmentId.value, { apptDate: form.apptDate, slotStart: form.slotStart });
     ElMessage.success(t('gzRecycleAppointment.rescheduleOk'));
     visible.value = false;
     emit('success');

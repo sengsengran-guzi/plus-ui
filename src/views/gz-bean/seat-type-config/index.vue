@@ -24,6 +24,13 @@
             <el-option v-for="s in storeOptions" :key="s.id" :label="`${s.storeNo} · ${s.name}`" :value="s.id" />
           </el-select>
         </el-form-item>
+        <el-form-item :label="t('gzBeanSeatTypeConfig.colChannel')">
+          <el-select v-model="channelFilter" style="width: 160px">
+            <el-option :label="t('gzBeanSeatTypeConfig.channelAll')" value="all" />
+            <el-option :label="t('gzBeanSeatTypeConfig.channelMp')" value="mp" />
+            <el-option :label="t('gzBeanSeatTypeConfig.channelTemp')" value="temp" />
+          </el-select>
+        </el-form-item>
         <el-form-item>
           <el-button v-hasPermi="['gz:bean:seatTypeConfig:add']" type="primary" plain :icon="Plus" :disabled="!currentStoreId" @click="handleAdd">{{
             t('gzBeanSeatTypeConfig.add')
@@ -32,13 +39,21 @@
         </el-form-item>
       </el-form>
 
-      <el-table v-loading="listLoading" :data="list" border stripe size="small">
+      <el-table v-loading="listLoading" :data="filteredList" border stripe size="small">
         <el-table-column :label="t('gzBeanSeatTypeConfig.colId')" prop="id" width="70" align="center" />
         <el-table-column :label="t('gzBeanSeatTypeConfig.colName')" prop="name" min-width="140" show-overflow-tooltip />
         <el-table-column :label="t('gzBeanSeatTypeConfig.colBookMode')" width="130" align="center">
           <template #default="{ row }">
             <el-tag :type="row.bookMode === 'seat' ? 'warning' : 'success'" size="small">
               {{ row.bookMode === 'seat' ? t('gzBeanSeatTypeConfig.bookModeSeat') : t('gzBeanSeatTypeConfig.bookModeWhole') }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <!-- 渠道列：只对临时桌渲 tag，正常行留空 —— 保持表格安静（GZ-BEAN-054） -->
+        <el-table-column :label="t('gzBeanSeatTypeConfig.colChannel')" width="100" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="isTempType(row)" type="warning" size="small" effect="plain">
+              {{ t('gzBeanSeatTypeConfig.tempTag') }}
             </el-tag>
           </template>
         </el-table-column>
@@ -73,7 +88,15 @@
         <el-table-column :label="t('gzBeanSeatTypeConfig.colSortNo')" prop="sortNo" width="70" align="center" />
         <el-table-column :label="t('gzBeanSeatTypeConfig.colAction')" fixed="right" width="200" align="center">
           <template #default="{ row }">
-            <el-button v-hasPermi="['gz:bean:seatTypeConfig:edit']" type="primary" link size="small" @click="handleWeekdayPrice(row)">
+            <!-- 临时桌不进小程序、金额由店员 walk-in 现场填 → 格价表对它无意义（GZ-BEAN-054） -->
+            <el-button
+              v-if="!isTempType(row)"
+              v-hasPermi="['gz:bean:seatTypeConfig:edit']"
+              type="primary"
+              link
+              size="small"
+              @click="handleWeekdayPrice(row)"
+            >
               {{ t('gzBeanSeatTypeConfig.weekdayPrice') }}
             </el-button>
             <el-button v-hasPermi="['gz:bean:seatTypeConfig:edit']" type="success" link size="small" @click="handleEdit(row)">
@@ -103,6 +126,14 @@
             <el-option :label="t('gzBeanSeatTypeConfig.bookModeSeat')" value="seat" />
           </el-select>
         </el-form-item>
+        <!-- 用途（GZ-BEAN-054）：显式二选一，不做取反开关（取反是 bug 温床） -->
+        <el-form-item :label="t('gzBeanSeatTypeConfig.colChannel')">
+          <el-radio-group v-model="form.mpVisible">
+            <el-radio-button :value="1">{{ t('gzBeanSeatTypeConfig.channelMp') }}</el-radio-button>
+            <el-radio-button :value="0">{{ t('gzBeanSeatTypeConfig.channelTemp') }}</el-radio-button>
+          </el-radio-group>
+          <span class="form-hint">{{ t('gzBeanSeatTypeConfig.channelHint') }}</span>
+        </el-form-item>
         <el-form-item :label="t('gzBeanSeatTypeConfig.colCapacity')" prop="capacity">
           <el-input-number v-model="form.capacity" :min="1" :max="99" />
           <span class="form-hint">{{ t('gzBeanSeatTypeConfig.capacityHint') }}</span>
@@ -110,17 +141,22 @@
         <el-form-item :label="t('gzBeanSeatTypeConfig.colQuantity')" prop="quantity">
           <el-input-number v-model="form.quantity" :min="0" :max="9999" />
           <span class="form-hint">{{ t('gzBeanSeatTypeConfig.quantityHint') }}</span>
+          <span class="form-hint">{{ t('gzBeanSeatTypeConfig.quantitySeatHint') }}</span>
+          <span class="form-hint">{{ t('gzBeanSeatTypeConfig.nameRevenueHint') }}</span>
         </el-form-item>
         <el-form-item :label="t('gzBeanSeatTypeConfig.colPriceYuan')" prop="priceYuan">
           <el-input-number v-model="form.priceYuan" :min="0" :precision="2" :step="1" />
           <span class="form-hint">{{ t('gzBeanSeatTypeConfig.priceHint') }}</span>
         </el-form-item>
+        <!-- 包天是纯小程序概念 → 临时桌禁用并归 0（后端 validateMpVisible 兜底，GZ-BEAN-054） -->
         <el-form-item :label="t('gzBeanSeatTypeConfig.colDayPassQuota')">
-          <el-input-number v-model="form.dayPassQuota" :min="0" :max="9999" />
-          <span class="form-hint">{{ t('gzBeanSeatTypeConfig.dayPassQuotaHint') }}</span>
+          <el-input-number v-model="form.dayPassQuota" :min="0" :max="9999" :disabled="form.mpVisible === 0" />
+          <span class="form-hint">{{
+            form.mpVisible === 0 ? t('gzBeanSeatTypeConfig.dayPassTempHint') : t('gzBeanSeatTypeConfig.dayPassQuotaHint')
+          }}</span>
         </el-form-item>
         <el-form-item :label="t('gzBeanSeatTypeConfig.colDayPassPrice')">
-          <el-input-number v-model="form.dayPassPriceYuan" :min="0" :precision="2" :step="1" />
+          <el-input-number v-model="form.dayPassPriceYuan" :min="0" :precision="2" :step="1" :disabled="form.mpVisible === 0" />
           <span class="form-hint">{{ t('gzBeanSeatTypeConfig.dayPassPriceHint') }}</span>
         </el-form-item>
         <el-form-item :label="t('gzBeanSeatTypeConfig.colEnabled')">
@@ -250,7 +286,7 @@
 </template>
 
 <script setup lang="ts" name="GzBeanSeatTypeConfig">
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, computed, watch, onMounted } from 'vue';
 import { Plus, Refresh, MagicStick } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus';
 import { useI18n } from 'vue-i18n';
@@ -273,6 +309,7 @@ import {
   type GzBeanDayPassPriceForm
 } from '@/api/gz-bean/seatTypeConfig';
 import { listGzBeanSlotByStore, type GzBeanTimeSlotTemplateVO } from '@/api/gz-bean/slot';
+import { batchGenerateGzBeanSeat } from '@/api/gz-bean/seat';
 
 const { t } = useI18n();
 
@@ -297,6 +334,8 @@ interface FormState {
   dayPassQuota: number;
   /** 包天固定价（元；提交时 *100 转分） */
   dayPassPriceYuan: number;
+  /** 是否对小程序开放：1=正常桌型 / 0=仅后台临时桌（GZ-BEAN-054 / ADR-0023） */
+  mpVisible: number;
   enabled: number;
   sortNo: number;
   remark: string;
@@ -314,10 +353,36 @@ const form = reactive<FormState>({
   priceYuan: 0,
   dayPassQuota: 0,
   dayPassPriceYuan: 0,
+  mpVisible: 1,
   enabled: 1,
   sortNo: 0,
   remark: ''
 });
+
+/** 临时桌判定（GZ-BEAN-054）：mpVisible 为 null/undefined 的存量行视作正常桌型，与 DB DEFAULT 1 同口径 */
+function isTempType(row: GzBeanSeatTypeConfigVO): boolean {
+  return row.mpVisible === 0;
+}
+
+/** 渠道筛选：该页一次拉全量，纯前端过滤，后端零改动 */
+const channelFilter = ref<'all' | 'mp' | 'temp'>('all');
+const filteredList = computed(() => {
+  if (channelFilter.value === 'mp') return list.value.filter((r) => !isTempType(r));
+  if (channelFilter.value === 'temp') return list.value.filter((r) => isTempType(r));
+  return list.value;
+});
+
+// 切到临时桌时把包天两项归 0 —— 后端 validateMpVisible 会直接拒，先在表单里清干净免得用户提交才报错
+watch(
+  () => form.mpVisible,
+  (v) => {
+    if (v === 0) {
+      form.dayPassQuota = 0;
+      form.dayPassPriceYuan = 0;
+    }
+  }
+);
+
 const formTitle = computed(() => (formMode.value === 'add' ? t('gzBeanSeatTypeConfig.addTitle') : t('gzBeanSeatTypeConfig.editTitle')));
 const rules = {
   name: [{ required: true, message: t('gzBeanSeatTypeConfig.ruleNameRequired'), trigger: 'blur' }],
@@ -544,6 +609,7 @@ function handleAdd() {
     priceYuan: 0,
     dayPassQuota: 0,
     dayPassPriceYuan: 0,
+    mpVisible: 1,
     enabled: 1,
     sortNo: 0,
     remark: ''
@@ -563,6 +629,7 @@ function handleEdit(row: GzBeanSeatTypeConfigVO) {
     priceYuan: (row.priceCent || 0) / 100,
     dayPassQuota: row.dayPassQuota ?? 0,
     dayPassPriceYuan: (row.dayPassPriceCent || 0) / 100,
+    mpVisible: row.mpVisible ?? 1,
     enabled: row.enabled,
     sortNo: row.sortNo,
     remark: row.remark || ''
@@ -589,23 +656,65 @@ async function handleSubmit() {
       priceCent: Math.round((form.priceYuan || 0) * 100),
       dayPassQuota: form.dayPassQuota,
       dayPassPriceCent: Math.round((form.dayPassPriceYuan || 0) * 100),
+      mpVisible: form.mpVisible,
       enabled: form.enabled,
       sortNo: form.sortNo,
       remark: form.remark
     };
-    if (formMode.value === 'add') {
+    const isAdd = formMode.value === 'add';
+    if (isAdd) {
       await addGzBeanSeatTypeConfig(payload);
       ElMessage.success(t('gzBeanSeatTypeConfig.addSuccess'));
     } else {
       await updateGzBeanSeatTypeConfig(payload);
       ElMessage.success(t('gzBeanSeatTypeConfig.editSuccess'));
     }
+    const justCreatedTemp = isAdd && form.mpVisible === 0 && (form.quantity || 0) > 0;
     formVisible.value = false;
     await loadList();
+    if (justCreatedTemp) {
+      await offerGenerateSeats(payload.name);
+    }
   } catch (e) {
     console.error('[gz-bean-seat-type-config] submit failed', e);
   } finally {
     submitting.value = false;
+  }
+}
+
+/**
+ * 新建临时桌后直接问「要不要现在生成计时格」（GZ-BEAN-054）。
+ *
+ * 把「建桌型 → 切 tab → 找桌型 → 批量生成 → 填前缀」5 步压成 1 次确认 —— 甲方周末加桌是高频动作。
+ * 默认前缀用 T + 本店已有临时桌序号：后端 derivePrefix 对纯中文名恒回退 "X"，多建两个临时桌必撞号。
+ */
+async function offerGenerateSeats(name: string) {
+  const created = list.value.find((r) => r.name === name);
+  if (!created) return;
+  const seatCount = created.bookMode === 'seat' ? (created.quantity || 0) * (created.capacity || 1) : created.quantity || 0;
+  const defaultPrefix = `T${list.value.filter(isTempType).length}`;
+  try {
+    const { value: prefix } = await ElMessageBox.prompt(
+      t('gzBeanSeatTypeConfig.genSeatsTip', { count: seatCount }),
+      t('gzBeanSeatTypeConfig.genSeatsTitle'),
+      {
+        confirmButtonText: t('gzBeanSeatTypeConfig.confirm'),
+        cancelButtonText: t('gzBeanSeatTypeConfig.cancel'),
+        inputValue: defaultPrefix,
+        inputPattern: /^.{1,8}$/,
+        inputErrorMessage: t('gzBeanSeatTypeConfig.genSeatsPrefixRule')
+      }
+    );
+    const res = await batchGenerateGzBeanSeat({ storeId: created.storeId, seatTypeConfigId: created.id, prefix });
+    // 前缀与已有座位跨桌型撞号时 created 可能是 0 —— 必须显式 warning，否则店员只看到「什么都没多」
+    if (res.data?.hasConflict) {
+      ElMessage.warning(t('gzBeanSeatTypeConfig.genSeatsConflict', { nos: (res.data.conflictSeatNos || []).join('、') }));
+    } else {
+      ElMessage.success(t('gzBeanSeatTypeConfig.genSeatsSuccess', { count: res.data?.created ?? 0 }));
+    }
+  } catch (e) {
+    if (e === 'cancel' || e === 'close') return; // 用户主动取消，不是错误
+    console.error('[gz-bean-seat-type-config] batchGenerate failed', e);
   }
 }
 

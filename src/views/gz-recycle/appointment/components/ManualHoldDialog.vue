@@ -1,10 +1,14 @@
 <template>
   <el-dialog v-model="visible" :title="t('gzRecycleAppointment.holdDialogTitle')" width="480px" append-to-body @closed="onClosed">
     <div class="hold-selected">
-      <div class="hold-selected__label">{{ t('gzRecycleAppointment.holdSelectedList') }}（{{ cells.length }}）</div>
+      <div class="hold-selected__label">
+        {{ t('gzRecycleAppointment.holdSelectedList') }}（{{ t('gzRecycleAppointment.selectedCountRuns', { n: cells.length, m: runs.length }) }}）
+      </div>
+      <!-- 显示合并后的**段**：4 个连续格 → 一个 tag「08-30 · 09:00-13:00」，而不是 4 个 tag。
+           跨午休 gap 天然不合并（判定 prev.end === cur.start），店员确认成本骤降。 -->
       <div class="hold-selected__list">
-        <el-tag v-for="c in cells" :key="`${c.apptDate}|${c.timeSlotId}`" class="hold-selected__tag" size="small">
-          {{ c.apptDate }} · {{ c.slotLabel }}
+        <el-tag v-for="r in runs" :key="`${r.apptDate}|${r.start}`" class="hold-selected__tag" size="small">
+          {{ r.apptDate }} · {{ hhmm(r.start) }}-{{ hhmm(r.end) }}
         </el-tag>
       </div>
     </div>
@@ -36,11 +40,20 @@ import { manualHoldSlots } from '@/api/gz-recycle/appointment';
 
 const { t } = useI18n();
 
-/** 已选格（跨日期跨时段，同一门店内；ADR-0021 §1） */
+/** 已选小时格（跨日期，同一门店内；ADR-0021 §1 + ADR-0022 小时格） */
 interface SelectedCell {
   apptDate: string;
-  timeSlotId: string;
+  /** 格起点 "HH:mm:ss" */
+  slotStart: string;
   slotLabel: string;
+}
+
+/** 相邻格合并成的连续段（由父组件 WeekBoard 算好传进来） */
+interface SelectedRun {
+  apptDate: string;
+  start: string;
+  end: string;
+  count: number;
 }
 
 const emit = defineEmits<{ (e: 'success'): void; (e: 'fail'): void }>();
@@ -50,6 +63,7 @@ const submitting = ref(false);
 const formRef = ref<FormInstance>();
 const storeId = ref<string | number>('');
 const cells = ref<SelectedCell[]>([]);
+const runs = ref<SelectedRun[]>([]);
 const form = reactive<{ remark: string }>({ remark: '' });
 
 const rules: FormRules = {
@@ -69,11 +83,17 @@ const rules: FormRules = {
   ]
 };
 
-function open(payload: { storeId: string | number; cells: SelectedCell[] }) {
+function open(payload: { storeId: string | number; cells: SelectedCell[]; runs: SelectedRun[] }) {
   storeId.value = payload.storeId;
   cells.value = payload.cells;
+  runs.value = payload.runs;
   form.remark = '';
   visible.value = true;
+}
+
+/** "HH:mm:ss" → "HH:mm" */
+function hhmm(t9: string): string {
+  return (t9 || '').slice(0, 5);
 }
 
 function onClosed() {
@@ -81,7 +101,7 @@ function onClosed() {
 }
 
 /**
- * 跨日期按日期分组多次请求（同日多格一次请求带全部 timeSlotIds），任一失败即停并提示（AC6）。
+ * 跨日期按日期分组多次请求（同日多格一次请求带全部 slotStarts），任一失败即停并提示（AC6）。
  *
  * 组件级重入闸（`if (submitting.value) return` + 进函数即置位）：不依赖全局 axios 防重复提交拦截器 /
  * 后端 Redis 锁做唯一防线 —— 校验是异步的，置位若放在 await 之后，按钮 disabled 翻转前的窗口内可连点两次。
@@ -99,12 +119,12 @@ async function handleConfirm() {
     const groups = new Map<string, string[]>();
     for (const c of cells.value) {
       const arr = groups.get(c.apptDate) ?? [];
-      arr.push(c.timeSlotId);
+      arr.push(c.slotStart);
       groups.set(c.apptDate, arr);
     }
     try {
-      for (const [apptDate, timeSlotIds] of groups) {
-        await manualHoldSlots({ storeId: storeId.value, apptDate, timeSlotIds, remark: form.remark.trim() });
+      for (const [apptDate, slotStarts] of groups) {
+        await manualHoldSlots({ storeId: storeId.value, apptDate, slotStarts, remark: form.remark.trim() });
       }
       ElMessage.success(t('gzRecycleAppointment.holdOk'));
       visible.value = false;

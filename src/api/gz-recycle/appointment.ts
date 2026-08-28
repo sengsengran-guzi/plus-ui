@@ -139,21 +139,36 @@ export function verifyAppointment(
 
 /* ===================== GZ-RECYCLE-011 回收看板周视图 + 手动占用 / 改期（ADR-0021） ===================== */
 
-/** 看板列头：一个到店时段格（与 GzRecycleWeekBoardVO.SlotVO 对齐） */
+/** 看板行头：一个 1 小时格（GZ-RECYCLE-012 起不再有 id —— 格由起点唯一标识） */
 export interface RecycleBoardSlotVO {
-  id: string;
-  label: string;
+  /** 格起点 "HH:mm:ss"，前端用它做行 key */
   startTime: string;
+  /** 格止点 = startTime + 1h */
   endTime: string;
+  /**
+   * 本行是否在当前营业窗口之外（孤儿格）：被存量单 / 改窄窗口留下的占用挡着，但已不可新约。
+   * 不显式标出来的话，店员会以为「这行是可用时间但一直约不上」。
+   */
+  outOfWindow?: boolean | null;
 }
 
-/** 看板被占格：某日期 × 某到店时段的占用状况（与 GzRecycleWeekBoardVO.CellVO 对齐） */
+/**
+ * 看板占用**区间块**（与 GzRecycleWeekBoardVO.CellVO 对齐，GZ-RECYCLE-012 / ADR-0022）。
+ *
+ * 一单发**一个**块（不是逐格发 N 个），前端按 spanHours 做 rowspan 合并渲染。
+ * `kind='spill'` 随 spill_time_slot_id 一起退休：多格占用现在由块自身的 [slotStart, slotEnd) 表达。
+ */
 export interface RecycleBoardCellVO {
   apptDate: string;
-  timeSlotId: string;
-  /** customer（顾客单）/ manual（手动占用）/ spill（大单溢出占用，不可操作，需操作源单） */
-  kind: 'customer' | 'manual' | 'spill';
-  /** 源单 id（spill 格指向大单本身；customer/manual 格 = 本记录 id） */
+  /** 块起点 "HH:mm:ss" */
+  slotStart: string;
+  /** 块止点 "HH:mm:ss" */
+  slotEnd: string;
+  /** 本块跨几个 1 小时格（rowspan） */
+  spanHours: number;
+  /** customer（顾客单）/ manual（手动占用） */
+  kind: 'customer' | 'manual';
+  /** 源单 id */
   appointmentId: string;
   appointmentNo?: string | null;
   /** 记录状态 submitted/confirmed_onsite/paying/paid/payout_failed/manual_hold */
@@ -168,17 +183,56 @@ export interface RecycleBoardCellVO {
   remark?: string | null;
 }
 
-/** 回收看板周视图 VO（与 GzRecycleWeekBoardVO.java 对齐，ADR-0021 §3） */
+/** 回收看板周视图 VO（与 GzRecycleWeekBoardVO.java 对齐，ADR-0021 §3 + ADR-0022 小时格） */
 export interface RecycleWeekBoardVO {
   storeId: string;
   /** 周一（weekStart 入参归一到所在周的周一） */
   weekStart: string;
   /** 周日（weekStart + 6 天） */
   weekEnd: string;
-  /** 该店 enabled 到店时段列（矩阵行） */
+  /** 矩阵行 = 营业窗口切出的小时格 ∪ 本周活跃单覆盖到的孤儿格 */
   slots: RecycleBoardSlotVO[];
-  /** 被占格（空闲格由前端用 slots × 7 天补齐） */
+  /** 占用区间块（空闲格由前端用 slots × 7 天补齐） */
   cells: RecycleBoardCellVO[];
+}
+
+/** 一个 1 小时格的可选性（与 RecycleHourSlotVO.java 对齐，GZ-RECYCLE-012） */
+export interface RecycleHourSlotVO {
+  startTime: string;
+  endTime: string;
+  /** 展示文案 "HH:mm" */
+  label: string;
+  /** 本格自身已被占 */
+  taken: boolean;
+  /** 今天且该时刻已过 */
+  past: boolean;
+  /** 以本格为起点能否放下整段 N 小时 —— **前端唯一该看的字段** */
+  selectable: boolean;
+}
+
+/** 小时格可用性容器（与 RecycleSlotAvailabilityVO.java 对齐） */
+export interface RecycleHourSlotsVO {
+  date: string;
+  spanHours: number;
+  slots: RecycleHourSlotVO[];
+}
+
+/**
+ * admin 小时格可用性（改期弹窗选新时间用，GZ-RECYCLE-012）。
+ *
+ * `excludeAppointmentId` **必传**：不排除的话被改期的单会跟自己的原区间冲突，相邻起点永远选不了。
+ */
+export function getHourSlots(
+  storeId: string | number,
+  date: string,
+  spanHours: number,
+  excludeAppointmentId?: string | number
+): AxiosPromise<RecycleHourSlotsVO> {
+  return request({
+    url: '/system/gz/recycle/appointment/hour-slots',
+    method: 'get',
+    params: { storeId, date, spanHours, excludeAppointmentId }
+  });
 }
 
 /** 回收看板周视图（GET /system/gz/recycle/appointment/week-board?storeId=&weekStart=YYYY-MM-DD） */
@@ -190,7 +244,8 @@ export function getWeekBoard(storeId: string | number, weekStart: string): Axios
 export function manualHoldSlots(data: {
   storeId: string | number;
   apptDate: string;
-  timeSlotIds: (string | number)[];
+  /** 小时格起点列表 "HH:mm:ss"（一格一行，每行 1 小时；GZ-RECYCLE-012） */
+  slotStarts: string[];
   remark: string;
 }): AxiosPromise<GzRecycleAppointmentVO[]> {
   return request({ url: '/system/gz/recycle/appointment/manual-hold', method: 'post', data });
@@ -202,6 +257,16 @@ export function releaseHold(id: string): AxiosPromise<GzRecycleAppointmentVO> {
 }
 
 /** 预约改期（原地 UPDATE，不含 storeId——不允许跨门店改期；ADR-0021 §2） */
-export function rescheduleAppointment(id: string, data: { apptDate: string; timeSlotId: string | number }): AxiosPromise<GzRecycleAppointmentVO> {
+export function rescheduleAppointment(id: string, data: { apptDate: string; slotStart: string }): AxiosPromise<GzRecycleAppointmentVO> {
   return request({ url: `/system/gz/recycle/appointment/${id}/reschedule`, method: 'post', data });
+}
+
+/**
+ * 取消顾客单（GZ-RECYCLE-014）：释放它占住的全部小时格。
+ *
+ * 仅 submitted / confirmed_onsite 可取消 —— 回收是反向打款，paying/paid/payout_failed 一律 4132。
+ * 手动占用走 releaseHold。
+ */
+export function cancelCustomerAppointment(id: string): AxiosPromise<GzRecycleAppointmentVO> {
+  return request({ url: `/system/gz/recycle/appointment/${id}/cancel`, method: 'post' });
 }

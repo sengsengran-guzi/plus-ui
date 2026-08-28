@@ -45,6 +45,8 @@ export interface GzBeanSeatVO {
   assignable?: boolean | null;
   /** 排位候选专用：assignable=false 时的占用止界 HH:mm，前端拼「占用至 HH:mm」。可排 / 非候选查询为空。 */
   occupiedUntil?: string | null;
+  /** 本座所属桌型是否为临时桌（config.mp_visible=0，GZ-BEAN-054）；分座/改派/排位候选查询回填，用于打标 + 垫底排序 */
+  temp?: boolean | null;
 }
 
 /** 新增 / 编辑 BO（与 GzBeanSeatBo.java 对齐；编辑禁改 storeId / seatNo，service 内部忽略） */
@@ -141,8 +143,23 @@ export function delGzBeanSeat(ids: Array<number | string> | number | string) {
   });
 }
 
+/**
+ * 批量生成结果（与 GzBeanSeatBatchGenerateResultVO.java 对齐，GZ-BEAN-054）。
+ * seat_no 全店唯一，跨桌型撞号会让「点了生成但什么都没多」→ conflictSeatNos 让前端提示换前缀。
+ */
+export interface GzBeanSeatBatchGenerateResultVO {
+  /** 新建 + 复活软删座的数量 */
+  created: number;
+  /** 跳过数量（含幂等重跑与前缀冲突两种） */
+  skipped: number;
+  /** 因编号被**其它桌型**占用而跳过的编号（= 真·前缀冲突） */
+  conflictSeatNos: string[];
+  /** 是否存在跨桌型编号冲突 */
+  hasConflict: boolean;
+}
+
 /** POST /system/gz/bean/seat/batchGenerate — 按桌型批量生成座位单元（幂等复活/跳过） */
-export function batchGenerateGzBeanSeat(data: GzBeanSeatBatchGenerateForm): AxiosPromise<number> {
+export function batchGenerateGzBeanSeat(data: GzBeanSeatBatchGenerateForm): AxiosPromise<GzBeanSeatBatchGenerateResultVO> {
   return request({
     url: '/system/gz/bean/seat/batchGenerate',
     method: 'post',

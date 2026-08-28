@@ -204,24 +204,21 @@
       <!-- 看板：按分区 → 桌型 分组渲染座位单元卡片 -->
       <el-empty v-if="!listLoading && rows.length === 0" :description="t('gzBeanBoard.empty')" />
       <div v-else v-loading="listLoading" class="board-zones">
-        <div v-for="group in groupedRows" :key="group.key" class="board-zone">
+        <div v-for="group in groupedRows" :key="group.key" class="board-zone" :class="{ 'is-temp': group.temp }">
           <div class="board-zone__head">
             <span class="board-zone__zone">{{ group.zone }}</span>
             <span class="board-zone__type">{{ group.typeName }}</span>
             <el-tag v-if="group.bookMode" :type="group.bookMode === 'seat' ? 'warning' : 'success'" size="small" class="ml-1">
               {{ group.bookMode === 'seat' ? t('gzBeanBoard.bookModeSeat') : t('gzBeanBoard.bookModeWhole') }}
             </el-tag>
+            <el-tag v-if="group.temp" type="warning" size="small" effect="dark" class="ml-1">
+              {{ t('gzBeanBoard.tempTypeTag') }}
+            </el-tag>
           </div>
           <div class="board-seat-grid">
             <!-- 分层双栏格（ADR-0018 §2 / c1 mockup）：座位号/状态胶囊 + 上栏在座(放座/延时/改派) + 下栏待核销(核销/取消排位) / 空闲代客预约 -->
             <!-- 点座位任意区域 → 开详情抽屉；卡片内快捷按钮均 @click.stop 走各自动作、不误触抽屉 -->
-            <div
-              v-for="row in group.seats"
-              :key="row.seatId"
-              class="board-seat"
-              :class="[`is-${row.boardStatus}`]"
-              @click="openDetail(row)"
-            >
+            <div v-for="row in group.seats" :key="row.seatId" class="board-seat" :class="[`is-${row.boardStatus}`]" @click="openDetail(row)">
               <div class="board-seat__head">
                 <span class="board-seat__no">
                   {{ row.seatNo }}<span v-if="row.tableNo" class="board-seat__table">{{ row.tableNo }}</span>
@@ -583,7 +580,10 @@
             <div class="assign-seat__no">
               {{ seat.seatNo }}<span v-if="seat.tableNo" class="assign-seat__table">{{ seat.tableNo }}</span>
             </div>
-            <div class="assign-seat__type">{{ seat.typeName || '-' }}</div>
+            <div class="assign-seat__type">
+              {{ seat.typeName || '-' }}
+              <el-tag v-if="seat.temp" type="warning" size="small" effect="plain">{{ t('gzBeanBoard.tempTypeTag') }}</el-tag>
+            </div>
             <!-- 排位候选：被目标时段占用的座置灰给理由（ADR-0018 §2 客户 7.07），店员不再困惑「D4 去哪了」 -->
             <div v-if="!seat.assignable" class="assign-seat__occupied">
               {{ seat.occupiedUntil ? t('gzBeanBoard.seatOccupiedUntil', { time: seat.occupiedUntil }) : t('gzBeanBoard.seatUnavailable') }}
@@ -702,6 +702,8 @@ interface BoardGroup {
   zone: string;
   typeName: string;
   bookMode: string | null;
+  /** 临时桌分组（config.mp_visible=0，GZ-BEAN-054）：加标识 + 垫底排序 */
+  temp: boolean;
   seats: GzBeanBoardRowVO[];
 }
 
@@ -713,12 +715,13 @@ const groupedRows = computed<BoardGroup[]>(() => {
     const key = `${r.zone || ''}__${r.seatTypeConfigId || ''}`;
     let g = map.get(key);
     if (!g) {
-      g = { key, zone, typeName, bookMode: r.bookMode || null, seats: [] };
+      g = { key, zone, typeName, bookMode: r.bookMode || null, temp: r.mpVisible === 0, seats: [] };
       map.set(key, g);
     }
     g.seats.push(r);
   }
-  return Array.from(map.values());
+  // 临时桌垫底：店员的肌肉记忆是「先看正常桌」，周末加桌不能把原有分组挤位
+  return Array.from(map.values()).sort((a, b) => Number(a.temp) - Number(b.temp));
 });
 
 // ============ 状态/倒计时辅助 ============
@@ -1069,7 +1072,14 @@ const walkInSubmitting = ref(false);
 const walkInSeat = ref<GzBeanBoardRowVO | null>(null);
 // mode: 'verify'=核销立即落座（used）/ 'reserve'=排位占座待客（pending，客人到点核销）——店员显式二选一，驱动开始时间与后端 used/pending 判定一致
 // slotStart/slotEnd 存 'HH:mm:ss'（分钟精度，店员自由设）；amountYuan=null（未录金额）→ 营业额 0，填数则为实收金额（议价/抹零）
-const walkInForm = ref<{ mode: 'verify' | 'reserve'; slotStart: string; slotEnd: string; mobile: string; isFree: boolean; amountYuan: number | null }>({
+const walkInForm = ref<{
+  mode: 'verify' | 'reserve';
+  slotStart: string;
+  slotEnd: string;
+  mobile: string;
+  isFree: boolean;
+  amountYuan: number | null;
+}>({
   mode: 'verify',
   slotStart: '14:00:00',
   slotEnd: '15:00:00',
@@ -1078,14 +1088,10 @@ const walkInForm = ref<{ mode: 'verify' | 'reserve'; slotStart: string; slotEnd:
   amountYuan: null
 });
 /** 核销（立即落座）不可用 = 座位当前有人在坐 或 看板不是今天（非当天无法此刻落座，只能排位/占座待客）。 */
-const walkInModeVerifyDisabled = computed(
-  () => !!walkInSeat.value && (hasCurrent(walkInSeat.value) || sessDate.value !== todayStr())
-);
+const walkInModeVerifyDisabled = computed(() => !!walkInSeat.value && (hasCurrent(walkInSeat.value) || sessDate.value !== todayStr()));
 /** 置灰核销的原因文案：占用座 vs 非当天。 */
 const walkInModeDisabledHint = computed(() =>
-  walkInSeat.value && hasCurrent(walkInSeat.value)
-    ? t('gzBeanBoard.walkInModeVerifyDisabledHint')
-    : t('gzBeanBoard.walkInModeVerifyDisabledHintDate')
+  walkInSeat.value && hasCurrent(walkInSeat.value) ? t('gzBeanBoard.walkInModeVerifyDisabledHint') : t('gzBeanBoard.walkInModeVerifyDisabledHintDate')
 );
 
 /** 'HH:mm:ss' → 当日分钟数（分钟精度比较 / 时长 / 整点格数）。非法串回退 0。 */
@@ -1444,6 +1450,8 @@ interface AssignSeatOption {
   assignable: boolean;
   /** 不可排时的占用止界 HH:mm（拼「占用至 HH:mm」告诉店员为何不可排） */
   occupiedUntil?: string | null;
+  /** 是否临时桌座位（GZ-BEAN-054）：打标 + 排在正常桌之后 */
+  temp: boolean;
 }
 /** 排位候选座（ADR-0018 §2 客户 7.07，openPreAssign 时按目标单 slot 区间重叠拉取，含被占的置灰座）。 */
 const preAssignCandidates = ref<GzBeanSeatVO[]>([]);
@@ -1457,7 +1465,8 @@ const assignSeatOptions = computed<AssignSeatOption[]>(() => {
       tableNo: c.tableNo,
       typeName: c.typeName,
       assignable: c.assignable !== false,
-      occupiedUntil: c.occupiedUntil ?? null
+      occupiedUntil: c.occupiedUntil ?? null,
+      temp: c.temp === true
     }));
   }
   // verify / reassign 模式：沿用「整天 idle」板行（当下物理占用口径，逐字不动，避免回归核销分座 / 改派）。
@@ -1465,10 +1474,20 @@ const assignSeatOptions = computed<AssignSeatOption[]>(() => {
   const wantType = assignMode.value === 'reassign' ? reassignTargetRow.value?.typeName : assignTarget.value?.seatTypeSnapshot;
   let options = idle;
   if (wantType) {
-    const matched = idle.filter((r) => r.typeName === wantType);
+    // 候选 = 同桌型 ∪ 本店临时桌（GZ-BEAN-054 / ADR-0023 放宽同桌型限制，后端 assertSeatTypeCompatible 同口径）。
+    // 同桌型一个都没有时才整体回退到全部 idle（保持原有兜底行为）。
+    const matched = idle.filter((r) => r.typeName === wantType || r.mpVisible === 0);
     options = matched.length > 0 ? matched : idle;
   }
   const sid = suggestedSeatId.value;
+  // 临时桌垫底（GZ-BEAN-054），但建议座（GZ-BEAN-037 续坐同座）永远置顶 —— 两条规则按此优先级
+  options = [...options].sort((a, b) => {
+    if (sid) {
+      if (a.seatId === sid) return -1;
+      if (b.seatId === sid) return 1;
+    }
+    return Number(a.mpVisible === 0) - Number(b.mpVisible === 0);
+  });
   if (sid && !options.some((r) => r.seatId === sid)) {
     const suggestedRow = rows.value.find((r) => r.seatId === sid);
     if (suggestedRow) options = [suggestedRow, ...options];
@@ -1479,7 +1498,8 @@ const assignSeatOptions = computed<AssignSeatOption[]>(() => {
     tableNo: r.tableNo,
     typeName: r.typeName,
     assignable: true,
-    occupiedUntil: null
+    occupiedUntil: null,
+    temp: r.mpVisible === 0
   }));
 });
 
@@ -1816,6 +1836,12 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+/* 临时桌分组（GZ-BEAN-054）：虚线左边框 + 极浅底，让周末新增的一块可扫读 */
+.board-zone.is-temp {
+  padding-left: 8px;
+  border-left: 2px dashed #e6a23c;
+  background: #fdf6ec66;
 }
 .board-zone__head {
   display: flex;

@@ -22,6 +22,12 @@ export interface GzRecycleTimeSlotVO {
   startTime: string;
   /** 到店时段结束 "HH:mm:ss" */
   endTime: string;
+  /** 生效星期（ISO 1=周一..7=周日，逗号分隔）—— GZ-RECYCLE-015 对齐拼豆 */
+  weekdays?: string | null;
+  /** 生效起 "yyyy-MM-dd"（空 = 立即生效） */
+  effectiveDate?: string | null;
+  /** 生效止 "yyyy-MM-dd"（空 = 长期有效） */
+  expireDate?: string | null;
   /** 0=停用 / 1=启用 */
   enabled: number;
   /** 展示排序（小在前） */
@@ -38,6 +44,12 @@ export interface GzRecycleTimeSlotForm {
   label?: string | null;
   startTime?: string | null;
   endTime?: string | null;
+  /** 生效星期（ISO 1-7 逗号分隔）；空 → 后端视作全周 */
+  weekdays?: string | null;
+  /** 生效起（空 = 立即生效） */
+  effectiveDate?: string | null;
+  /** 生效止（空 = 长期有效） */
+  expireDate?: string | null;
   enabled?: number | null;
   sortNo?: number | null;
   remark?: string | null;

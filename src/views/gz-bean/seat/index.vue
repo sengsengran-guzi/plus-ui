@@ -26,12 +26,7 @@
             style="width: 200px"
             @change="handleQuery"
           >
-            <el-option
-              v-for="c in configOptions"
-              :key="c.id"
-              :label="`${c.name}（${c.bookMode === 'seat' ? t('gzBeanSeat.bookModeSeat') : t('gzBeanSeat.bookModeWhole')}）`"
-              :value="c.id"
-            />
+            <el-option v-for="c in configOptions" :key="c.id" :label="configOptionLabel(c)" :value="c.id" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('gzBeanSeat.tableNo')">
@@ -98,6 +93,10 @@
             <el-tag v-if="row.bookMode" :type="row.bookMode === 'seat' ? 'warning' : 'success'" size="small" class="ml-1">
               {{ row.bookMode === 'seat' ? t('gzBeanSeat.bookModeSeat') : t('gzBeanSeat.bookModeWhole') }}
             </el-tag>
+            <!-- 临时桌（GZ-BEAN-054）：只在看板可见、不进小程序 -->
+            <el-tag v-if="isTempSeat(row)" type="warning" size="small" effect="plain" class="ml-1">
+              {{ t('gzBeanSeat.tempTag') }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column :label="t('gzBeanSeat.colTableNo')" prop="tableNo" width="110" align="center">
@@ -141,12 +140,7 @@
       <el-form ref="formRef" :model="form" :rules="rules" label-width="120px">
         <el-form-item :label="t('gzBeanSeat.colSeatTypeConfig')" prop="seatTypeConfigId">
           <el-select v-model="form.seatTypeConfigId" filterable :placeholder="t('gzBeanSeat.seatTypeConfigPlaceholder')" style="width: 100%">
-            <el-option
-              v-for="c in configOptions"
-              :key="c.id"
-              :label="`${c.name}（${c.bookMode === 'seat' ? t('gzBeanSeat.bookModeSeat') : t('gzBeanSeat.bookModeWhole')}）`"
-              :value="c.id"
-            />
+            <el-option v-for="c in configOptions" :key="c.id" :label="configOptionLabel(c)" :value="c.id" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('gzBeanSeat.colSeatNo')" prop="seatNo">
@@ -192,12 +186,7 @@
         </el-form-item>
         <el-form-item v-if="bgForm.scope === 'one'" :label="t('gzBeanSeat.colSeatTypeConfig')">
           <el-select v-model="bgForm.seatTypeConfigId" filterable :placeholder="t('gzBeanSeat.seatTypeConfigPlaceholder')" style="width: 100%">
-            <el-option
-              v-for="c in configOptions"
-              :key="c.id"
-              :label="`${c.name}（${c.bookMode === 'seat' ? t('gzBeanSeat.bookModeSeat') : t('gzBeanSeat.bookModeWhole')}）`"
-              :value="c.id"
-            />
+            <el-option v-for="c in configOptions" :key="c.id" :label="configOptionLabel(c)" :value="c.id" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('gzBeanSeat.bgPrefix')">
@@ -241,6 +230,20 @@ const submitting = ref(false);
 const storeOptions = ref<GzBeanStoreVO[]>([]);
 const currentStoreId = ref<number | null>(null);
 const configOptions = ref<GzBeanSeatTypeConfigVO[]>([]);
+/** configId → 桌型（列表行判临时桌用；configOptions 该页已全量加载，无需额外请求） */
+const configMap = computed(() => new Map(configOptions.value.map((c) => [String(c.id), c])));
+
+/** 桌型下拉 label：临时桌加「（临时）」后缀（GZ-BEAN-054），店员选座时一眼分辨 */
+function configOptionLabel(c: GzBeanSeatTypeConfigVO): string {
+  const mode = c.bookMode === 'seat' ? t('gzBeanSeat.bookModeSeat') : t('gzBeanSeat.bookModeWhole');
+  const suffix = c.mpVisible === 0 ? `（${t('gzBeanSeat.tempTag')}）` : '';
+  return `${c.name}（${mode}）${suffix}`;
+}
+
+/** 座位所属桌型是否临时桌（GZ-BEAN-054） */
+function isTempSeat(row: GzBeanSeatVO): boolean {
+  return configMap.value.get(String(row.seatTypeConfigId))?.mpVisible === 0;
+}
 
 const rows = ref<GzBeanSeatVO[]>([]);
 const total = ref(0);
@@ -497,8 +500,14 @@ async function handleBatchGenerate() {
       seatTypeConfigId: bgForm.scope === 'one' ? bgForm.seatTypeConfigId : null,
       prefix: bgForm.prefix || null
     });
-    const generated = (resp as any).data ?? 0;
-    ElMessage.success(t('gzBeanSeat.batchGenerateSuccess', { count: generated }));
+    const result = resp.data;
+    // 前缀与已有座位跨桌型撞号 → created 可能是 0（seat_no 全店唯一）。不提示的话店员只看到
+    // 「点了生成但什么都没多」，完全不知道是前缀撞了（GZ-BEAN-054）。
+    if (result?.hasConflict) {
+      ElMessage.warning(t('gzBeanSeat.batchGenerateConflict', { nos: (result.conflictSeatNos || []).join('、') }));
+    } else {
+      ElMessage.success(t('gzBeanSeat.batchGenerateSuccess', { count: result?.created ?? 0 }));
+    }
     bgVisible.value = false;
     await loadList();
   } catch (e) {
