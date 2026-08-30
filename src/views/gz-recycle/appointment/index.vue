@@ -3,6 +3,81 @@
     <!-- 回收看板周视图（GZ-RECYCLE-011，ADR-0021 §3）：门店 × 周切换的时段格矩阵，占用/改期/释放都在格上做 -->
     <WeekBoard ref="weekBoardRef" :store-options="storeOptions" :status-dict="gz_recycle_status" @detail="onBoardDetail" />
 
+    <!-- 过期未核销单：批量筛选 + 释放（GZ-RECYCLE-017，甲方 8.28） -->
+    <el-card v-loading="expiredLoading" shadow="never" class="mb-2">
+      <template #header>
+        <div class="flex items-center justify-between">
+          <span class="text-base font-medium">
+            {{ t('gzRecycleAppointment.expiredTitle') }}
+            <el-tag v-if="expiredList.length" type="warning" size="small" class="ml-2">{{ expiredList.length }}</el-tag>
+          </span>
+          <span class="ticket-tag">GZ-RECYCLE-017</span>
+        </div>
+      </template>
+
+      <el-alert :title="t('gzRecycleAppointment.expiredAlertDesc')" type="warning" :closable="false" show-icon class="mb-3" />
+
+      <el-form :model="expiredQuery" inline @submit.prevent="loadExpired">
+        <el-form-item :label="t('gzRecycleAppointment.store')">
+          <el-select v-model="expiredQuery.storeId" :placeholder="t('gzRecycleAppointment.storePlaceholder')" clearable style="width: 160px">
+            <el-option v-for="s in storeOptions" :key="s.id" :label="s.name" :value="s.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('gzRecycleAppointment.apptDate')">
+          <el-date-picker
+            v-model="expiredDateRange"
+            type="daterange"
+            value-format="YYYY-MM-DD"
+            :start-placeholder="t('gzRecycleAppointment.dateRangeStart')"
+            :end-placeholder="t('gzRecycleAppointment.dateRangeEnd')"
+            style="width: 240px"
+          />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="loadExpired">{{ t('gzRecycleAppointment.search') }}</el-button>
+          <el-button @click="resetExpiredQuery">{{ t('gzRecycleAppointment.reset') }}</el-button>
+          <el-button v-hasPermi="['gz:recycle:appointment:hold']" type="danger" plain :disabled="!expiredSelected.length" @click="handleBatchRelease">
+            {{ t('gzRecycleAppointment.expiredRelease') }}
+            <template v-if="expiredSelected.length">（{{ expiredSelected.length }}）</template>
+          </el-button>
+        </el-form-item>
+      </el-form>
+
+      <el-table
+        :data="expiredList"
+        border
+        size="small"
+        :empty-text="t('gzRecycleAppointment.expiredEmpty')"
+        @selection-change="(rows: GzRecycleAppointmentVO[]) => (expiredSelected = rows)"
+      >
+        <el-table-column type="selection" width="46" />
+        <el-table-column :label="t('gzRecycleAppointment.colAppointmentNo')" prop="appointmentNo" min-width="180" show-overflow-tooltip />
+        <el-table-column :label="t('gzRecycleAppointment.colStore')" prop="storeName" min-width="130" show-overflow-tooltip />
+        <el-table-column :label="t('gzRecycleAppointment.colQtyBucket')" min-width="110">
+          <template #default="{ row }">{{ row.product?.qtyBucketLabel || '-' }}</template>
+        </el-table-column>
+        <el-table-column :label="t('gzRecycleAppointment.colApptDate')" prop="apptDate" width="120" />
+        <el-table-column :label="t('gzRecycleAppointment.colSlot')" width="130" align="center">
+          <template #default="{ row }">
+            <span v-if="row.slotStart">{{ row.slotStart?.slice(0, 5) }} - {{ row.slotEnd?.slice(0, 5) }}</span>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('gzRecycleAppointment.colExpiredDays')" width="110" align="center">
+          <template #default="{ row }">
+            <el-tag type="danger" size="small" effect="plain">
+              {{ t('gzRecycleAppointment.expiredDaysLabel', { n: expiredDays(row.apptDate) }) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('gzRecycleAppointment.colAction')" width="90" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="openDetail(row)">{{ t('gzRecycleAppointment.detail') }}</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
     <!-- 回收记录：按 时间 / 点数 / 金额 / 门店 / 状态 / 单号 筛选（GZ-RECYCLE-008） -->
     <el-card v-loading="loading" shadow="never">
       <template #header>
@@ -259,6 +334,8 @@ import {
   getAppointment,
   retryAppointmentPayout,
   verifyAppointment,
+  listExpiredUnsettled,
+  batchReleaseExpired,
   type GzRecycleAppointmentVO,
   type GzRecycleAppointmentQuery,
   type RecycleProductVO
@@ -501,9 +578,81 @@ async function onRetry(row: GzRecycleAppointmentVO) {
   }
 }
 
+/* ============ GZ-RECYCLE-017 过期未核销单：批量筛选 + 释放（甲方 8.28） ============ */
+
+const expiredLoading = ref(false);
+const expiredList = ref<GzRecycleAppointmentVO[]>([]);
+const expiredSelected = ref<GzRecycleAppointmentVO[]>([]);
+const expiredQuery = reactive<{ storeId?: string | number; dateFrom?: string; dateTo?: string }>({});
+const expiredDateRange = ref<[string, string] | null>(null);
+
+/** 已过期天数（到店日距今），给店员一个「积压多久了」的直观量。 */
+function expiredDays(apptDate: string): number {
+  const d = new Date(`${apptDate}T00:00:00`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.round((today.getTime() - d.getTime()) / 86400000));
+}
+
+async function loadExpired() {
+  expiredLoading.value = true;
+  try {
+    const [dateFrom, dateTo] = expiredDateRange.value ?? [undefined, undefined];
+    const res = await listExpiredUnsettled({ storeId: expiredQuery.storeId, dateFrom, dateTo });
+    expiredList.value = res.data ?? [];
+    expiredSelected.value = [];
+  } catch {
+    expiredList.value = [];
+  } finally {
+    expiredLoading.value = false;
+  }
+}
+
+function resetExpiredQuery() {
+  expiredQuery.storeId = undefined;
+  expiredDateRange.value = null;
+  loadExpired();
+}
+
+async function handleBatchRelease() {
+  const rows = expiredSelected.value;
+  if (!rows.length) {
+    ElMessage.warning(t('gzRecycleAppointment.expiredNoSelection'));
+    return;
+  }
+  try {
+    await ElMessageBox.confirm(t('gzRecycleAppointment.expiredReleaseConfirm', { n: rows.length }), t('gzRecycleAppointment.expiredReleaseTitle'), {
+      type: 'warning',
+      confirmButtonText: t('gzRecycleAppointment.expiredReleaseOk'),
+      cancelButtonText: t('gzRecycleAppointment.cancel')
+    });
+  } catch {
+    return; // 用户取消
+  }
+  try {
+    const res = await batchReleaseExpired(rows.map((r) => r.id));
+    const { succeeded, skipped, failed } = res.data;
+    // 三元计数如实回显：skipped/failed 不为 0 时不能只说「成功」——那会掩盖并发被核对 / DB 异常
+    if (failed > 0) {
+      ElMessage.warning(t('gzRecycleAppointment.expiredReleasePartial', { succeeded, skipped, failed }));
+    } else if (skipped > 0) {
+      ElMessage.warning(t('gzRecycleAppointment.expiredReleaseSkipped', { succeeded, skipped }));
+    } else {
+      ElMessage.success(t('gzRecycleAppointment.expiredReleaseOkHint', { n: succeeded }));
+    }
+    await loadExpired();
+    // 释放后主列表状态变了（submitted → no_show），周看板占用格也少了 → 一起刷
+    loadList();
+    weekBoardRef.value?.reload?.();
+  } catch {
+    ElMessage.error(t('gzRecycleAppointment.opFailed'));
+  }
+}
+
 loadStores();
 loadQtyRanges();
 loadList();
+loadExpired();
 </script>
 
 <style scoped>

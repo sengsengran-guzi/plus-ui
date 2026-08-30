@@ -270,3 +270,37 @@ export function rescheduleAppointment(id: string, data: { apptDate: string; slot
 export function cancelCustomerAppointment(id: string): AxiosPromise<GzRecycleAppointmentVO> {
   return request({ url: `/system/gz/recycle/appointment/${id}/cancel`, method: 'post' });
 }
+
+/**
+ * 过期未核销单列表（GZ-RECYCLE-017，甲方 8.28）：到店日已过、仍停在 submitted 的顾客单。
+ *
+ * 三个参数全可选（都不传 = 全门店全部历史积压）。上界后端硬夹到「昨天」——
+ * 当天的单当天仍可到店核对，绝不进候选。
+ */
+export function listExpiredUnsettled(params: {
+  storeId?: string | number;
+  dateFrom?: string;
+  dateTo?: string;
+}): AxiosPromise<GzRecycleAppointmentVO[]> {
+  return request({ url: '/system/gz/recycle/appointment/expired-unsettled', method: 'get', params });
+}
+
+/** 批量释放结果（三元计数，对齐拼豆 batchSettle 口径） */
+export interface RecycleBatchReleaseResult {
+  /** 成功标 no_show 的条数 */
+  succeeded: number;
+  /** 幂等跳过（已非 submitted —— 并发被核对 / 重复点击） */
+  skipped: number;
+  /** 异常失败（后端已记 warn 日志） */
+  failed: number;
+}
+
+/**
+ * 批量释放过期未核销单（GZ-RECYCLE-017）：submitted → no_show。
+ *
+ * 释放解决的真问题：一人一单守卫按 submitted 计数且**不带日期条件**，顾客一张一个月前的
+ * 爽约单会让他永久约不了下一单（4127）。标 no_show 即解封。
+ */
+export function batchReleaseExpired(ids: string[]): AxiosPromise<RecycleBatchReleaseResult> {
+  return request({ url: '/system/gz/recycle/appointment/batch-release-expired', method: 'post', data: { ids } });
+}
