@@ -607,11 +607,6 @@ export default {
       'Quantity x seats per table = number of timing cells on the board (1 table x 4 seats -> quantity 1 / seats per table 4 / mode "by seat" -> 4 cells)',
     nameRevenueHint: 'Revenue reports break down by seat type name, so use a readable name (e.g. Temp 4-seat table)',
     dayPassTempHint: 'Temp tables do not support day passes (day pass applies only to types open to the mini program)',
-    genSeatsTitle: 'Generate timing cells',
-    genSeatsTip: 'Temp table created. Generate {count} timing cells now? Enter a code prefix:',
-    genSeatsPrefixRule: 'Prefix must be 1-8 characters',
-    genSeatsSuccess: 'Generated {count} timing cells',
-    genSeatsConflict: 'Some codes are already used by other seat types ({nos}). Pick a different prefix and retry.',
     dayPassOff: 'Disabled',
     delConfirm: 'Delete "{type}"? (soft delete; existing bookings unaffected; its weekday prices are cleared)',
     addSuccess: 'Added',
@@ -633,23 +628,13 @@ export default {
     colDayPassPrice: 'Day Pass Base Price',
     colEnabled: 'Enabled',
     colCells: 'Timer cells',
-    cellsTipBase: 'Board has {board} timer cells; config (quantity x seats per table) expects {expected}.',
-    cellsTipShort:
-      'Fewer cells than configured: the mini program sells {expected} per hour but the shop can only seat this many - a paid customer may arrive with no seat to assign.',
-    cellsTipShortTemp: 'Fewer cells than configured: staff can only time this many people on the board.',
-    cellsTipExtra:
-      'More cells than configured: the mini program only sells up to the configured quantity, so the extra cells can never be booked online - walk-in only.',
-    cellsTipExtraTemp:
-      'More cells than configured: temp tables are not on the mini program, so the extra cells still work for walk-ins; they just do not match the configured quantity.',
     cellsTipDisabled: '{disabled} of them are disabled and do not appear on the board.',
-    syncCells: 'Sync cells',
-    syncConfirmTitle: 'Sync timer cells',
-    syncConfirmTip: 'Board has {board} timer cells, config expects {expected}. Align them now?',
-    syncPruneTip:
-      'Board has {board} timer cells, config expects {expected} - {n} extra will be removed. Seats still holding bookings are kept. Continue?',
-    syncConfirmOk: 'Sync now',
-    syncConfirmLater: 'Later',
-    syncDone: 'Timer cells synced',
+    cellsTipOk: 'This table type occupies {board} cells on the in-store timer board (aligned automatically on save; no manual upkeep).',
+    cellsTipStale:
+      'The board currently has {board} cells; per the current quantity x seats-per-table it should be {expected}. Saving this table type once will align it.',
+    reduceConfirmTitle: 'Confirm seat reduction',
+    reduceConfirmTip:
+      'After saving, the in-store timer board goes from {current} cells down to {next} ({n} removed). If any of them still hold bookings, the save is rejected and you will be asked to reassign first. Continue?',
     colSortNo: 'Sort',
     colCreateTime: 'Create Time',
     colAction: 'Action',

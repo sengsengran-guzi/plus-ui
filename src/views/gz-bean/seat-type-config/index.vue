@@ -60,14 +60,15 @@
         <el-table-column :label="t('gzBeanSeatTypeConfig.colCapacity')" prop="capacity" width="100" align="center" />
         <el-table-column :label="t('gzBeanSeatTypeConfig.colQuantity')" prop="quantity" width="90" align="center" />
         <!--
-          计时格列（GZ-BEAN-055）：把「配额 vs 实际座位」的错配摆到台面上。
-          改数量不会动座位表、批量生成又只增不减 → 两个数会自己漂开，过去只能靠翻看板才发现。
+          看板格数（GZ-BEAN-055）：只读派生值，= 该桌型在店内计时看板上占几个格子。
+          保存桌型时座位会自动对齐到这个数，所以正常情况下它恒等于「数量 × 每桌座位数」，
+          店员不需要理解也不需要维护它 —— 放这列只是让人一眼确认「我配的桌子在看板上长这样」。
         -->
-        <el-table-column :label="t('gzBeanSeatTypeConfig.colCells')" width="120" align="center">
+        <el-table-column :label="t('gzBeanSeatTypeConfig.colCells')" width="110" align="center">
           <template #default="{ row }">
             <el-tooltip :content="cellsTooltip(row)" placement="top">
-              <span :class="{ 'cells-mismatch': isCellsMismatch(row) }">
-                {{ row.boardCells ?? '-' }} / {{ row.expectedCells ?? '-' }}
+              <span :class="{ 'cells-stale': isCellsMismatch(row) }">
+                {{ row.boardCells ?? '-' }}
                 <el-icon v-if="isCellsMismatch(row)"><WarningFilled /></el-icon>
               </span>
             </el-tooltip>
@@ -100,19 +101,8 @@
           </template>
         </el-table-column>
         <el-table-column :label="t('gzBeanSeatTypeConfig.colSortNo')" prop="sortNo" width="70" align="center" />
-        <el-table-column :label="t('gzBeanSeatTypeConfig.colAction')" fixed="right" width="260" align="center">
+        <el-table-column :label="t('gzBeanSeatTypeConfig.colAction')" fixed="right" width="200" align="center">
           <template #default="{ row }">
-            <!-- 同步：错配时才出现（正常行不加噪音）。补齐缺的 + 移除多余的，不用填前缀（GZ-BEAN-055） -->
-            <el-button
-              v-if="isCellsMismatch(row)"
-              v-hasPermi="['gz:bean:seat:batchGenerate']"
-              type="warning"
-              link
-              size="small"
-              @click="handleSyncCells(row)"
-            >
-              {{ t('gzBeanSeatTypeConfig.syncCells') }}
-            </el-button>
             <!-- 临时桌不进小程序、金额由店员 walk-in 现场填 → 格价表对它无意义（GZ-BEAN-054） -->
             <el-button
               v-if="!isTempType(row)"
@@ -334,7 +324,6 @@ import {
   type GzBeanDayPassPriceForm
 } from '@/api/gz-bean/seatTypeConfig';
 import { listGzBeanSlotByStore, type GzBeanTimeSlotTemplateVO } from '@/api/gz-bean/slot';
-import { batchGenerateGzBeanSeat, syncGzBeanSeatUnits } from '@/api/gz-bean/seat';
 
 const { t } = useI18n();
 
@@ -390,28 +379,28 @@ function isTempType(row: GzBeanSeatTypeConfigVO): boolean {
 }
 
 /**
- * 计时格错配判定（GZ-BEAN-055）：看板实际格数 ≠ 按配置应有的格数。
+ * 历史遗留错位判定（GZ-BEAN-055）：看板实际格数 ≠ 按配置应有的格数。
  *
- * 两个数本该恒等（ADR-0016 取舍 C：配额分母必须 = 可分物理座位数），但改「数量」不动座位表、
- * 批量生成又只增不减，所以差额会自己长出来。老数据没有这两个派生字段时不误报。
+ * 保存桌型时后端会自动对齐这两个数，所以**新数据不会出现这种情况**。
+ * 会命中的只有两类：① 本次改动上线前就存在的历史错位；② 有人直接去「座位单元」页删/停用了座位。
+ * 两者都会在下次保存该桌型时自动修好 —— tooltip 就是这么写的，不给按钮、不让店员做额外动作。
  */
 function isCellsMismatch(row: GzBeanSeatTypeConfigVO): boolean {
   if (row.boardCells == null || row.expectedCells == null) return false;
   return row.boardCells !== row.expectedCells;
 }
 
-/** 计时格列的 tooltip：把差额的方向和后果说清楚，不然店员只看到两个数不知道该怎么办 */
+/** 看板格数的 tooltip：正常情况只说这数是什么；错位时说清楚怎么自愈，不要求店员理解「配额」 */
 function cellsTooltip(row: GzBeanSeatTypeConfigVO): string {
   const board = row.boardCells ?? 0;
   const expected = row.expectedCells ?? 0;
   const disabled = row.disabledCells ?? 0;
-  const parts: string[] = [t('gzBeanSeatTypeConfig.cellsTipBase', { board, expected })];
-  if (board < expected) {
-    // 临时桌不上小程序，所以少格子只影响店员能计时几个人，不涉及卖超
-    parts.push(isTempType(row) ? t('gzBeanSeatTypeConfig.cellsTipShortTemp') : t('gzBeanSeatTypeConfig.cellsTipShort'));
-  } else if (board > expected) {
-    parts.push(isTempType(row) ? t('gzBeanSeatTypeConfig.cellsTipExtraTemp') : t('gzBeanSeatTypeConfig.cellsTipExtra'));
+  if (!isCellsMismatch(row)) {
+    return disabled > 0
+      ? `${t('gzBeanSeatTypeConfig.cellsTipOk', { board })} ${t('gzBeanSeatTypeConfig.cellsTipDisabled', { disabled })}`
+      : t('gzBeanSeatTypeConfig.cellsTipOk', { board });
   }
+  const parts = [t('gzBeanSeatTypeConfig.cellsTipStale', { board, expected })];
   if (disabled > 0) {
     parts.push(t('gzBeanSeatTypeConfig.cellsTipDisabled', { disabled }));
   }
@@ -716,6 +705,10 @@ async function handleSubmit() {
       remark: form.remark
     };
     const isAdd = formMode.value === 'add';
+    if (!isAdd && !(await confirmCellReduction())) {
+      submitting.value = false;
+      return;
+    }
     if (isAdd) {
       await addGzBeanSeatTypeConfig(payload);
       ElMessage.success(t('gzBeanSeatTypeConfig.addSuccess'));
@@ -723,15 +716,8 @@ async function handleSubmit() {
       await updateGzBeanSeatTypeConfig(payload);
       ElMessage.success(t('gzBeanSeatTypeConfig.editSuccess'));
     }
-    const justCreatedTemp = isAdd && form.mpVisible === 0 && (form.quantity || 0) > 0;
-    const editedId = isAdd ? null : form.id;
     formVisible.value = false;
     await loadList();
-    if (justCreatedTemp) {
-      await offerGenerateSeats(payload.name);
-    } else if (editedId != null) {
-      await offerSyncAfterEdit(editedId);
-    }
   } catch (e) {
     console.error('[gz-bean-seat-type-config] submit failed', e);
   } finally {
@@ -740,113 +726,32 @@ async function handleSubmit() {
 }
 
 /**
- * 编辑保存后，若计时格与新配置对不上就地问一句要不要同步（GZ-BEAN-055）。
+ * 会减少看板格子时先确认一次（GZ-BEAN-055）。
  *
- * **这是「改了数量但看板没多格子」的直接修复**：原来只有新建临时桌才弹生成确认（isAdd 分支），
- * 编辑路径完全没有出口 —— 店员把数量从 1 改成 2，配额立刻变成 2 而座位表一动不动，
- * 看板还是 1 桌的格子，界面上没有任何地方提示这件事。
+ * 保存桌型会自动把座位对齐到新数量 —— 加格子无感，**减格子是破坏性的**（看板上真的会少几个格），
+ * 所以只在减的时候拦一下。挂着预约的座位后端会拒绝并整单回滚，这里不用重复判断。
  *
- * 判定用 loadList() 之后的**服务端真实值**，不用表单里的数：停用座位、跨桌型撞号都会让
- * 「应有」和「实际」以表单看不到的方式对不上。
+ * @returns true=继续保存
  */
-async function offerSyncAfterEdit(configId: number) {
-  const row = list.value.find((r) => r.id === configId);
-  if (!row || !isCellsMismatch(row)) return;
+async function confirmCellReduction(): Promise<boolean> {
+  const row = list.value.find((r) => r.id === form.id);
+  if (!row) return true;
+  const current = row.boardCells ?? 0;
+  const next = form.bookMode === 'seat' ? (form.quantity || 0) * Math.max(form.capacity || 1, 1) : form.quantity || 0;
+  if (next >= current) return true;
   try {
     await ElMessageBox.confirm(
-      t('gzBeanSeatTypeConfig.syncConfirmTip', { board: row.boardCells ?? 0, expected: row.expectedCells ?? 0 }),
-      t('gzBeanSeatTypeConfig.syncConfirmTitle'),
-      {
-        confirmButtonText: t('gzBeanSeatTypeConfig.syncConfirmOk'),
-        cancelButtonText: t('gzBeanSeatTypeConfig.syncConfirmLater'),
-        type: 'warning'
-      }
-    );
-  } catch {
-    return; // 选了「稍后」——列表里的警示徽标会一直挂着，不会丢失这件事
-  }
-  await runSyncCells(row);
-}
-
-/** 列表「同步计时格」按钮：多余座位会被移除，属破坏性操作 → 先确认再执行 */
-async function handleSyncCells(row: GzBeanSeatTypeConfigVO) {
-  const board = row.boardCells ?? 0;
-  const expected = row.expectedCells ?? 0;
-  try {
-    await ElMessageBox.confirm(
-      board > expected
-        ? t('gzBeanSeatTypeConfig.syncPruneTip', { n: board - expected, board, expected })
-        : t('gzBeanSeatTypeConfig.syncConfirmTip', { board, expected }),
-      t('gzBeanSeatTypeConfig.syncConfirmTitle'),
-      {
-        confirmButtonText: t('gzBeanSeatTypeConfig.syncConfirmOk'),
-        cancelButtonText: t('gzBeanSeatTypeConfig.cancel'),
-        type: 'warning'
-      }
-    );
-  } catch {
-    return;
-  }
-  await runSyncCells(row);
-}
-
-/**
- * 执行同步并如实播报结果。
- *
- * 后端把「删了哪几个 / 哪几个因挂着预约没敢删 / 撞号没建成的」都拼进了 msg，这里直接用它 ——
- * 同步会软删座位，只说一句「成功」店员无法判断这是不是他要的结果。
- * 有 blocked（挂预约没删掉）时用 warning 而非 success：这次同步**没有完全达成**，别让人以为完事了。
- */
-async function runSyncCells(row: GzBeanSeatTypeConfigVO) {
-  try {
-    const res = await syncGzBeanSeatUnits(row.id);
-    const data = res.data;
-    const incomplete = (data?.blockedSeatNos?.length ?? 0) > 0 || (data?.conflictSeatNos?.length ?? 0) > 0;
-    const msg = (res as unknown as { msg?: string }).msg || t('gzBeanSeatTypeConfig.syncDone');
-    if (incomplete) {
-      ElMessage({ type: 'warning', message: msg, duration: 8000, showClose: true });
-    } else {
-      ElMessage.success(msg);
-    }
-    await loadList();
-  } catch (e) {
-    console.error('[gz-bean-seat-type-config] sync failed', e);
-  }
-}
-
-/**
- * 新建临时桌后直接问「要不要现在生成计时格」（GZ-BEAN-054）。
- *
- * 把「建桌型 → 切 tab → 找桌型 → 批量生成 → 填前缀」5 步压成 1 次确认 —— 甲方周末加桌是高频动作。
- * 默认前缀用 T + 本店已有临时桌序号：后端 derivePrefix 对纯中文名恒回退 "X"，多建两个临时桌必撞号。
- */
-async function offerGenerateSeats(name: string) {
-  const created = list.value.find((r) => r.name === name);
-  if (!created) return;
-  const seatCount = created.bookMode === 'seat' ? (created.quantity || 0) * (created.capacity || 1) : created.quantity || 0;
-  const defaultPrefix = `T${list.value.filter(isTempType).length}`;
-  try {
-    const { value: prefix } = await ElMessageBox.prompt(
-      t('gzBeanSeatTypeConfig.genSeatsTip', { count: seatCount }),
-      t('gzBeanSeatTypeConfig.genSeatsTitle'),
+      t('gzBeanSeatTypeConfig.reduceConfirmTip', { n: current - next, current, next }),
+      t('gzBeanSeatTypeConfig.reduceConfirmTitle'),
       {
         confirmButtonText: t('gzBeanSeatTypeConfig.confirm'),
         cancelButtonText: t('gzBeanSeatTypeConfig.cancel'),
-        inputValue: defaultPrefix,
-        inputPattern: /^.{1,8}$/,
-        inputErrorMessage: t('gzBeanSeatTypeConfig.genSeatsPrefixRule')
+        type: 'warning'
       }
     );
-    const res = await batchGenerateGzBeanSeat({ storeId: created.storeId, seatTypeConfigId: created.id, prefix });
-    // 前缀与已有座位跨桌型撞号时 created 可能是 0 —— 必须显式 warning，否则店员只看到「什么都没多」
-    if (res.data?.hasConflict) {
-      ElMessage.warning(t('gzBeanSeatTypeConfig.genSeatsConflict', { nos: (res.data.conflictSeatNos || []).join('、') }));
-    } else {
-      ElMessage.success(t('gzBeanSeatTypeConfig.genSeatsSuccess', { count: res.data?.created ?? 0 }));
-    }
-  } catch (e) {
-    if (e === 'cancel' || e === 'close') return; // 用户主动取消，不是错误
-    console.error('[gz-bean-seat-type-config] batchGenerate failed', e);
+    return true;
+  } catch {
+    return false;
   }
 }
 
