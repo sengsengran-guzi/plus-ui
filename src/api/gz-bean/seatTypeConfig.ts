@@ -45,6 +45,15 @@ export interface GzBeanSeatTypeConfigVO {
   createTime?: string;
   /** 备注 */
   remark?: string | null;
+
+  // ===== 派生字段（GZ-BEAN-055），让「配额 vs 计时格」错配在后台可见 =====
+
+  /** 按配置应有的计时格数（整桌=数量 / 按座=数量×每桌座位数）；也是小程序每个 1h 格能卖的数量 */
+  expectedCells?: number;
+  /** 看板上实际有几个计时格（该桌型启用且未删的座位单元数）。与 expectedCells 不等 = 错配 */
+  boardCells?: number;
+  /** 占着编号但已停用的座位数 —— 「同步后仍少于应有」的合法解释 */
+  disabledCells?: number;
 }
 
 /** 新增 / 编辑 BO（与 GzBeanSeatTypeConfigBo.java 对齐；seatType code 由后端生成不传） */

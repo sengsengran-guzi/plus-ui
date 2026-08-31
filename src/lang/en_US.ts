@@ -632,6 +632,24 @@ export default {
     colDayPassQuota: 'Day Pass Quota',
     colDayPassPrice: 'Day Pass Base Price',
     colEnabled: 'Enabled',
+    colCells: 'Timer cells',
+    cellsTipBase: 'Board has {board} timer cells; config (quantity x seats per table) expects {expected}.',
+    cellsTipShort:
+      'Fewer cells than configured: the mini program sells {expected} per hour but the shop can only seat this many - a paid customer may arrive with no seat to assign.',
+    cellsTipShortTemp: 'Fewer cells than configured: staff can only time this many people on the board.',
+    cellsTipExtra:
+      'More cells than configured: the mini program only sells up to the configured quantity, so the extra cells can never be booked online - walk-in only.',
+    cellsTipExtraTemp:
+      'More cells than configured: temp tables are not on the mini program, so the extra cells still work for walk-ins; they just do not match the configured quantity.',
+    cellsTipDisabled: '{disabled} of them are disabled and do not appear on the board.',
+    syncCells: 'Sync cells',
+    syncConfirmTitle: 'Sync timer cells',
+    syncConfirmTip: 'Board has {board} timer cells, config expects {expected}. Align them now?',
+    syncPruneTip:
+      'Board has {board} timer cells, config expects {expected} - {n} extra will be removed. Seats still holding bookings are kept. Continue?',
+    syncConfirmOk: 'Sync now',
+    syncConfirmLater: 'Later',
+    syncDone: 'Timer cells synced',
     colSortNo: 'Sort',
     colCreateTime: 'Create Time',
     colAction: 'Action',

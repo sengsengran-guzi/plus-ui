@@ -166,3 +166,45 @@ export function batchGenerateGzBeanSeat(data: GzBeanSeatBatchGenerateForm): Axio
     data
   });
 }
+
+/**
+ * 座位单元同步结果（与 GzBeanSeatSyncResultVO.java 对齐，GZ-BEAN-055）。
+ *
+ * 桌型配置的「数量 × 每桌座位数」是小程序售卖配额分母，而看板计时格是 gz_bean_seat 的实际行数。
+ * 改数量不动座位表、批量生成又只增不减 → 两个数会朝两个方向漂。同步把它们重新对齐。
+ */
+export interface GzBeanSeatSyncResultVO {
+  /** 按配置应有的计时格数（整桌=数量 / 按座=数量×每桌座位数） */
+  expected: number;
+  /** 同步前实际座位单元数（含已停用） */
+  before: number;
+  /** 同步后实际座位单元数 */
+  after: number;
+  /** 新建 + 复活的数量 */
+  created: number;
+  /** 本次移除的多余座位数 */
+  pruned: number;
+  /** 本次移除的座位编号 */
+  prunedSeatNos: string[];
+  /** 多余但仍挂着预约、**没敢删**的座位编号（删了那笔已付款单会从看板上消失） */
+  blockedSeatNos: string[];
+  /** 编号被其它桌型占用、没能生成的编号 */
+  conflictSeatNos: string[];
+  /** 本次补齐使用的编号前缀（后端从已有座位反推） */
+  prefix: string;
+  /** 同步后仍处于停用状态的座位数（占编号但不上看板） */
+  disabled: number;
+}
+
+/**
+ * POST /system/gz/bean/seat/sync/{seatTypeConfigId} — 把座位单元对齐到桌型配置的数量。
+ *
+ * 与 batchGenerate 的区别：不用填前缀（后端从已有座位反推，接着往下编）且**会做减法**。
+ * 多余座位若还挂着今天及以后的活跃单则保留不删，在 blockedSeatNos 里回报。
+ */
+export function syncGzBeanSeatUnits(seatTypeConfigId: number | string): AxiosPromise<GzBeanSeatSyncResultVO> {
+  return request({
+    url: `/system/gz/bean/seat/sync/${seatTypeConfigId}`,
+    method: 'post'
+  });
+}
