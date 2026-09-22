@@ -247,7 +247,7 @@ function windowLabel(row: GzBeanFreePromoVO): string {
 // ============ 列表 ============
 async function loadStoreOptions() {
   try {
-    const resp = await getGzBeanStoreOptions();
+    const resp = await getGzBeanStoreOptions('pindou');
     const r = resp as any;
     storeOptions.value = (r.data || r || []) as GzBeanStoreVO[];
   } catch (e) {

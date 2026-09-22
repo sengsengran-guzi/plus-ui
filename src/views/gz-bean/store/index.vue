@@ -24,17 +24,16 @@
         <el-form-item :label="t('gzBeanStore.name')">
           <el-input v-model="query.name" :placeholder="t('gzBeanStore.namePlaceholder')" clearable style="width: 200px" @keyup.enter="handleQuery" />
         </el-form-item>
-        <el-form-item :label="t('gzBeanStore.type')">
-          <el-select v-model="query.type" :placeholder="t('gzBeanStore.typePlaceholder')" clearable style="width: 160px">
-            <el-option :label="t('gzBeanStore.typePindou')" value="pindou" />
-            <el-option :label="t('gzBeanStore.typeGuzi')" value="guzi" />
-          </el-select>
-        </el-form-item>
         <el-form-item :label="t('gzBeanStore.status')">
           <el-select v-model="query.status" :placeholder="t('gzBeanStore.statusPlaceholder')" clearable style="width: 160px">
             <el-option :label="t('gzBeanStore.statusOpen')" value="open" />
             <el-option :label="t('gzBeanStore.statusClosed')" value="closed" />
             <el-option :label="t('gzBeanStore.statusMaintenance')" value="maintenance" />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('gzBeanStore.bizScope')">
+          <el-select v-model="query.bizScope" :placeholder="t('gzBeanStore.bizScopePlaceholder')" clearable style="width: 160px">
+            <el-option v-for="sc in BIZ_SCOPES" :key="sc" :label="bizScopeLabel(sc)" :value="sc" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -70,10 +69,11 @@
           </template>
         </el-table-column>
         <el-table-column :label="t('gzBeanStore.colName')" prop="name" min-width="160" show-overflow-tooltip />
-        <el-table-column :label="t('gzBeanStore.colType')" prop="type" width="100" align="center">
+        <!-- 适用业务（GZ-BEAN-053）：回收与拼豆是两套门店，列表上一眼要能分清，否则还会配混 -->
+        <el-table-column :label="t('gzBeanStore.bizScope')" width="150" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.type === 'pindou' ? 'success' : 'info'" size="small">
-              {{ row.type === 'pindou' ? t('gzBeanStore.typePindou') : t('gzBeanStore.typeGuzi') }}
+            <el-tag v-for="sc in parseBizScope(row.bizScope)" :key="sc" :type="sc === 'recycle' ? 'warning' : 'success'" size="small" class="mr-1">
+              {{ bizScopeLabel(sc) }}
             </el-tag>
           </template>
         </el-table-column>
@@ -112,21 +112,20 @@
     <!-- 新增 / 编辑弹窗 -->
     <el-dialog v-model="formVisible" :title="formTitle" width="640px" @close="resetForm">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="120px">
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item :label="t('gzBeanStore.storeNo')" prop="storeNo">
-              <el-input v-model="form.storeNo" :disabled="formMode === 'edit'" maxlength="32" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item :label="t('gzBeanStore.type')" prop="type">
-              <el-select v-model="form.type" style="width: 100%">
-                <el-option :label="t('gzBeanStore.typePindou')" value="pindou" />
-                <el-option :label="t('gzBeanStore.typeGuzi')" value="guzi" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
+        <!-- 业务码由后端自动生成（GZ-BEAN-054，MD + 3 位流水）：新增时不让填，编辑时只读展示。
+             「类型」字段已从界面移除：门店开哪条业务线由下方「适用业务」决定，type 只是 v2 预留的谷子店业态占位，
+             放在界面上会被误选成「谷子店」，而误选的门店会在小程序上消失。 -->
+        <el-form-item v-if="formMode === 'edit'" :label="t('gzBeanStore.storeNo')">
+          <el-input :model-value="form.storeNo" disabled />
+        </el-form-item>
+        <!-- 适用业务（GZ-BEAN-053，客户 2026-09-21「回收和拼豆不是一个门店」）：
+             新店默认只勾拼豆；回收店（含西安店）勾回收。两条线可同时勾（存量成都两店过渡期就是双开）。 -->
+        <el-form-item :label="t('gzBeanStore.bizScope')" prop="bizScope">
+          <el-checkbox-group v-model="bizScopeArr">
+            <el-checkbox v-for="sc in BIZ_SCOPES" :key="sc" :value="sc">{{ bizScopeLabel(sc) }}</el-checkbox>
+          </el-checkbox-group>
+          <div class="form-tip">{{ t('gzBeanStore.bizScopeTip') }}</div>
+        </el-form-item>
         <el-form-item :label="t('gzBeanStore.name')" prop="name">
           <el-input v-model="form.name" maxlength="64" />
         </el-form-item>
@@ -201,13 +200,13 @@
         <el-descriptions-item :label="t('gzBeanStore.colId')">{{ detail.id }}</el-descriptions-item>
         <el-descriptions-item :label="t('gzBeanStore.colStoreNo')">{{ detail.storeNo }}</el-descriptions-item>
         <el-descriptions-item :label="t('gzBeanStore.colName')" :span="2">{{ detail.name }}</el-descriptions-item>
-        <el-descriptions-item :label="t('gzBeanStore.colType')">
-          <el-tag :type="detail.type === 'pindou' ? 'success' : 'info'" size="small">
-            {{ detail.type === 'pindou' ? t('gzBeanStore.typePindou') : t('gzBeanStore.typeGuzi') }}
-          </el-tag>
-        </el-descriptions-item>
         <el-descriptions-item :label="t('gzBeanStore.colStatus')">
           <el-tag :type="statusTagType(detail.status)" size="small">{{ statusLabel(detail.status) }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item :label="t('gzBeanStore.bizScope')" :span="2">
+          <el-tag v-for="sc in parseBizScope(detail.bizScope)" :key="sc" :type="sc === 'recycle' ? 'warning' : 'success'" size="small" class="mr-1">
+            {{ bizScopeLabel(sc) }}
+          </el-tag>
         </el-descriptions-item>
         <el-descriptions-item :label="t('gzBeanStore.colAddress')" :span="2">{{ detail.address }}</el-descriptions-item>
         <el-descriptions-item :label="t('gzBeanStore.colPhone')">{{ detail.phone || '-' }}</el-descriptions-item>
@@ -242,7 +241,9 @@ import {
   delGzBeanStore,
   type GzBeanStoreVO,
   type GzBeanStoreForm,
-  type GzBeanStoreQuery
+  type GzBeanStoreQuery,
+  type BizScope,
+  BIZ_SCOPES
 } from '@/api/gz-bean/store';
 import { GZ_FILE_USAGE_TYPE } from '@/api/gz-common/file';
 import GzImageUpload from '@/components/GzImageUpload/index.vue';
@@ -274,6 +275,26 @@ const form = reactive<GzBeanStoreForm>({
   nearEndMinutes: 30
 });
 
+/**
+ * 适用业务多选框的中转数组（GZ-BEAN-053）。后端存逗号串，这里用数组驱动 el-checkbox-group，
+ * 提交时按 BIZ_SCOPES 固定顺序序列化 —— 与后端 @Pattern 白名单一致，避免勾选先后不同产出不同串。
+ */
+const bizScopeArr = ref<BizScope[]>(['pindou']);
+
+function parseBizScope(raw?: string | null): BizScope[] {
+  if (!raw) return [];
+  const parts = raw.split(',').map((x) => x.trim());
+  return BIZ_SCOPES.filter((sc) => parts.includes(sc));
+}
+
+function serializeBizScope(arr: BizScope[]): string {
+  return BIZ_SCOPES.filter((sc) => arr.includes(sc)).join(',');
+}
+
+function bizScopeLabel(sc: BizScope): string {
+  return sc === 'recycle' ? t('gzBeanStore.bizScopeRecycle') : t('gzBeanStore.bizScopePindou');
+}
+
 /** 经纬度用字符串中转避免 el-input-number 强制数值导致提交时 "" → null 处理麻烦 */
 const longitudeStr = ref<string>('');
 const latitudeStr = ref<string>('');
@@ -281,11 +302,17 @@ const latitudeStr = ref<string>('');
 const formTitle = computed(() => (formMode.value === 'add' ? t('gzBeanStore.addDialogTitle') : t('gzBeanStore.editDialogTitle')));
 
 const rules = {
-  storeNo: [{ required: true, message: t('gzBeanStore.ruleStoreNoRequired'), trigger: 'blur' }],
   name: [{ required: true, message: t('gzBeanStore.ruleNameRequired'), trigger: 'blur' }],
   address: [{ required: true, message: t('gzBeanStore.ruleAddressRequired'), trigger: 'blur' }],
-  type: [{ required: true, message: t('gzBeanStore.ruleTypeRequired'), trigger: 'change' }],
-  status: [{ required: true, message: t('gzBeanStore.ruleStatusRequired'), trigger: 'change' }]
+  status: [{ required: true, message: t('gzBeanStore.ruleStatusRequired'), trigger: 'change' }],
+  // 校验走中转数组：form.bizScope 只在提交时才序列化，直接校验它永远是旧值
+  bizScope: [
+    {
+      validator: (_r: unknown, _v: unknown, cb: (e?: Error) => void) =>
+        bizScopeArr.value.length ? cb() : cb(new Error(t('gzBeanStore.ruleBizScopeRequired'))),
+      trigger: 'change'
+    }
+  ]
 };
 
 async function loadList() {
@@ -313,8 +340,8 @@ function handleQuery() {
 function handleReset() {
   query.storeNo = undefined;
   query.name = undefined;
-  query.type = undefined;
   query.status = undefined;
+  query.bizScope = undefined;
   query.pageNum = 1;
   loadList();
 }
@@ -352,6 +379,7 @@ function resetForm() {
     nearEndMinutes: 30,
     remark: ''
   });
+  bizScopeArr.value = ['pindou'];
   longitudeStr.value = '';
   latitudeStr.value = '';
   formRef.value?.resetFields();
@@ -385,6 +413,7 @@ async function handleEdit(row: GzBeanStoreVO) {
       nearEndMinutes: d.nearEndMinutes ?? 30,
       remark: d.remark
     });
+    bizScopeArr.value = parseBizScope(d.bizScope);
     longitudeStr.value = d.longitude !== null && d.longitude !== undefined ? String(d.longitude) : '';
     latitudeStr.value = d.latitude !== null && d.latitude !== undefined ? String(d.latitude) : '';
     formVisible.value = true;
@@ -404,6 +433,7 @@ async function handleSubmit() {
   const lat = latitudeStr.value.trim();
   form.longitude = lng && !isNaN(Number(lng)) ? Number(lng) : null;
   form.latitude = lat && !isNaN(Number(lat)) ? Number(lat) : null;
+  form.bizScope = serializeBizScope(bizScopeArr.value);
 
   submitting.value = true;
   try {

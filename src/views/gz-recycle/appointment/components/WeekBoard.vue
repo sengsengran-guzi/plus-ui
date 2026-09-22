@@ -1,10 +1,10 @@
 <template>
   <el-card shadow="never" class="mb-3">
     <template #header>
+      <!-- 表头压成一行（2026-09-22 看板瘦身）：标题由外层页签承担；图例并进来，Shift 提示收进「手动占用」的 tooltip -->
       <div class="board-header">
         <div class="board-header__left">
-          <span class="text-base font-medium">{{ t('gzRecycleAppointment.boardTitle') }}</span>
-          <el-select v-model="storeId" :placeholder="t('gzRecycleAppointment.storePlaceholder')" style="width: 160px">
+          <el-select v-model="storeId" :placeholder="t('gzRecycleAppointment.storePlaceholder')" size="small" style="width: 150px">
             <el-option v-for="s in storeOptions" :key="s.id" :label="s.name" :value="s.id" />
           </el-select>
           <div class="board-week-switch">
@@ -15,12 +15,25 @@
           </div>
         </div>
         <div class="board-header__right">
+          <span class="board-legend">
+            <span class="board-legend__item"><i class="board-legend__dot is-customer"></i>{{ t('gzRecycleAppointment.legendCustomer') }}</span>
+            <span class="board-legend__item"><i class="board-legend__dot is-manual"></i>{{ t('gzRecycleAppointment.legendManual') }}</span>
+            <span class="board-legend__item"><i class="board-legend__dot is-idle"></i>{{ t('gzRecycleAppointment.legendIdle') }}</span>
+          </span>
           <span v-if="selectedCount > 0" class="board-selected-count">{{
             t('gzRecycleAppointment.selectedCountRuns', { n: selectedCount, m: selectedRunCount })
           }}</span>
-          <el-button v-hasPermi="['gz:recycle:appointment:hold']" type="primary" size="small" :disabled="selectedCount === 0" @click="openHoldDialog">
-            {{ t('gzRecycleAppointment.holdAction') }}
-          </el-button>
+          <el-tooltip :content="t('gzRecycleAppointment.shiftSelectHint')" placement="top">
+            <el-button
+              v-hasPermi="['gz:recycle:appointment:hold']"
+              type="primary"
+              size="small"
+              :disabled="selectedCount === 0"
+              @click="openHoldDialog"
+            >
+              {{ t('gzRecycleAppointment.holdAction') }}
+            </el-button>
+          </el-tooltip>
           <el-button v-if="selectedCount > 0" size="small" @click="clearSelection">{{ t('gzRecycleAppointment.clearSelection') }}</el-button>
           <el-button link type="primary" size="small" @click="loadBoard">{{ t('gzRecycleAppointment.refresh') }}</el-button>
         </div>
@@ -31,20 +44,18 @@
       <div v-if="!storeId" class="board-empty">{{ t('gzRecycleAppointment.boardNoStore') }}</div>
       <div v-else-if="slots.length === 0" class="board-empty">{{ t('gzRecycleAppointment.boardNoSlot') }}</div>
       <div v-else class="board-matrix-wrap">
-        <!-- 图例（GZ-RECYCLE-012：行数从 3 变成 ~12，没图例店员扫不动） -->
-        <div class="board-legend">
-          <span class="board-legend__item"><i class="board-legend__dot is-customer"></i>{{ t('gzRecycleAppointment.legendCustomer') }}</span>
-          <span class="board-legend__item"><i class="board-legend__dot is-manual"></i>{{ t('gzRecycleAppointment.legendManual') }}</span>
-          <span class="board-legend__item"><i class="board-legend__dot is-idle"></i>{{ t('gzRecycleAppointment.legendIdle') }}</span>
-          <span class="board-legend__hint">{{ t('gzRecycleAppointment.shiftSelectHint') }}</span>
-        </div>
         <table class="board-matrix">
           <thead>
             <tr>
               <th class="board-matrix__corner"></th>
-              <th v-for="day in days" :key="day.date" class="board-matrix__day-head" :class="{ 'is-today': day.isToday }">
-                <div class="board-matrix__day-date">{{ day.md }}</div>
-                <div class="board-matrix__day-week">{{ day.weekLabel }}</div>
+              <th v-for="(day, colIdx) in days" :key="day.date" class="board-matrix__day-head" :class="{ 'is-today': day.isToday }">
+                <div class="board-matrix__day-date">
+                  {{ day.md }} <span class="board-matrix__day-week">{{ day.weekLabel }}</span>
+                </div>
+                <!-- 每日小计：不点开也知道这周哪天忙；空列显示「无预约」而不是纯空白 -->
+                <div class="board-matrix__day-sum" :class="{ 'is-empty': daySummaries[colIdx].hours === 0 }">
+                  {{ daySummaryText(daySummaries[colIdx]) }}
+                </div>
               </th>
             </tr>
           </thead>
@@ -77,34 +88,45 @@
                   <!-- 占用区间块：一单一块，rowspan 合并；点块开 popover 承载全部动作 -->
                   <el-popover v-else placement="right" trigger="click" :width="230">
                     <template #reference>
+                      <!-- 单行块（2026-09-22 看板瘦身，行高 36px）：只放尾号·点数档；状态改成左侧色条，
+                           状态文字 / 时段 / 备注都收进点开的弹层（title 悬停也能看到时段 + 状态） -->
                       <div
                         class="board-cell"
-                        :class="matrix[rowIdx][colIdx].block!.kind === 'manual' ? 'board-cell--manual' : 'board-cell--customer'"
+                        :class="[
+                          matrix[rowIdx][colIdx].block!.kind === 'manual' ? 'board-cell--manual' : 'board-cell--customer',
+                          statusBarClass(matrix[rowIdx][colIdx].block!)
+                        ]"
+                        :title="blockTitle(matrix[rowIdx][colIdx].block!)"
                         :data-cell-kind="matrix[rowIdx][colIdx].block!.kind"
                         :data-cell-date="day.date"
                         :data-cell-slot="slot.startTime"
                       >
-                        <template v-if="matrix[rowIdx][colIdx].block!.kind === 'manual'">
-                          <div class="board-cell__remark" :title="matrix[rowIdx][colIdx].block!.remark || ''">
+                        <div class="board-cell__text">
+                          <template v-if="matrix[rowIdx][colIdx].block!.kind === 'manual'">
                             {{ t('gzRecycleAppointment.manualLabel', { remark: matrix[rowIdx][colIdx].block!.remark || '' }) }}
-                          </div>
-                        </template>
-                        <template v-else>
-                          <div class="board-cell__line1">
+                          </template>
+                          <template v-else>
                             {{ mobileLast4(matrix[rowIdx][colIdx].block!.mobileSnapshot) }} ·
                             {{ matrix[rowIdx][colIdx].block!.qtyBucketLabel || '-' }}
-                          </div>
-                          <div class="board-cell__line2">
-                            <dict-tag :options="statusDict" :value="matrix[rowIdx][colIdx].block!.status" />
-                            <span class="board-cell__range">{{ blockRange(matrix[rowIdx][colIdx].block!) }}</span>
-                          </div>
-                        </template>
+                          </template>
+                        </div>
                       </div>
                     </template>
 
                     <div class="board-pop">
                       <div class="board-pop__title">{{ matrix[rowIdx][colIdx].block!.appointmentNo || '-' }}</div>
-                      <div class="board-pop__meta">{{ blockRange(matrix[rowIdx][colIdx].block!) }}</div>
+                      <div class="board-pop__meta">
+                        {{ blockRange(matrix[rowIdx][colIdx].block!) }}
+                        <dict-tag
+                          v-if="matrix[rowIdx][colIdx].block!.kind === 'customer'"
+                          :options="statusDict"
+                          :value="matrix[rowIdx][colIdx].block!.status"
+                          class="board-pop__status"
+                        />
+                      </div>
+                      <div v-if="matrix[rowIdx][colIdx].block!.remark" class="board-pop__remark">
+                        {{ t('gzRecycleAppointment.popRemark') }}{{ matrix[rowIdx][colIdx].block!.remark }}
+                      </div>
                       <div class="board-pop__acts">
                         <el-button
                           v-if="matrix[rowIdx][colIdx].block!.kind === 'customer'"
@@ -250,6 +272,31 @@ const matrix = computed<MatrixCell[][]>(() => {
   return grid;
 });
 
+/**
+ * 每日小计（2026-09-22 看板瘦身）：orders = 顾客单数（不含店员手动占用），hours = 当天被占小时格总数（含手动占用）。
+ * 直接从已算好的 matrix 读 block 的 rowspan，与格子上画出来的占用面严格一致。
+ */
+const daySummaries = computed(() =>
+  days.value.map((_, c) => {
+    let orders = 0;
+    let hours = 0;
+    for (const row of matrix.value) {
+      const cell = row[c];
+      if (cell?.type !== 'block') continue;
+      hours += cell.rowspan;
+      if (cell.block.kind === 'customer') orders++;
+    }
+    return { orders, hours };
+  })
+);
+
+/** 小计文案：无占用 →「无预约」；只有店员手动占用 →「手动占用 Nh」；有顾客单 →「N 单 · 占 Nh」 */
+function daySummaryText(sum: { orders: number; hours: number }): string {
+  if (sum.hours === 0) return t('gzRecycleAppointment.daySummaryEmpty');
+  if (sum.orders === 0) return t('gzRecycleAppointment.daySummaryManualOnly', { h: sum.hours });
+  return t('gzRecycleAppointment.daySummary', { n: sum.orders, h: sum.hours });
+}
+
 const WEEKDAY_KEYS = ['weekdaySun', 'weekdayMon', 'weekdayTue', 'weekdayWed', 'weekdayThu', 'weekdayFri', 'weekdaySat'];
 
 interface DayCol {
@@ -323,6 +370,29 @@ function isWindowStart(rowIdx: number): boolean {
 function mobileLast4(mobile?: string | null): string {
   if (!mobile || mobile.length < 4) return mobile || '-';
   return mobile.slice(-4);
+}
+/** 块左侧状态色条：待核对=橙 / 已确认·已到账=绿 / 打款中=蓝 / 打款失败=红 / 手动占用=灰 */
+function statusBarClass(b: RecycleBoardCellVO): string {
+  if (b.kind === 'manual') return 'is-bar-manual';
+  switch (b.status) {
+    case 'submitted':
+      return 'is-bar-pending';
+    case 'confirmed_onsite':
+    case 'paid':
+      return 'is-bar-done';
+    case 'paying':
+      return 'is-bar-paying';
+    case 'payout_failed':
+      return 'is-bar-failed';
+    default:
+      return 'is-bar-manual';
+  }
+}
+/** 悬停提示：单行块放不下的时段 + 状态文字（点开弹层看完整信息 + 操作） */
+function blockTitle(b: RecycleBoardCellVO): string {
+  if (b.kind === 'manual') return `${blockRange(b)} ${b.remark || ''}`.trim();
+  const label = props.statusDict.find((d) => d.value === b.status)?.label ?? b.status ?? '';
+  return `${blockRange(b)} · ${label}`;
 }
 /** 仅 submitted（顾客单）/ manual_hold（手动占用）可改期，其余前端先挡一道（后端 4128 兜底） */
 function canReschedule(b: RecycleBoardCellVO): boolean {
@@ -550,6 +620,7 @@ defineExpose({ reload: loadBoard });
 </script>
 
 <style scoped>
+/* 2026-09-22 看板瘦身：行高 74→36px、表头一行、单行占用块 + 状态色条（一周 12 行一屏看完） */
 .board-header {
   display: flex;
   align-items: center;
@@ -557,16 +628,12 @@ defineExpose({ reload: loadBoard });
   flex-wrap: wrap;
   gap: 8px;
 }
-.board-header__left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
+.board-header__left,
 .board-header__right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 .board-week-switch {
   display: flex;
@@ -582,6 +649,36 @@ defineExpose({ reload: loadBoard });
   font-size: 13px;
   color: var(--el-color-primary);
 }
+.board-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #909399;
+}
+.board-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.board-legend__dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px solid #dcdfe6;
+}
+.board-legend__dot.is-customer {
+  background: var(--el-color-success-light-9);
+  border-left: 3px solid var(--el-color-warning);
+}
+.board-legend__dot.is-manual {
+  background: #f4f4f5;
+  border-left: 3px solid #909399;
+}
+.board-legend__dot.is-idle {
+  background: #fff;
+}
 .board-empty {
   padding: 24px 0;
   text-align: center;
@@ -596,6 +693,8 @@ defineExpose({ reload: loadBoard });
   min-width: 780px;
   border-collapse: collapse;
   table-layout: fixed;
+  /* Shift+点击是区间多选，不禁用的话浏览器会同时做原生文字选择，把时间列和块里的字刷成蓝底 */
+  user-select: none;
 }
 .board-matrix th,
 .board-matrix td {
@@ -603,20 +702,22 @@ defineExpose({ reload: loadBoard });
   padding: 0;
 }
 .board-matrix__corner {
-  width: 92px;
+  width: 64px;
 }
 .board-matrix__slot-head {
-  width: 92px;
-  padding: 8px 6px;
+  width: 64px;
+  padding: 0 6px;
   background: #f5f7fa;
   font-size: 12px;
-  color: #303133;
+  font-weight: normal;
+  color: #606266;
   white-space: nowrap;
 }
 .board-matrix__day-head {
-  padding: 6px 4px;
+  padding: 4px;
   background: #f5f7fa;
   text-align: center;
+  font-weight: normal;
 }
 .board-matrix__day-head.is-today {
   background: var(--el-color-primary-light-8);
@@ -627,19 +728,33 @@ defineExpose({ reload: loadBoard });
   color: #303133;
 }
 .board-matrix__day-week {
-  font-size: 11px;
+  margin-left: 2px;
+  font-size: 12px;
+  font-weight: normal;
   color: #909399;
 }
+.board-matrix__day-sum {
+  font-size: 12px;
+  color: var(--el-color-primary);
+}
+.board-matrix__day-sum.is-empty {
+  color: #c0c4cc;
+}
+/* 午休等营业断档：窗口起始行加粗上边线 */
+.board-matrix tr.is-window-start > * {
+  border-top: 2px solid #dcdfe6;
+}
 .board-matrix__td {
-  height: 74px;
+  height: 36px;
   vertical-align: top;
 }
 .board-cell {
   height: 100%;
-  min-height: 74px;
-  padding: 4px 6px;
+  min-height: 36px;
+  padding: 0 6px;
   box-sizing: border-box;
   font-size: 12px;
+  line-height: 36px;
 }
 .board-cell--idle {
   cursor: pointer;
@@ -655,38 +770,56 @@ defineExpose({ reload: loadBoard });
 .board-cell--customer {
   cursor: pointer;
   background: var(--el-color-success-light-9);
-}
-.board-cell--manual {
-  background: #f4f4f5;
-}
-.board-cell--spill {
-  background: repeating-linear-gradient(45deg, #f5f5f5, #f5f5f5 6px, #ececec 6px, #ececec 12px);
-  color: #909399;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  cursor: not-allowed;
-}
-.board-cell__mobile {
-  font-weight: 600;
   color: #303133;
 }
-.board-cell__bucket {
+.board-cell--manual {
+  cursor: pointer;
+  background: #f4f4f5;
   color: #606266;
 }
-.board-cell__status {
-  margin-top: 2px;
+/* 状态色条（取代原来块内的状态标签） */
+.board-cell.is-bar-pending {
+  box-shadow: inset 3px 0 0 var(--el-color-warning);
 }
-.board-cell__remark {
+.board-cell.is-bar-done {
+  box-shadow: inset 3px 0 0 var(--el-color-success);
+}
+.board-cell.is-bar-paying {
+  box-shadow: inset 3px 0 0 var(--el-color-primary);
+}
+.board-cell.is-bar-failed {
+  box-shadow: inset 3px 0 0 var(--el-color-danger);
+}
+.board-cell.is-bar-manual {
+  box-shadow: inset 3px 0 0 #909399;
+}
+.board-cell__text {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+.board-pop__title {
+  font-weight: 600;
+  color: #303133;
+}
+.board-pop__meta {
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
   color: #606266;
 }
-.board-cell__act {
-  margin-top: 2px;
+.board-pop__remark {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #606266;
+  word-break: break-all;
+}
+.board-pop__acts {
+  margin-top: 8px;
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
 }
 </style>

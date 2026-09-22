@@ -508,7 +508,7 @@ async function handleBatchSubmit() {
 }
 
 async function loadStores() {
-  const res = await getGzBeanStoreOptions();
+  const res = await getGzBeanStoreOptions('recycle');
   storeOptions.value = res.data ?? [];
   if (!query.storeId && storeOptions.value.length) {
     query.storeId = storeOptions.value[0].id;

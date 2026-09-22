@@ -869,7 +869,7 @@ function hhmmsToMs(time: string | null | undefined): number | null {
 async function loadStoreOptions() {
   pageLoading.value = true;
   try {
-    const resp = await getGzBeanStoreOptions();
+    const resp = await getGzBeanStoreOptions('pindou');
     const r = resp as any;
     storeOptions.value = (r.data || r || []) as GzBeanStoreVO[];
     if (storeOptions.value.length > 0 && currentStoreId.value == null) {

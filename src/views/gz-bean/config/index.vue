@@ -392,7 +392,7 @@ function weekdayStrToArr(s: string | undefined): number[] {
 // ============ 加载门店选项 ============
 async function loadStoreOptions() {
   try {
-    const resp = await getGzBeanStoreOptions();
+    const resp = await getGzBeanStoreOptions('pindou');
     // ruoyi request.ts 已解包，直接拿 data 数组（实际返回 { code, msg, data: [...] }）
     const r = resp as any;
     storeOptions.value = (r.data || r || []) as GzBeanStoreVO[];

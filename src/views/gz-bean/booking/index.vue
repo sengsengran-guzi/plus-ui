@@ -332,7 +332,7 @@ function shortTime(t?: string): string {
 async function loadStores() {
   try {
     // ruoyi request.ts 已解包 R/TableDataInfo，直接拿到 data 数组
-    const resp = await getGzBeanStoreOptions();
+    const resp = await getGzBeanStoreOptions('pindou');
     storeOptions.value = ((resp as any).data || resp) as GzBeanStoreVO[];
   } catch (e) {
     console.error('[gz-bean-booking] load store options failed', e);

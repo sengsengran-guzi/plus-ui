@@ -1,173 +1,206 @@
 <template>
   <div class="p-2">
-    <!-- 回收看板周视图（GZ-RECYCLE-011，ADR-0021 §3）：门店 × 周切换的时段格矩阵，占用/改期/释放都在格上做 -->
-    <WeekBoard ref="weekBoardRef" :store-options="storeOptions" :status-dict="gz_recycle_status" @detail="onBoardDetail" />
+    <!-- 三个页签（2026-09-22 看板瘦身）：看板 / 过期待处理 / 回收记录各占整屏，不再上下叠三张卡。
+         「过期待处理」页签带积压数角标，店员不用滚两屏去找补核销。页签不懒加载：看板进页即拉数据。 -->
+    <el-tabs v-model="activeTab" class="recycle-tabs">
+      <el-tab-pane name="board" :label="t('gzRecycleAppointment.tabBoard')">
+        <!-- 回收看板周视图（GZ-RECYCLE-011，ADR-0021 §3）：门店 × 周切换的时段格矩阵，占用/改期/释放都在格上做 -->
+        <WeekBoard ref="weekBoardRef" :store-options="storeOptions" :status-dict="gz_recycle_status" @detail="onBoardDetail" @release="loadExpired" />
+      </el-tab-pane>
 
-    <!-- 过期未核销单：批量筛选 + 释放（GZ-RECYCLE-017，甲方 8.28） -->
-    <el-card v-loading="expiredLoading" shadow="never" class="mb-2">
-      <template #header>
-        <div class="flex items-center justify-between">
-          <span class="text-base font-medium">
-            {{ t('gzRecycleAppointment.expiredTitle') }}
-            <el-tag v-if="expiredList.length" type="warning" size="small" class="ml-2">{{ expiredList.length }}</el-tag>
-          </span>
-          <span class="ticket-tag">GZ-RECYCLE-017</span>
-        </div>
-      </template>
+      <el-tab-pane name="expired">
+        <template #label>
+          {{ t('gzRecycleAppointment.tabExpired') }}
+          <el-badge v-if="expiredList.length" :value="expiredList.length" type="warning" class="recycle-tabs__badge" />
+        </template>
+        <!-- 过期未核销单：批量筛选 + 释放 / 补核销（GZ-RECYCLE-017，甲方 8.28） -->
+        <el-card v-loading="expiredLoading" shadow="never">
+          <el-alert :title="t('gzRecycleAppointment.expiredAlertDesc')" type="warning" :closable="false" show-icon class="mb-3" />
 
-      <el-alert :title="t('gzRecycleAppointment.expiredAlertDesc')" type="warning" :closable="false" show-icon class="mb-3" />
+          <el-form :model="expiredQuery" inline @submit.prevent="loadExpired">
+            <el-form-item :label="t('gzRecycleAppointment.store')">
+              <el-select v-model="expiredQuery.storeId" :placeholder="t('gzRecycleAppointment.storePlaceholder')" clearable style="width: 160px">
+                <el-option v-for="s in storeOptions" :key="s.id" :label="s.name" :value="s.id" />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="t('gzRecycleAppointment.apptDate')">
+              <el-date-picker
+                v-model="expiredDateRange"
+                type="daterange"
+                value-format="YYYY-MM-DD"
+                :start-placeholder="t('gzRecycleAppointment.dateRangeStart')"
+                :end-placeholder="t('gzRecycleAppointment.dateRangeEnd')"
+                style="width: 240px"
+              />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="loadExpired">{{ t('gzRecycleAppointment.search') }}</el-button>
+              <el-button @click="resetExpiredQuery">{{ t('gzRecycleAppointment.reset') }}</el-button>
+              <el-button
+                v-hasPermi="['gz:recycle:appointment:hold']"
+                type="danger"
+                plain
+                :disabled="!expiredSelected.length"
+                @click="handleBatchRelease"
+              >
+                {{ t('gzRecycleAppointment.expiredRelease') }}
+                <template v-if="expiredSelected.length">（{{ expiredSelected.length }}）</template>
+              </el-button>
+            </el-form-item>
+          </el-form>
 
-      <el-form :model="expiredQuery" inline @submit.prevent="loadExpired">
-        <el-form-item :label="t('gzRecycleAppointment.store')">
-          <el-select v-model="expiredQuery.storeId" :placeholder="t('gzRecycleAppointment.storePlaceholder')" clearable style="width: 160px">
-            <el-option v-for="s in storeOptions" :key="s.id" :label="s.name" :value="s.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('gzRecycleAppointment.apptDate')">
-          <el-date-picker
-            v-model="expiredDateRange"
-            type="daterange"
-            value-format="YYYY-MM-DD"
-            :start-placeholder="t('gzRecycleAppointment.dateRangeStart')"
-            :end-placeholder="t('gzRecycleAppointment.dateRangeEnd')"
-            style="width: 240px"
-          />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="loadExpired">{{ t('gzRecycleAppointment.search') }}</el-button>
-          <el-button @click="resetExpiredQuery">{{ t('gzRecycleAppointment.reset') }}</el-button>
-          <el-button v-hasPermi="['gz:recycle:appointment:hold']" type="danger" plain :disabled="!expiredSelected.length" @click="handleBatchRelease">
-            {{ t('gzRecycleAppointment.expiredRelease') }}
-            <template v-if="expiredSelected.length">（{{ expiredSelected.length }}）</template>
-          </el-button>
-        </el-form-item>
-      </el-form>
+          <el-table
+            :data="expiredList"
+            border
+            size="small"
+            :empty-text="t('gzRecycleAppointment.expiredEmpty')"
+            @selection-change="(rows: GzRecycleAppointmentVO[]) => (expiredSelected = rows)"
+          >
+            <el-table-column type="selection" width="46" />
+            <el-table-column :label="t('gzRecycleAppointment.colAppointmentNo')" prop="appointmentNo" min-width="180" show-overflow-tooltip />
+            <el-table-column :label="t('gzRecycleAppointment.colStore')" prop="storeName" min-width="130" show-overflow-tooltip />
+            <el-table-column :label="t('gzRecycleAppointment.colQtyBucket')" min-width="110">
+              <template #default="{ row }">{{ row.product?.qtyBucketLabel || '-' }}</template>
+            </el-table-column>
+            <el-table-column :label="t('gzRecycleAppointment.colApptDate')" prop="apptDate" width="120" />
+            <el-table-column :label="t('gzRecycleAppointment.colSlot')" width="130" align="center">
+              <template #default="{ row }">
+                <span v-if="row.slotStart">{{ row.slotStart?.slice(0, 5) }} - {{ row.slotEnd?.slice(0, 5) }}</span>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('gzRecycleAppointment.colExpiredDays')" width="110" align="center">
+              <template #default="{ row }">
+                <el-tag type="danger" size="small" effect="plain">
+                  {{ t('gzRecycleAppointment.expiredDaysLabel', { n: expiredDays(row.apptDate) }) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('gzRecycleAppointment.colAction')" width="170" fixed="right">
+              <template #default="{ row }">
+                <el-button link type="primary" @click="openDetail(row)">{{ t('gzRecycleAppointment.detail') }}</el-button>
+                <!-- 补核销（客户 2026-09-21「积压的单提供按钮，给管理员或者店长自行处理」）：
+                 老师确实来过、只是店员当天没核销 —— 这类单该补核销记上金额，而不是「释放」成未到店。
+                 过期单仍是 submitted 态，后端 verify 接口原样可用，这里复用同一个弹窗，无需新端点。 -->
+                <el-button v-hasPermi="['gz:recycle:appointment:verify']" link type="success" @click="openVerify(row)">{{
+                  t('gzRecycleAppointment.expiredVerify')
+                }}</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+      </el-tab-pane>
 
-      <el-table
-        :data="expiredList"
-        border
-        size="small"
-        :empty-text="t('gzRecycleAppointment.expiredEmpty')"
-        @selection-change="(rows: GzRecycleAppointmentVO[]) => (expiredSelected = rows)"
-      >
-        <el-table-column type="selection" width="46" />
-        <el-table-column :label="t('gzRecycleAppointment.colAppointmentNo')" prop="appointmentNo" min-width="180" show-overflow-tooltip />
-        <el-table-column :label="t('gzRecycleAppointment.colStore')" prop="storeName" min-width="130" show-overflow-tooltip />
-        <el-table-column :label="t('gzRecycleAppointment.colQtyBucket')" min-width="110">
-          <template #default="{ row }">{{ row.product?.qtyBucketLabel || '-' }}</template>
-        </el-table-column>
-        <el-table-column :label="t('gzRecycleAppointment.colApptDate')" prop="apptDate" width="120" />
-        <el-table-column :label="t('gzRecycleAppointment.colSlot')" width="130" align="center">
-          <template #default="{ row }">
-            <span v-if="row.slotStart">{{ row.slotStart?.slice(0, 5) }} - {{ row.slotEnd?.slice(0, 5) }}</span>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('gzRecycleAppointment.colExpiredDays')" width="110" align="center">
-          <template #default="{ row }">
-            <el-tag type="danger" size="small" effect="plain">
-              {{ t('gzRecycleAppointment.expiredDaysLabel', { n: expiredDays(row.apptDate) }) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('gzRecycleAppointment.colAction')" width="90" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="openDetail(row)">{{ t('gzRecycleAppointment.detail') }}</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+      <el-tab-pane name="records" :label="t('gzRecycleAppointment.tabRecords')">
+        <!-- 回收记录：按 时间 / 点数 / 金额 / 门店 / 状态 / 单号 筛选（GZ-RECYCLE-008） -->
+        <el-card v-loading="loading" shadow="never">
+          <el-alert :title="t('gzRecycleAppointment.alertDesc')" type="info" :closable="false" show-icon class="mb-3" />
 
-    <!-- 回收记录：按 时间 / 点数 / 金额 / 门店 / 状态 / 单号 筛选（GZ-RECYCLE-008） -->
-    <el-card v-loading="loading" shadow="never">
-      <template #header>
-        <div class="flex items-center justify-between">
-          <span class="text-base font-medium">{{ t('gzRecycleAppointment.recordsTitle') }}</span>
-          <span class="ticket-tag">GZ-RECYCLE-008</span>
-        </div>
-      </template>
+          <el-form :model="query" inline @submit.prevent="handleQuery">
+            <el-form-item :label="t('gzRecycleAppointment.store')">
+              <el-select v-model="query.storeId" :placeholder="t('gzRecycleAppointment.storePlaceholder')" clearable style="width: 160px">
+                <el-option v-for="s in storeOptions" :key="s.id" :label="s.name" :value="s.id" />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="t('gzRecycleAppointment.status')">
+              <el-select v-model="query.status" :placeholder="t('gzRecycleAppointment.statusPlaceholder')" clearable style="width: 150px">
+                <el-option v-for="d in gz_recycle_status" :key="d.value" :label="d.label" :value="d.value" />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="t('gzRecycleAppointment.appointmentNo')">
+              <el-input
+                v-model="query.appointmentNo"
+                :placeholder="t('gzRecycleAppointment.appointmentNoPlaceholder')"
+                clearable
+                style="width: 200px"
+              />
+            </el-form-item>
+            <el-form-item :label="t('gzRecycleAppointment.apptDate')">
+              <el-date-picker
+                v-model="dateRange"
+                type="daterange"
+                value-format="YYYY-MM-DD"
+                :start-placeholder="t('gzRecycleAppointment.dateRangeStart')"
+                :end-placeholder="t('gzRecycleAppointment.dateRangeEnd')"
+                style="width: 240px"
+              />
+            </el-form-item>
+            <el-form-item :label="t('gzRecycleAppointment.qtyBucket')">
+              <el-select v-model="query.qtyBucketCode" :placeholder="t('gzRecycleAppointment.qtyBucketPlaceholder')" clearable style="width: 150px">
+                <el-option v-for="q in qtyRangeOptions" :key="q.code" :label="q.label" :value="q.code" />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="t('gzRecycleAppointment.amountRange')">
+              <el-input
+                v-model="amountMin"
+                type="number"
+                :placeholder="t('gzRecycleAppointment.amountMinPlaceholder')"
+                clearable
+                style="width: 110px"
+              />
+              <span class="amount-sep">-</span>
+              <el-input
+                v-model="amountMax"
+                type="number"
+                :placeholder="t('gzRecycleAppointment.amountMaxPlaceholder')"
+                clearable
+                style="width: 110px"
+              />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="handleQuery">{{ t('gzRecycleAppointment.search') }}</el-button>
+              <el-button @click="resetQuery">{{ t('gzRecycleAppointment.reset') }}</el-button>
+            </el-form-item>
+          </el-form>
 
-      <el-alert :title="t('gzRecycleAppointment.alertDesc')" type="info" :closable="false" show-icon class="mb-3" />
+          <el-table :data="list" border :empty-text="t('gzRecycleAppointment.empty')">
+            <el-table-column :label="t('gzRecycleAppointment.colAppointmentNo')" prop="appointmentNo" min-width="180" show-overflow-tooltip />
+            <el-table-column :label="t('gzRecycleAppointment.colQtyBucket')" min-width="120">
+              <template #default="{ row }">{{ row.product?.qtyBucketLabel || '-' }}</template>
+            </el-table-column>
+            <el-table-column :label="t('gzRecycleAppointment.colFinal')" width="100" align="right">
+              <template #default="{ row }">
+                <span v-if="row.finalAmountCent != null">¥{{ fmtYuan(row.finalAmountCent) }}</span>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('gzRecycleAppointment.colPayoutStatus')" width="110" align="center">
+              <template #default="{ row }">
+                <dict-tag v-if="row.payoutStatus" :options="gz_payout_status" :value="row.payoutStatus" />
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('gzRecycleAppointment.colStatus')" width="120">
+              <template #default="{ row }">
+                <dict-tag :options="gz_recycle_status" :value="row.status" />
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('gzRecycleAppointment.colApptDate')" prop="apptDate" width="120" />
+            <el-table-column :label="t('gzRecycleAppointment.colCreateTime')" prop="createTime" width="170" />
+            <el-table-column :label="t('gzRecycleAppointment.colAction')" width="180" fixed="right">
+              <template #default="{ row }">
+                <el-button link type="primary" @click="openDetail(row)">{{ t('gzRecycleAppointment.detail') }}</el-button>
+                <!-- v-hasPermi 必须有：接口打了 @SaCheckPermission，没这个守卫就是「按钮看得到、点了 403」，
+                 店员只会反馈「后台核销不了」而不知道是缺权限（客户 2026-09-21 踩过） -->
+                <el-button
+                  v-if="row.status === 'submitted'"
+                  v-hasPermi="['gz:recycle:appointment:verify']"
+                  link
+                  type="success"
+                  @click="openVerify(row)"
+                  >{{ t('gzRecycleAppointment.verify') }}</el-button
+                >
+                <el-button v-if="row.status === 'payout_failed'" link type="warning" @click="onRetry(row)">{{
+                  t('gzRecycleAppointment.retryPayout')
+                }}</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
 
-      <el-form :model="query" inline @submit.prevent="handleQuery">
-        <el-form-item :label="t('gzRecycleAppointment.store')">
-          <el-select v-model="query.storeId" :placeholder="t('gzRecycleAppointment.storePlaceholder')" clearable style="width: 160px">
-            <el-option v-for="s in storeOptions" :key="s.id" :label="s.name" :value="s.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('gzRecycleAppointment.status')">
-          <el-select v-model="query.status" :placeholder="t('gzRecycleAppointment.statusPlaceholder')" clearable style="width: 150px">
-            <el-option v-for="d in gz_recycle_status" :key="d.value" :label="d.label" :value="d.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('gzRecycleAppointment.appointmentNo')">
-          <el-input v-model="query.appointmentNo" :placeholder="t('gzRecycleAppointment.appointmentNoPlaceholder')" clearable style="width: 200px" />
-        </el-form-item>
-        <el-form-item :label="t('gzRecycleAppointment.apptDate')">
-          <el-date-picker
-            v-model="dateRange"
-            type="daterange"
-            value-format="YYYY-MM-DD"
-            :start-placeholder="t('gzRecycleAppointment.dateRangeStart')"
-            :end-placeholder="t('gzRecycleAppointment.dateRangeEnd')"
-            style="width: 240px"
-          />
-        </el-form-item>
-        <el-form-item :label="t('gzRecycleAppointment.qtyBucket')">
-          <el-select v-model="query.qtyBucketCode" :placeholder="t('gzRecycleAppointment.qtyBucketPlaceholder')" clearable style="width: 150px">
-            <el-option v-for="q in qtyRangeOptions" :key="q.code" :label="q.label" :value="q.code" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('gzRecycleAppointment.amountRange')">
-          <el-input v-model="amountMin" type="number" :placeholder="t('gzRecycleAppointment.amountMinPlaceholder')" clearable style="width: 110px" />
-          <span class="amount-sep">-</span>
-          <el-input v-model="amountMax" type="number" :placeholder="t('gzRecycleAppointment.amountMaxPlaceholder')" clearable style="width: 110px" />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="handleQuery">{{ t('gzRecycleAppointment.search') }}</el-button>
-          <el-button @click="resetQuery">{{ t('gzRecycleAppointment.reset') }}</el-button>
-        </el-form-item>
-      </el-form>
-
-      <el-table :data="list" border :empty-text="t('gzRecycleAppointment.empty')">
-        <el-table-column :label="t('gzRecycleAppointment.colAppointmentNo')" prop="appointmentNo" min-width="180" show-overflow-tooltip />
-        <el-table-column :label="t('gzRecycleAppointment.colQtyBucket')" min-width="120">
-          <template #default="{ row }">{{ row.product?.qtyBucketLabel || '-' }}</template>
-        </el-table-column>
-        <el-table-column :label="t('gzRecycleAppointment.colFinal')" width="100" align="right">
-          <template #default="{ row }">
-            <span v-if="row.finalAmountCent != null">¥{{ fmtYuan(row.finalAmountCent) }}</span>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('gzRecycleAppointment.colPayoutStatus')" width="110" align="center">
-          <template #default="{ row }">
-            <dict-tag v-if="row.payoutStatus" :options="gz_payout_status" :value="row.payoutStatus" />
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('gzRecycleAppointment.colStatus')" width="120">
-          <template #default="{ row }">
-            <dict-tag :options="gz_recycle_status" :value="row.status" />
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('gzRecycleAppointment.colApptDate')" prop="apptDate" width="120" />
-        <el-table-column :label="t('gzRecycleAppointment.colCreateTime')" prop="createTime" width="170" />
-        <el-table-column :label="t('gzRecycleAppointment.colAction')" width="180" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="openDetail(row)">{{ t('gzRecycleAppointment.detail') }}</el-button>
-            <el-button v-if="row.status === 'submitted'" link type="success" @click="openVerify(row)">{{
-              t('gzRecycleAppointment.verify')
-            }}</el-button>
-            <el-button v-if="row.status === 'payout_failed'" link type="warning" @click="onRetry(row)">{{
-              t('gzRecycleAppointment.retryPayout')
-            }}</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-
-      <pagination v-show="total > 0" v-model:limit="query.pageSize" v-model:page="query.pageNum" :total="total" @pagination="loadList" />
-    </el-card>
+          <pagination v-show="total > 0" v-model:limit="query.pageSize" v-model:page="query.pageNum" :total="total" @pagination="loadList" />
+        </el-card>
+      </el-tab-pane>
+    </el-tabs>
 
     <!-- 详情 drawer：两套照片 + 估价/实付 + 核对留痕 -->
     <el-drawer v-model="detailVisible" :title="t('gzRecycleAppointment.detailTitle')" size="640px">
@@ -279,7 +312,7 @@
       </div>
     </el-drawer>
 
-    <!-- admin 核销弹窗（GZ-RECYCLE-009）：上传核对照 + 最终金额 + 备注 + 确认 → 触发反向打款 -->
+    <!-- admin 核销弹窗（GZ-RECYCLE-009 / -019）：最终金额必填 + 核对照选填 + 备注 → 确认（auto-payout 开时触发反向打款） -->
     <el-dialog v-model="verifyVisible" :title="t('gzRecycleAppointment.verifyTitle')" width="560px" append-to-body>
       <div v-if="verifyRow" class="verify-body">
         <el-alert :title="t('gzRecycleAppointment.verifyAlert')" type="warning" :closable="false" show-icon class="mb-3" />
@@ -290,7 +323,9 @@
         </el-descriptions>
 
         <el-form label-width="92px">
-          <el-form-item :label="t('gzRecycleAppointment.verifyPhotos')" required>
+          <!-- 核对照选填（客户 2026-09-21「回收核销不用拍照存证」）：PC 后台核销现场没有拍照条件，
+               强制必填会让整条核销路径走不通。想留证的店员照传不误，不传直接确认即可。 -->
+          <el-form-item :label="t('gzRecycleAppointment.verifyPhotos')">
             <div class="verify-photos">
               <div v-for="fid in verifyImageIds" :key="fid" class="verify-photo">
                 <GzImageThumb :file-id="fid" :size="72" />
@@ -376,6 +411,9 @@ const submitUrls = ref<string[]>([]);
 const verifyUrls = ref<string[]>([]);
 
 // 回收看板周视图（GZ-RECYCLE-011）：矩阵渲染/占用/改期/释放全部下沉 WeekBoard 子组件，index.vue 仅持有 ref 转发详情
+/** 当前页签：board 看板 / expired 过期待处理 / records 回收记录 */
+const activeTab = ref<'board' | 'expired' | 'records'>('board');
+
 const weekBoardRef = ref<InstanceType<typeof WeekBoard>>();
 
 // 记录区「点数档」筛选下拉源
@@ -415,7 +453,7 @@ function ipText(product?: RecycleProductVO | null): string {
 
 async function loadStores() {
   try {
-    const res = await getGzBeanStoreOptions();
+    const res = await getGzBeanStoreOptions('recycle');
     storeOptions.value = res.data ?? [];
   } catch {
     storeOptions.value = [];
@@ -540,10 +578,7 @@ function removeVerifyImage(id: string) {
 
 async function submitVerify() {
   if (!verifyRow.value) return;
-  if (verifyImageIds.value.length === 0) {
-    ElMessage.warning(t('gzRecycleAppointment.verifyNeedPhoto'));
-    return;
-  }
+  // 核对照已改选填（客户 2026-09-21）：这里不再拦空，后端 @NotEmpty 也同步去掉了
   const amt = Number(verifyAmount.value);
   if (verifyAmount.value === '' || !Number.isFinite(amt) || amt < 0) {
     ElMessage.warning(t('gzRecycleAppointment.verifyNeedAmount'));
@@ -560,6 +595,8 @@ async function submitVerify() {
     verifyVisible.value = false;
     loadList();
     weekBoardRef.value?.reload();
+    // 补核销的单要从「过期待处理」里消失，页签角标数也要跟着变 —— 过期列表进页即加载，这里总是刷新
+    loadExpired();
   } catch {
     // http 拦截器已全局 toast 后端 msg（4104 不存在 / 4105 非可核对态 / 4106 openid 缺失 + 金额上限）
   } finally {
@@ -656,6 +693,14 @@ loadExpired();
 </script>
 
 <style scoped>
+.recycle-tabs__badge {
+  margin-left: 4px;
+  vertical-align: 1px;
+}
+.recycle-tabs__badge :deep(.el-badge__content) {
+  position: static;
+  transform: none;
+}
 .ticket-tag {
   font-size: 12px;
   color: #909399;

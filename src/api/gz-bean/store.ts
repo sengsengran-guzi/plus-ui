@@ -19,6 +19,8 @@ export interface GzBeanStoreVO {
   name: string;
   /** 类型 pindou / guzi */
   type: string;
+  /** 适用业务（逗号分隔集合，GZ-BEAN-053）：pindou=拼豆预约 / recycle=回收预约 */
+  bizScope: string;
   /** 完整地址 */
   address: string;
   /** 经度（V1.0 可空） */
@@ -43,12 +45,22 @@ export interface GzBeanStoreVO {
   remark?: string | null;
 }
 
+/**
+ * 业务线（GZ-BEAN-053，客户 2026-09-21「回收和拼豆不是一个门店」）。
+ * 一家门店可同时开通两条线（存量成都两店过渡期即如此），故门店上存的是集合，筛选时只传单个。
+ */
+export type BizScope = 'pindou' | 'recycle';
+
+export const BIZ_SCOPES: readonly BizScope[] = ['pindou', 'recycle'];
+
 /** 新增 / 编辑 BO（与 GzBeanStoreBo.java 对齐） */
 export interface GzBeanStoreForm {
   id?: number | null;
   storeNo?: string;
   name?: string;
   type?: string;
+  /** 适用业务（逗号分隔，如 'pindou' / 'recycle' / 'pindou,recycle'） */
+  bizScope?: string;
   address?: string;
   longitude?: number | string | null;
   latitude?: number | string | null;
@@ -69,6 +81,8 @@ export interface GzBeanStoreQuery {
   name?: string;
   type?: string;
   status?: string;
+  /** 适用业务筛选：传单个业务线，匹配「开通了该业务线」的门店 */
+  bizScope?: BizScope;
   pageNum?: number;
   pageSize?: number;
 }
@@ -82,11 +96,17 @@ export function listGzBeanStore(query: GzBeanStoreQuery): AxiosPromise<{ total: 
   });
 }
 
-/** GET /system/gz/bean/store/options — admin 账号管理下拉数据源 */
-export function getGzBeanStoreOptions(): AxiosPromise<GzBeanStoreVO[]> {
+/**
+ * GET /system/gz/bean/store/options — admin 门店下拉数据源。
+ *
+ * 业务页必须传自己的 scope：回收页传 'recycle'、拼豆页传 'pindou'，否则下拉里会混进另一条线的门店。
+ * 不传 = 全部门店（仅账号管理绑定门店这类跨业务场景用）。
+ */
+export function getGzBeanStoreOptions(scope?: BizScope): AxiosPromise<GzBeanStoreVO[]> {
   return request({
     url: '/system/gz/bean/store/options',
-    method: 'get'
+    method: 'get',
+    params: scope ? { scope } : undefined
   });
 }
 

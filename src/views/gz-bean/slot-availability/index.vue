@@ -268,7 +268,7 @@ async function handleBatchClose() {
 // ============ 数据加载 ============
 async function loadStoreOptions() {
   try {
-    const resp = await getGzBeanStoreOptions();
+    const resp = await getGzBeanStoreOptions('pindou');
     const r = resp as any;
     storeOptions.value = (r.data || r || []) as GzBeanStoreVO[];
     if (!storeId.value && storeOptions.value.length > 0) {
