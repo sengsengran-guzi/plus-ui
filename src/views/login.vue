@@ -44,7 +44,8 @@
         </div>
       </el-form-item>
       <el-checkbox v-model="loginForm.rememberMe" style="margin: 0 0 25px 0">{{ proxy.$t('login.rememberPassword') }}</el-checkbox>
-      <el-form-item style="float: right">
+      <!-- 第三方登录（微信 / MaxKey / TopIam / Gitee / Github）是 ruoyi 演示功能，本项目未接入，暂时隐藏；恢复改 SOCIAL_LOGIN_ENABLED -->
+      <el-form-item v-if="SOCIAL_LOGIN_ENABLED" style="float: right">
         <el-button circle :title="proxy.$t('login.social.wechat')" @click="doSocialLogin('wechat')">
           <svg-icon icon-class="wechat" />
         </el-button>
@@ -94,10 +95,12 @@ const userStore = useUserStore();
 const router = useRouter();
 const { t } = useI18n();
 
+// 账号密码默认一律为空（2026-09-22 安全修复）：ruoyi 原版在这里写死了超管 admin / admin123，
+// 会原样打进生产包 —— 任何人打开登录页（包括店员刷新后被踢回登录页）都能看到并直接用超管登录。
 const loginForm = ref<LoginData>({
   tenantId: '000000',
-  username: 'admin',
-  password: 'admin123',
+  username: '',
+  password: '',
   rememberMe: false,
   code: '',
   uuid: ''
@@ -136,17 +139,16 @@ const handleLogin = () => {
   loginRef.value?.validate(async (valid: boolean, fields: any) => {
     if (valid) {
       loading.value = true;
-      // 勾选了需要记住密码设置在 localStorage 中设置记住用户名和密码
+      // 「记住我」只记租户和用户名，绝不落盘密码（2026-09-22 安全修复）：
+      // ruoyi 原版把明文密码存进 localStorage，共用电脑上任何人打开浏览器都能拿到。
+      localStorage.removeItem('password');
       if (loginForm.value.rememberMe) {
         localStorage.setItem('tenantId', String(loginForm.value.tenantId));
         localStorage.setItem('username', String(loginForm.value.username));
-        localStorage.setItem('password', String(loginForm.value.password));
-        localStorage.setItem('rememberMe', String(loginForm.value.rememberMe));
+        localStorage.setItem('rememberMe', 'true');
       } else {
-        // 否则移除
         localStorage.removeItem('tenantId');
         localStorage.removeItem('username');
-        localStorage.removeItem('password');
         localStorage.removeItem('rememberMe');
       }
       // 调用action的登录方法
@@ -184,15 +186,18 @@ const getCode = async () => {
 };
 
 const getLoginData = () => {
+  // 旧版本「记住密码」存下的明文密码：进登录页就删掉，不再回填（已存过密码的店员电脑，新版首次打开即清除）
+  localStorage.removeItem('password');
   const tenantId = localStorage.getItem('tenantId');
   const username = localStorage.getItem('username');
-  const password = localStorage.getItem('password');
   const rememberMe = localStorage.getItem('rememberMe');
   loginForm.value = {
+    ...loginForm.value,
     tenantId: tenantId === null ? String(loginForm.value.tenantId) : tenantId,
-    username: username === null ? String(loginForm.value.username) : username,
-    password: password === null ? String(loginForm.value.password) : String(password),
-    rememberMe: rememberMe === null ? false : Boolean(rememberMe)
+    username: username === null ? '' : username,
+    password: '',
+    // 存的是字符串：原写法 Boolean('false') 为 true，取消勾选后下次仍显示已勾选
+    rememberMe: rememberMe === 'true'
   } as LoginData;
 };
 
@@ -217,6 +222,9 @@ const initTenantList = async () => {
  * 第三方登录
  * @param type
  */
+/** 第三方登录按钮开关（2026-09-22 暂时关闭：均为 ruoyi 演示入口，本项目未配置对应的第三方应用） */
+const SOCIAL_LOGIN_ENABLED = false;
+
 const doSocialLogin = (type: string) => {
   authRouterUrl(type, loginForm.value.tenantId).then((res: any) => {
     if (res.code === HttpStatus.SUCCESS) {
