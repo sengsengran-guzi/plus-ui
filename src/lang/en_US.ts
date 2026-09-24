@@ -727,6 +727,8 @@ export default {
     seatNoPlaceholder: 'e.g. Q1 / D1 / T1-1',
     seatNoHint: 'Unique within store, cannot be changed after creation',
     seatNoEditHint: 'Seat no. is a business code and cannot be modified',
+    seatNoExtraHint:
+      'Extra seats can be renamed after their table (e.g. Q1-5) so staff can spot them on the board; not allowed while the seat has unfinished bookings',
     tableNoFormPlaceholder: 'Same identifier for seats of one physical table (e.g. T1)',
     zonePlaceholder: 'e.g. Window / Hall',
     ruleConfigRequired: 'Please select a seat type',

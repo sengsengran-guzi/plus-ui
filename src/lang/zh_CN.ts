@@ -721,6 +721,7 @@ export default {
     seatNoPlaceholder: '如 Q1 / D1 / T1-1',
     seatNoHint: '门店内唯一，新增后不可改',
     seatNoEditHint: '座位号为业务码，不可修改',
+    seatNoExtraHint: '加座座位可改成桌号编号（如 Q1-5），看板上一眼对上是哪张桌；座位有未完成的预约时不能改',
     tableNoFormPlaceholder: '同一物理桌的多个座位填同一标识（如 T1）',
     zonePlaceholder: '如 靠窗区 / 大厅',
     ruleConfigRequired: '请选择所属桌型',

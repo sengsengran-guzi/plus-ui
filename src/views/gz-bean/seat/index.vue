@@ -144,8 +144,8 @@
           </el-select>
         </el-form-item>
         <el-form-item :label="t('gzBeanSeat.colSeatNo')" prop="seatNo">
-          <el-input v-model="form.seatNo" maxlength="16" :disabled="formMode === 'edit'" :placeholder="t('gzBeanSeat.seatNoPlaceholder')" />
-          <span class="form-hint">{{ formMode === 'edit' ? t('gzBeanSeat.seatNoEditHint') : t('gzBeanSeat.seatNoHint') }}</span>
+          <el-input v-model="form.seatNo" maxlength="16" :disabled="!seatNoEditable" :placeholder="t('gzBeanSeat.seatNoPlaceholder')" />
+          <span class="form-hint">{{ seatNoHint }}</span>
         </el-form-item>
         <el-form-item :label="t('gzBeanSeat.colTableNo')">
           <el-input v-model="form.tableNo" maxlength="16" :placeholder="t('gzBeanSeat.tableNoFormPlaceholder')" />
@@ -285,6 +285,16 @@ const form = reactive<FormState>({
   remark: ''
 });
 const formTitle = computed(() => (formMode.value === 'add' ? t('gzBeanSeat.addTitle') : t('gzBeanSeat.editTitle')));
+/** 编辑时只有加座座位（整桌 + 仅后台临时桌）能改座位号，改成 Q1-5 这类桌号编号；正式桌编号由系统按桌型编排（后端同口径拦截） */
+const isExtraSeatForm = computed(() => {
+  const c = configMap.value.get(String(form.seatTypeConfigId));
+  return c?.mpVisible === 0 && c.bookMode === 'whole';
+});
+const seatNoEditable = computed(() => formMode.value === 'add' || isExtraSeatForm.value);
+const seatNoHint = computed(() => {
+  if (formMode.value === 'add') return t('gzBeanSeat.seatNoHint');
+  return isExtraSeatForm.value ? t('gzBeanSeat.seatNoExtraHint') : t('gzBeanSeat.seatNoEditHint');
+});
 const rules = {
   seatTypeConfigId: [{ required: true, message: t('gzBeanSeat.ruleConfigRequired'), trigger: 'change' }],
   seatNo: [{ required: true, message: t('gzBeanSeat.ruleSeatNoRequired'), trigger: 'blur' }]
