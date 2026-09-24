@@ -859,6 +859,7 @@ export default {
   // 拼豆店内计时看板（GZ-BEAN-028，ADR-0015 §5）
   gzBeanBoard: {
     tempTypeTag: '临时桌',
+    extraSeatTag: '加座',
     title: '店内计时看板',
     alertTitle: '说明',
     alertDesc:

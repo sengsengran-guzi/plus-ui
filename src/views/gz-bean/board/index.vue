@@ -218,10 +218,17 @@
           <div class="board-seat-grid">
             <!-- 分层双栏格（ADR-0018 §2 / c1 mockup）：座位号/状态胶囊 + 上栏在座(放座/延时/改派) + 下栏待核销(核销/取消排位) / 空闲代客预约 -->
             <!-- 点座位任意区域 → 开详情抽屉；卡片内快捷按钮均 @click.stop 走各自动作、不误触抽屉 -->
-            <div v-for="row in group.seats" :key="row.seatId" class="board-seat" :class="[`is-${row.boardStatus}`]" @click="openDetail(row)">
+            <div
+              v-for="(row, idx) in group.seats"
+              :key="row.seatId"
+              class="board-seat"
+              :class="[`is-${row.boardStatus}`, { 'is-extra': isExtraSeat(group, row), 'is-table-start': startsNewTable(group, idx) }]"
+              @click="openDetail(row)"
+            >
               <div class="board-seat__head">
                 <span class="board-seat__no">
-                  {{ row.seatNo }}<span v-if="row.tableNo" class="board-seat__table">{{ row.tableNo }}</span>
+                  {{ row.seatNo }}<span v-if="row.tableNo" class="board-seat__table">{{ row.tableNo }}</span
+                  ><span v-if="isExtraSeat(group, row)" class="board-seat__extra">{{ t('gzBeanBoard.extraSeatTag') }}</span>
                 </span>
                 <el-tag :type="statusTagType(row.boardStatus)" size="small" effect="plain" class="board-seat__pill">
                   {{ t(`gzBeanBoard.status.${row.boardStatus}`) }}
@@ -707,6 +714,41 @@ interface BoardGroup {
   seats: GzBeanBoardRowVO[];
 }
 
+/**
+ * 同桌标识归一（table_no，忽略大小写和空格，店员手填「q1」也能对上）；无 table_no 返回空串。
+ * 只认 table_no、不拿座位号兜底：自动生成的按座临时桌 table_no 可能恰好等于某个整桌座位号
+ * （前缀 S → 临时桌 S1 下挂 S1-1…，而单人座本身就叫 S1），拿座位号比会把整张临时桌误并进单人区。
+ */
+function tableKey(tableNo?: string | null): string {
+  return (tableNo || '').trim().toUpperCase();
+}
+
+/** 该桌在分组内最后一个座位的下标（加座插在它后面，多个加座按原顺序依次排） */
+function lastSeatIndexOfTable(seats: GzBeanBoardRowVO[], key: string): number {
+  for (let i = seats.length - 1; i >= 0; i--) {
+    if (tableKey(seats[i].tableNo) === key) {
+      return i;
+    }
+  }
+  return seats.length - 1;
+}
+
+/** 加座 = 并进正式桌分组里的临时桌座位（打「加座」角标 + 虚线框，和正式座位区分） */
+function isExtraSeat(group: BoardGroup, row: GzBeanBoardRowVO): boolean {
+  return !group.temp && row.mpVisible === 0;
+}
+
+/**
+ * 按座分组里每张物理桌另起一行（桌 6 座、每行 5 格时，第 6 座不会挤到下一张桌那行被看成别的桌）。
+ * 整桌分组一座一桌照常连排；缺 table_no 的座位不强制换行。
+ */
+function startsNewTable(group: BoardGroup, idx: number): boolean {
+  if (group.bookMode !== 'seat' || idx === 0) return false;
+  const cur = tableKey(group.seats[idx].tableNo);
+  const prev = tableKey(group.seats[idx - 1].tableNo);
+  return cur !== '' && prev !== '' && cur !== prev;
+}
+
 const groupedRows = computed<BoardGroup[]>(() => {
   const map = new Map<string, BoardGroup>();
   for (const r of rows.value) {
@@ -720,8 +762,36 @@ const groupedRows = computed<BoardGroup[]>(() => {
     }
     g.seats.push(r);
   }
-  // 临时桌垫底：店员的肌肉记忆是「先看正常桌」，周末加桌不能把原有分组挤位
-  return Array.from(map.values()).sort((a, b) => Number(a.temp) - Number(b.temp));
+  const groups = Array.from(map.values());
+
+  // 加座并桌：临时桌座位的「同桌标识」对上某张正式桌（如 Q1）→ 挪到那张桌最后一个座位后面，
+  // 店员按物理桌找位；对不上任何正式桌的（独立临时桌）留在自己的临时分组。
+  // 必须显式插入而不是靠后端顺序：后端按 table_no → sort_no 排，加座的 sort_no 小，原序会排到 Q1-1 前面。
+  const homes = new Map<string, BoardGroup>();
+  for (const g of groups) {
+    if (g.temp) continue;
+    for (const s of g.seats) {
+      const k = tableKey(s.tableNo);
+      if (k && !homes.has(k)) homes.set(k, g);
+    }
+  }
+  for (const g of groups) {
+    if (!g.temp) continue;
+    const stay: GzBeanBoardRowVO[] = [];
+    for (const s of g.seats) {
+      const k = tableKey(s.tableNo);
+      const home = k ? homes.get(k) : undefined;
+      if (home) {
+        home.seats.splice(lastSeatIndexOfTable(home.seats, k) + 1, 0, s);
+      } else {
+        stay.push(s);
+      }
+    }
+    g.seats = stay;
+  }
+
+  // 临时桌垫底：店员的肌肉记忆是「先看正常桌」，周末加桌不能把原有分组挤位；座位全并走的临时分组不再显示
+  return groups.filter((g) => g.seats.length > 0).sort((a, b) => Number(a.temp) - Number(b.temp));
 });
 
 // ============ 状态/倒计时辅助 ============
@@ -1901,6 +1971,23 @@ onBeforeUnmount(() => {
   font-size: 11px;
   font-weight: 400;
   color: #8792a3;
+}
+/* 加座（并进正式桌的临时桌座位）：虚线框 + 琥珀角标，和正式座位一眼区分；边框颜色仍跟状态走 */
+.board-seat.is-extra {
+  border-style: dashed;
+}
+.board-seat.is-table-start {
+  grid-column-start: 1;
+}
+.board-seat__extra {
+  margin-left: 6px;
+  padding: 0 4px;
+  border: 1px solid #f3d19e;
+  border-radius: 3px;
+  background: #fdf6ec;
+  font-size: 11px;
+  font-weight: 400;
+  color: #e6a23c;
 }
 .board-seat__pill {
   flex: none;

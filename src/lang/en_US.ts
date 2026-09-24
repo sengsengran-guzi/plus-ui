@@ -866,6 +866,7 @@ export default {
   // Pindou in-store timing board (GZ-BEAN-028, ADR-0015 §5)
   gzBeanBoard: {
     tempTypeTag: 'Temp table',
+    extraSeatTag: 'Extra',
     title: 'In-store Timing Board',
     alertTitle: 'About',
     alertDesc:
