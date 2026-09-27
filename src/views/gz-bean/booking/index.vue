@@ -207,12 +207,7 @@
             :disabled="!proxyForm.storeId"
             style="width: 100%"
           >
-            <el-option
-              v-for="c in proxySeatTypeOptions"
-              :key="c.id"
-              :label="`${c.name}（¥${c.priceYuan}）`"
-              :value="c.id"
-            />
+            <el-option v-for="c in proxySeatTypeOptions" :key="c.id" :label="`${c.name}（¥${c.priceYuan}）`" :value="c.id" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('gzBeanBooking.proxyMobile')">
@@ -505,7 +500,8 @@ async function onProxyStoreChange(storeId: number | string) {
   try {
     const typeResp = await listGzBeanSeatTypeConfigByStore(Number(storeId));
     const types = ((typeResp as any).data || typeResp || []) as GzBeanSeatTypeConfigVO[];
-    proxySeatTypeOptions.value = types.filter((c) => c.enabled === 1);
+    // 代客开台属 walk-in，不受「对小程序开放」影响（ADR-0024 §2）；退役桌型靠软删过滤，不在此筛
+    proxySeatTypeOptions.value = types;
   } catch (e) {
     console.error('[gz-bean-booking] proxy load store types failed', e);
     ElMessage.error(t('gzBeanBooking.loadFailed'));

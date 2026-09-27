@@ -38,9 +38,11 @@ VXETable.setConfig({
   zIndex: 999999
 });
 
-// 修改 el-dialog 默认点击遮照为不关闭
-import { ElDialog } from 'element-plus';
-ElDialog.props.closeOnClickModal.default = false;
+// 弹框 / 抽屉一律「点蒙层即关闭」——element-plus 原生默认即 true，此处不要再覆盖默认值。
+//   历史坑：曾用 `ElDialog.props.closeOnClickModal.default = false` 全局关掉（ruoyi 模板旧习惯），
+//   而 el-drawer 与 el-dialog 共用 dialogProps，于是**抽屉也一起被关**，业务页不显式写就一律点蒙层没反应。
+//   客户要求「所有抽屉/弹框点蒙层都能关」→ 保持原生默认即可；个别需要防误关的弹框自行显式写
+//   `:close-on-click-modal="false"`。
 
 const app = createApp(App);
 

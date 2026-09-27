@@ -185,12 +185,189 @@
         </el-collapse-item>
       </el-collapse>
 
-      <!-- 统计条（c1 分层双栏格）：已排位待核销 / 在座中 / 临近结束 / 已超时 / 空闲座位 -->
+      <!-- 今日可售抽屉（ADR-0024 §3 / 甲方 2026-09-26）：只读展示小程序看板日期里没被预订的座位 +
+           就地「今天留 N 个座不给线上」（数量制：减该桌型该格配额）。展开一行 = 空闲座位 + 逐时段余量（可按格调），
+           行内「全天都留 N 个」= 按天统一。不做「今天不上小程序」（甲方明确不要整档关停，要关满把该格调到上限），
+           不做座位级开关。 -->
+      <el-drawer v-model="sellableOpen" :title="t('gzBeanBoard.sellableTitle')" size="62%" class="sellable-drawer" data-test="sellable-drawer">
+        <div v-loading="sellableLoading" class="sellable-body">
+          <div class="sellable-panel__head">
+            <span class="sellable-panel__hint">{{ t('gzBeanBoard.sellableHint') }}</span>
+            <el-button text size="small" :icon="Refresh" :loading="sellableLoading" class="ml-2" @click="loadSellable">
+              {{ t('gzBeanBoard.refresh') }}
+            </el-button>
+          </div>
+
+          <el-table :data="sellableRows" border stripe size="small" row-key="seatTypeConfigId" data-test="sellable-table">
+            <el-table-column type="expand">
+              <template #default="{ row }">
+                <div class="sellable-free">
+                  <span class="sellable-free__label">{{ t('gzBeanBoard.sellableFreeSeats') }}</span>
+                  <template v-if="row.freeSeats && row.freeSeats.length > 0">
+                    <el-tag v-for="s in row.freeSeats" :key="s.seatId" size="small" effect="plain" class="sellable-free__seat">
+                      {{ s.seatNo }}<span v-if="s.tableNo" class="sellable-free__table">{{ s.tableNo }}</span>
+                    </el-tag>
+                  </template>
+                  <span v-else class="sellable-free__empty">{{ t('gzBeanBoard.sellableNoFreeSeat') }}</span>
+                </div>
+                <el-table :data="row.slots" size="small" border class="sellable-slots">
+                  <el-table-column :label="t('gzBeanBoard.sellableColSlot')" width="110" align="center">
+                    <template #default="{ row: sr }">{{ sr.slotStart }}-{{ sr.slotEnd }}</template>
+                  </el-table-column>
+                  <el-table-column :label="t('gzBeanBoard.sellableColSlotBooked')" prop="booked" width="80" align="center" />
+                  <el-table-column :label="t('gzBeanBoard.sellableColSlotRemaining')" width="80" align="center">
+                    <template #default="{ row: sr }">
+                      <el-tag :type="sr.remaining <= 0 ? 'danger' : 'success'" size="small" effect="light">
+                        {{ sr.remaining }}
+                      </el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column :label="t('gzBeanBoard.sellableColSlotClose')" width="150" align="center">
+                    <template #default="{ row: sr }">
+                      <el-tag v-if="sr.closeCount > 0" type="warning" size="small" effect="plain">{{ sr.closeCount }}</el-tag>
+                      <span v-else>0</span>
+                      <el-tag v-if="sr.closeInherited" type="info" size="small" effect="plain" class="ml-1">
+                        {{ t('gzBeanBoard.sellableInheritedShort') }}
+                      </el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column v-if="hasQuotaEditPerm" :label="t('gzBeanBoard.sellableColSlotAction')" width="200" align="center">
+                    <template #default="{ row: sr }">
+                      <div class="sellable-slot-action">
+                        <el-input-number
+                          v-model="sellableSlotInput[slotKey(row.seatTypeConfigId, sr.slotStart)]"
+                          :min="0"
+                          :max="row.capPerSlot"
+                          :step="1"
+                          size="small"
+                          controls-position="right"
+                          style="width: 90px"
+                          :disabled="sellableSlotSubmittingKey !== null"
+                        />
+                        <el-button
+                          link
+                          type="primary"
+                          size="small"
+                          :loading="sellableSlotSubmittingKey === slotKey(row.seatTypeConfigId, sr.slotStart)"
+                          :disabled="
+                            !sellableSlotDirty(row, sr) || (sellableSlotInput[slotKey(row.seatTypeConfigId, sr.slotStart)] ?? 0) > row.capPerSlot
+                          "
+                          @click="handleSlotSave(row, sr)"
+                        >
+                          {{ t('gzBeanBoard.sellableSlotSave') }}
+                        </el-button>
+                      </div>
+                    </template>
+                  </el-table-column>
+                </el-table>
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('gzBeanBoard.sellableColName')" prop="name" min-width="130" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span>{{ row.name }}</span>
+                <el-tag v-if="row.bookMode" size="small" effect="plain" class="ml-1">
+                  {{ row.bookMode === 'whole' ? t('gzBeanBoard.bookModeWhole') : t('gzBeanBoard.bookModeSeat') }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <!-- 每格容量 = 桌型总容量（不扣任何关闭）：今天能卖多少看「今天关闭」列与展开后的逐格「剩余」 -->
+            <el-table-column :label="t('gzBeanBoard.sellableColCapPerSlot')" width="110" align="center">
+              <template #default="{ row }">{{ row.capPerSlot }} {{ unitOf(row) }}</template>
+            </el-table-column>
+            <!-- 长期关闭 = 桌型配置里的默认值：店员今天不动，今天关闭数就是它。
+                 说明对所有行都一样 → 按甲方 2026-09-26 放到列头，不在每行重复 ⓘ（图标也放大一档） -->
+            <el-table-column width="130" align="center">
+              <template #header>
+                <span>{{ t('gzBeanBoard.sellableColLongClose') }}</span>
+                <el-tooltip :content="t('gzBeanBoard.sellableLongCloseTip')" placement="top">
+                  <el-icon class="sellable-tip"><QuestionFilled /></el-icon>
+                </el-tooltip>
+              </template>
+              <template #default="{ row }">{{ row.longCloseCount }}</template>
+            </el-table-column>
+            <el-table-column :label="t('gzBeanBoard.sellableColActiveTotal')" prop="activeBookings" width="110" align="center" />
+            <el-table-column :label="t('gzBeanBoard.sellableColFreeSeats')" width="110" align="center">
+              <template #default="{ row }">
+                <el-tag :type="row.freeSeats.length <= 0 ? 'danger' : 'success'" size="small" effect="light">
+                  {{ row.freeSeats.length }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('gzBeanBoard.sellableColClose')" width="150" align="center">
+              <template #default="{ row }">
+                <el-tag v-if="!isCloseUniform(row)" type="warning" size="small" effect="plain">
+                  {{ t('gzBeanBoard.sellableCloseMixed') }}
+                </el-tag>
+                <template v-else>
+                  <span>{{ row.slots.length > 0 ? row.slots[0].closeCount : 0 }}</span>
+                  <el-tag v-if="isAllInherited(row)" type="info" size="small" effect="plain" class="ml-1">
+                    {{ t('gzBeanBoard.sellableInherited') }}
+                  </el-tag>
+                  <el-tag v-else type="success" size="small" effect="plain" class="ml-1">
+                    {{ t('gzBeanBoard.sellableOverridden') }}
+                  </el-tag>
+                </template>
+              </template>
+            </el-table-column>
+            <el-table-column v-if="hasQuotaEditPerm" :label="t('gzBeanBoard.sellableColDayAction')" width="300" align="center">
+              <template #default="{ row }">
+                <div class="sellable-action">
+                  <el-input-number
+                    v-model="sellableDayInput[row.seatTypeConfigId]"
+                    :min="0"
+                    :max="row.capPerSlot"
+                    :step="1"
+                    size="small"
+                    controls-position="right"
+                    style="width: 110px"
+                    :disabled="sellableSubmittingId !== null"
+                  />
+                  <el-button
+                    :type="(sellableDayInput[row.seatTypeConfigId] ?? 0) === 0 ? 'default' : 'primary'"
+                    size="small"
+                    :loading="sellableSubmittingId === row.seatTypeConfigId"
+                    :disabled="!sellableDayValid(row) || row.slotCount <= 0"
+                    @click="handleCloseDay(row)"
+                  >
+                    {{
+                      (sellableDayInput[row.seatTypeConfigId] ?? 0) === 0
+                        ? t('gzBeanBoard.sellableRestoreBtn')
+                        : t('gzBeanBoard.sellableApplyDayBtn', { n: sellableDayInput[row.seatTypeConfigId] ?? 0 })
+                    }}
+                  </el-button>
+                </div>
+                <div class="sellable-action__hint">
+                  {{ t('gzBeanBoard.sellableCapHint', { cap: row.capPerSlot, unit: unitOf(row) }) }}
+                </div>
+              </template>
+            </el-table-column>
+            <template #empty>
+              <el-empty :description="t('gzBeanBoard.sellableEmpty')" :image-size="60" />
+            </template>
+          </el-table>
+        </div>
+      </el-drawer>
+
+      <!-- 统计条（c1 分层双栏格）：已排位待核销 / 在座中 / 临近结束 / 已超时 / 空闲座位
+           + 今日小程序剩余座位（ADR-0024 §3，甲方 2026-09-26：和这五个格子同一行、同一视觉规格；
+           曾经做成独占整行的大按钮，被批「太夸张了」→ 改成对齐的格子） -->
       <div class="board-metrics">
         <div v-for="st in legendStatuses" :key="st" class="board-metric" :class="`is-${st}`">
           <b class="board-metric__num">{{ statusCount(st) }}</b>
           <span class="board-metric__lbl">{{ t(`gzBeanBoard.status.${st}`) }}</span>
         </div>
+        <el-button
+          v-hasPermi="['gz:bean:booking:verify']"
+          type="primary"
+          plain
+          :icon="Goods"
+          :loading="sellableLoading"
+          class="sellable-entry"
+          data-test="sellable-entry"
+          @click="openSellable"
+        >
+          {{ t('gzBeanBoard.sellableEntry') }}
+        </el-button>
         <span class="board-clock">{{ t('gzBeanBoard.now') }}：{{ nowLabel }}</span>
       </div>
       <!-- 图例 + 动线说明 -->
@@ -212,7 +389,7 @@
               {{ group.bookMode === 'seat' ? t('gzBeanBoard.bookModeSeat') : t('gzBeanBoard.bookModeWhole') }}
             </el-tag>
             <el-tag v-if="group.temp" type="warning" size="small" effect="dark" class="ml-1">
-              {{ t('gzBeanBoard.tempTypeTag') }}
+              {{ t('gzBeanBoard.mpClosedTag') }}
             </el-tag>
           </div>
           <div class="board-seat-grid">
@@ -480,7 +657,6 @@
       :title="t(walkInIsReserve ? 'gzBeanBoard.walkInTitleReserve' : 'gzBeanBoard.walkInTitle')"
       size="440px"
       direction="rtl"
-      :close-on-click-modal="false"
     >
       <template v-if="walkInSeat">
         <el-descriptions :column="1" border size="small" class="mb-3">
@@ -589,7 +765,7 @@
             </div>
             <div class="assign-seat__type">
               {{ seat.typeName || '-' }}
-              <el-tag v-if="seat.temp" type="warning" size="small" effect="plain">{{ t('gzBeanBoard.tempTypeTag') }}</el-tag>
+              <el-tag v-if="seat.temp" type="warning" size="small" effect="plain">{{ t('gzBeanBoard.mpClosedTag') }}</el-tag>
             </div>
             <!-- 排位候选：被目标时段占用的座置灰给理由（ADR-0018 §2 客户 7.07），店员不再困惑「D4 去哪了」 -->
             <div v-if="!seat.assignable" class="assign-seat__occupied">
@@ -618,7 +794,21 @@
 
 <script setup lang="ts" name="GzBeanBoard">
 import { ref, computed, onMounted, onActivated, onDeactivated, onBeforeUnmount } from 'vue';
-import { Search, Refresh, Timer, CircleClose, Bell, Select, Switch, WarningFilled, EditPen, Delete, Plus } from '@element-plus/icons-vue';
+import {
+  Search,
+  Refresh,
+  Timer,
+  CircleClose,
+  Bell,
+  Select,
+  Switch,
+  WarningFilled,
+  EditPen,
+  Delete,
+  Plus,
+  Goods,
+  QuestionFilled
+} from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox, ElNotification } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { getGzBeanStoreOptions, type GzBeanStoreVO } from '@/api/gz-bean/store';
@@ -644,6 +834,9 @@ import {
   type GzBeanWalkInBo
 } from '@/api/gz-bean/board';
 import { getGzBeanPreAssignCandidates } from '@/api/gz-bean/booking';
+import { getGzBeanDaySellable, closeGzBeanSlotQuotaDay, type GzBeanDaySellableVO } from '@/api/gz-bean/daySellable';
+import { upsertGzBeanSlotQuotaClose } from '@/api/gz-bean/slotAvailability';
+import { checkPermi } from '@/utils/permission';
 import type { GzBeanSeatVO } from '@/api/gz-bean/seat';
 
 const { t } = useI18n();
@@ -956,11 +1149,14 @@ async function loadStoreOptions() {
 
 async function onStoreChange(id: number) {
   currentStoreId.value = id;
-  // 换店清空提醒记账 + 待分座区 + 过期待处理区，避免上一店的 near_end / 待分座 / 过期单串到本店
+  // 换店清空提醒记账 + 待分座区 + 过期待处理区 + 今日可售抽屉，避免上一店的 near_end / 待分座 / 过期单串到本店
   notifiedNearEnd.clear();
   pendingRows.value = [];
   expiredRows.value = [];
   selectedExpiredIds.value = [];
+  sellableRows.value = [];
+  sellableDayInput.value = {};
+  sellableSlotInput.value = {};
   await loadBoard();
 }
 
@@ -986,9 +1182,10 @@ async function loadBoard() {
     lastFetchAt = Date.now();
     listLoading.value = false;
   }
-  // 看板与待分座区 / 过期待处理区一起刷新（同一动作触发，互不阻塞）
+  // 看板与待分座区 / 过期待处理区 / 今日可售板块一起刷新（同一动作触发，互不阻塞）
   loadPending();
   loadExpired();
+  if (sellableOpen.value) loadSellable();
 }
 
 /** ②待分座区加载 */
@@ -1767,6 +1964,153 @@ async function handleBatchSettle(action: GzBeanSettleAction) {
   }
 }
 
+// ============ 今日可售抽屉（ADR-0024 §3）：只读看「还有哪些座位没人订」+ 就地「今天留 N 个座不给线上」 ============
+const sellableOpen = ref(false);
+const sellableLoading = ref(false);
+const sellableRows = ref<GzBeanDaySellableVO[]>([]);
+/** 按天统一入口的提交中标记（值为 seatTypeConfigId） */
+const sellableSubmittingId = ref<string | null>(null);
+/** 逐时段入口的提交中标记（值为 `configId@slotStart`） */
+const sellableSlotSubmittingKey = ref<string | null>(null);
+/** 按天统一的输入值，按 seatTypeConfigId 索引；开抽屉 / 刷新时用「各格一致的那个值」初始化，不一致则 0 */
+const sellableDayInput = ref<Record<string, number>>({});
+/** 逐时段输入值，按 `configId@slotStart` 索引 */
+const sellableSlotInput = ref<Record<string, number>>({});
+const hasQuotaEditPerm = computed(() => checkPermi(['gz:bean:slotQuota:edit']));
+
+/** 逐时段输入值的 key（一个桌型下每个小时格一行） */
+function slotKey(configId: string, slotStart: string): string {
+  return `${configId}@${slotStart}`;
+}
+
+/** 配额单位：whole 模式配额是「桌数」，seat 模式是「座位数」——不区分会让双人桌显示「剩 4」而实际 8 个座 */
+function unitOf(row: GzBeanDaySellableVO): string {
+  return row.bookMode === 'seat' ? t('gzBeanBoard.sellableUnitSeat') : t('gzBeanBoard.sellableUnitTable');
+}
+
+/** 该桌型各格「今天关闭」是否全部沿用长期默认（用于打「沿用长期」标；有一格改过就显示「今天已改」） */
+function isAllInherited(row: GzBeanDaySellableVO): boolean {
+  return row.slots.length > 0 && row.slots.every((s) => s.closeInherited === true);
+}
+
+/** 各格关闭数是否一致（一致的单个值才代表「今天的关闭数」；不一致显「分时段」） */
+function isCloseUniform(row: GzBeanDaySellableVO): boolean {
+  if (!row.slots || row.slots.length === 0) return true;
+  const first = row.slots[0].closeCount;
+  return row.slots.every((s) => s.closeCount === first);
+}
+
+function openSellable() {
+  sellableOpen.value = true;
+  loadSellable();
+}
+
+function sellableDayValid(row: GzBeanDaySellableVO): boolean {
+  const n = sellableDayInput.value[row.seatTypeConfigId];
+  // 上限 = 总容量：当日关闭是**覆盖**长期默认的绝对值（GZ-BEAN-057），今天可以把长期关着的也放开
+  return Number.isInteger(n) && n >= 0 && n <= row.capPerSlot;
+}
+
+/** 该格输入值是否与后端现值不同（相同就不给提交：既省一次写，也避开 @RepeatSubmit 的相同 payload 拦截） */
+function sellableSlotDirty(row: GzBeanDaySellableVO, slot: GzBeanDaySellableVO['slots'][number]): boolean {
+  const n = sellableSlotInput.value[slotKey(row.seatTypeConfigId, slot.slotStart)];
+  return Number.isInteger(n) && n >= 0 && n !== slot.closeCount;
+}
+
+/** 拉取当日「对小程序开放」的桌型逐时段可售行（抽屉未打开时不请求，避免空转） */
+async function loadSellable() {
+  if (currentStoreId.value == null) return;
+  sellableLoading.value = true;
+  try {
+    const resp = await getGzBeanDaySellable({ storeId: currentStoreId.value, sessDate: sessDate.value });
+    const list = ((resp as any).data || []) as GzBeanDaySellableVO[];
+    sellableRows.value = list;
+    // 输入值处理：看板每 30s 自动刷新，不能把店员正在填的数字冲掉 —— 已存在的输入值原样保留（仅按新上限收敛），
+    // 只初始化新行 / 新格。
+    const dayInputs: Record<string, number> = {};
+    const slotInputs: Record<string, number> = {};
+    for (const r of list) {
+      const prevDay = sellableDayInput.value[r.seatTypeConfigId];
+      const uniform = r.slots && r.slots.length > 0 && isCloseUniform(r);
+      dayInputs[r.seatTypeConfigId] =
+        typeof prevDay === 'number' && Number.isInteger(prevDay) ? Math.min(prevDay, r.capPerSlot) : uniform ? r.slots[0].closeCount : 0;
+      for (const s of r.slots || []) {
+        const k = slotKey(r.seatTypeConfigId, s.slotStart);
+        const prev = sellableSlotInput.value[k];
+        slotInputs[k] = typeof prev === 'number' && Number.isInteger(prev) ? Math.min(prev, r.capPerSlot) : s.closeCount;
+      }
+    }
+    sellableDayInput.value = dayInputs;
+    sellableSlotInput.value = slotInputs;
+  } catch (e) {
+    // 失败原样透出后端 msg：request.ts 已 toast，此处不重复弹
+    console.error('[gz-bean-board] loadSellable failed', e);
+  } finally {
+    sellableLoading.value = false;
+  }
+}
+
+/** 全天关闭：把该桌型该日每格关闭数统一覆盖为输入的 N（0 = 今天全开，顶掉长期默认）；上限总容量前端先拦一道 */
+async function handleCloseDay(row: GzBeanDaySellableVO) {
+  const n = sellableDayInput.value[row.seatTypeConfigId];
+  if (!sellableDayValid(row)) {
+    ElMessage.warning(t('gzBeanBoard.sellableCountInvalid', { cap: row.capPerSlot }));
+    return;
+  }
+  await submitCloseDay(row, n);
+}
+
+/** 逐时段：只覆盖该桌型该日某一个小时格的关闭数（只对今天生效） */
+async function handleSlotSave(row: GzBeanDaySellableVO, slot: GzBeanDaySellableVO['slots'][number]) {
+  if (currentStoreId.value == null) return;
+  const n = sellableSlotInput.value[slotKey(row.seatTypeConfigId, slot.slotStart)];
+  if (!Number.isInteger(n) || n < 0 || n > row.capPerSlot) {
+    ElMessage.warning(t('gzBeanBoard.sellableCountInvalid', { cap: row.capPerSlot }));
+    return;
+  }
+  const key = slotKey(row.seatTypeConfigId, slot.slotStart);
+  sellableSlotSubmittingKey.value = key;
+  try {
+    await upsertGzBeanSlotQuotaClose({
+      storeId: currentStoreId.value,
+      seatTypeConfigId: row.seatTypeConfigId,
+      sessDate: sessDate.value,
+      slotStart: slot.slotStart,
+      closeCount: n
+    });
+    ElMessage.success(
+      n === 0
+        ? t('gzBeanBoard.sellableSlotRestoreSuccess', { slot: `${slot.slotStart}-${slot.slotEnd}` })
+        : t('gzBeanBoard.sellableSlotCloseSuccess', { slot: `${slot.slotStart}-${slot.slotEnd}`, n })
+    );
+    await loadSellable();
+  } catch (e) {
+    console.error('[gz-bean-board] close-slot failed', e);
+  } finally {
+    sellableSlotSubmittingKey.value = null;
+  }
+}
+
+async function submitCloseDay(row: GzBeanDaySellableVO, n: number) {
+  if (currentStoreId.value == null) return;
+  sellableSubmittingId.value = row.seatTypeConfigId;
+  try {
+    await closeGzBeanSlotQuotaDay({
+      storeId: currentStoreId.value,
+      seatTypeConfigId: row.seatTypeConfigId,
+      sessDate: sessDate.value,
+      closeCount: n
+    });
+    ElMessage.success(n === 0 ? t('gzBeanBoard.sellableRestoreSuccess') : t('gzBeanBoard.sellableCloseSuccess', { n }));
+    await loadSellable();
+  } catch (e) {
+    // 失败原样透出后端 msg（含超限点名）：request.ts 已 toast，此处不重复弹
+    console.error('[gz-bean-board] close-day failed', e);
+  } finally {
+    sellableSubmittingId.value = null;
+  }
+}
+
 // ============ 时钟 tick：每秒刷倒计时；每 30s 且开启自动刷新时重拉看板 ============
 function startTick() {
   stopTick();
@@ -2271,6 +2615,103 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+/* 今日可售（ADR-0024 §3）：入口挂在「过期待处理 / 刷新」同一行的右侧空白区，
+   标题 slot 默认是 inline 内容，先把标题行改成 flex 才能用 margin-left:auto 靠右 */
+.expired-panel :deep(.el-collapse-item__title) {
+  display: flex;
+  align-items: center;
+}
+/* 今日小程序剩余座位：独占一行的大按钮（甲方 2026-09-26） */
+/* 列头提示图标（甲方 2026-09-26：图标做大一点）：比正文大一档、hover 变色 */
+.sellable-tip {
+  margin-left: 4px;
+  font-size: 15px;
+  color: #909399;
+  vertical-align: -2px;
+  cursor: help;
+}
+.sellable-tip:hover {
+  color: #409eff;
+}
+/* 今日小程序剩余座位（甲方 2026-09-26）：和统计格同一行、同一视觉规格 ——
+   align-self:stretch 让它跟最高的那个格子等高（不写死高度，格子内边距/字号变了也不会错位） */
+.board-metrics .sellable-entry {
+  align-self: stretch;
+  height: auto;
+  margin-left: 4px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+.sellable-panel {
+  border: 1px solid #e3e8ef;
+  border-radius: 8px;
+  padding: 10px 12px 12px;
+  background: #fbfcfe;
+}
+.sellable-panel__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.sellable-panel__icon {
+  color: #1f9a63;
+}
+.sellable-panel__title {
+  font-weight: 600;
+  color: #303133;
+}
+.sellable-panel__hint {
+  color: #8792a3;
+  font-size: 11.5px;
+}
+/* 今日可售抽屉：内层「逐时段」小表不能撑破外层单元格（Element Plus 嵌套表格默认 100% 宽 + 自己的 border） */
+.sellable-body {
+  min-height: 200px;
+}
+.sellable-slots {
+  margin: 2px 0;
+}
+.sellable-slots :deep(.el-table__cell) {
+  padding: 2px 0;
+}
+.sellable-slot-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.sellable-free {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 8px;
+}
+.sellable-free__label {
+  color: #4b5666;
+  font-size: 12px;
+}
+.sellable-free__table {
+  margin-left: 4px;
+  color: #8792a3;
+}
+.sellable-free__empty {
+  color: #8792a3;
+  font-size: 12px;
+}
+.sellable-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.sellable-action__hint {
+  margin-top: 2px;
+  color: #8792a3;
+  font-size: 11px;
 }
 /* 分配座位弹窗 */
 .assign-seat-label {

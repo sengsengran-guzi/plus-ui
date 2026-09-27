@@ -4,8 +4,8 @@
  * 后端路径：/system/gz/bean/seat/*
  * 权限：gz:bean:seat:list / add / edit / remove / batchGenerate
  *
- * 模型背景：ADR-0015 复活具体座位单元（挂桌型 config 之下），影院选座以具体座位为准；
- * admin 单独 CRUD / 启停 + 「按桌型批量生成」（不逐个手画）。
+ * 模型背景：ADR-0015 复活具体座位单元（挂桌型 config 之下）；admin 单独 CRUD
+ * + 「按桌型批量生成」（不逐个手画）。座位是物理档案，可订性由所属桌型的 mp_visible 决定。
  * 字段权威：doc/11 §3.3 gz_bean_seat。
  */
 import request from '@/utils/request';
@@ -17,7 +17,7 @@ export interface GzBeanSeatVO {
   id: string;
   /** 门店 id（string） */
   storeId: string;
-  /** 所属桌型 config id（string）；NULL = legacy 停用座 */
+  /** 所属桌型 config id（string）；NULL = 无桌型的遗留座 */
   seatTypeConfigId: string | null;
   /** 座位/桌编号（显示标签） */
   seatNo: string;
@@ -29,8 +29,6 @@ export interface GzBeanSeatVO {
   rowLabel?: string | null;
   /** 列序号（影院图行列定位辅助） */
   colIndex?: number | null;
-  /** 0=停用 / 1=启用 */
-  enabled: number;
   /** 排序值 */
   sortNo: number;
   /** 创建时间 */
@@ -59,7 +57,6 @@ export interface GzBeanSeatForm {
   zone?: string | null;
   rowLabel?: string | null;
   colIndex?: number | null;
-  enabled?: number;
   sortNo?: number;
   remark?: string | null;
 }
@@ -70,7 +67,6 @@ export interface GzBeanSeatQuery {
   seatTypeConfigId?: number | string | null;
   seatNo?: string;
   tableNo?: string;
-  enabled?: number;
   pageNum?: number;
   pageSize?: number;
 }
@@ -122,15 +118,6 @@ export function updateGzBeanSeat(data: GzBeanSeatForm) {
     url: '/system/gz/bean/seat',
     method: 'put',
     data
-  });
-}
-
-/** PUT /system/gz/bean/seat/{id}/enabled?enabled= — 启停（属编辑权限） */
-export function toggleGzBeanSeatEnabled(id: number | string, enabled: number) {
-  return request({
-    url: `/system/gz/bean/seat/${id}/enabled`,
-    method: 'put',
-    params: { enabled }
   });
 }
 

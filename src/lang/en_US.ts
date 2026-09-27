@@ -580,7 +580,7 @@ export default {
     title: 'Seat Type Config',
     alertTitle: 'Note',
     alertDesc:
-      'Per store, define custom seat/table types: name + booking mode (whole-table / per-seat sharing) + seats per table + quantity + base price. Whole = book the entire table (e.g. 2-seat table); per-seat = book a single seat / share a table (e.g. 4-seat table). Base price is the fallback; via "Weekday × Slot Price" you can price each 1h slot of each weekday individually (interval total = sum of per-hour slot prices). Disabled types are hidden in the mini-program.',
+      'Per store, define custom seat/table types: name + booking mode (whole-table / per-seat sharing) + seats per table + quantity + base price. Whole = book the entire table (e.g. 2-seat table); per-seat = book a single seat / share a table (e.g. 4-seat table). Base price is the fallback; via "Weekday × Slot Price" you can price each 1h slot of each weekday individually (interval total = sum of per-hour slot prices). Closing "Open to Mini Program" hides the type in the mini-program, while the in-store board and seat assignment are unaffected.',
     store: 'Store',
     add: 'Add Type',
     refresh: 'Refresh',
@@ -602,17 +602,28 @@ export default {
     priceHint: 'Base price (Yuan/hour); can be overridden per "weekday × slot"',
     dayPassQuotaHint: '0 = day pass disabled; max = total seats of this type (whole = quantity, per-seat = quantity × seats per table)',
     dayPassPriceHint: 'Base day-pass price (Yuan/day), not charged hourly; set weekday / weekend prices in "Weekday prices"',
-    colChannel: 'Channel',
-    channelAll: 'All',
-    channelMp: 'Bookable in mini program',
-    channelTemp: 'Back-office temp table only',
-    tempTag: 'Temp',
-    channelHint:
-      'Temp tables appear only on the in-store board for staff walk-in timing. They are hidden from the mini program and excluded from online availability and quota closing.',
+    mpVisibleClosed: 'Closed',
+    colMpLongClose: 'Long-term close',
+    colMpSellable: 'Bookable in app',
+    unitSeat: 'seats',
+    unitTable: 'tables',
+    mpSellableTip:
+      'How many can be booked per hour slot in the mini program when staff have not changed anything on the board today (= capacity - long-term close). Board changes apply to that day only.',
+    mpLongCloseTag: 'Long close {n}',
+    colPriceMoved: 'Pricing',
+    priceMovedHint: 'Base price ¥{base}/hour, day-pass base ¥{dayPass}/day. All prices (incl. per-slot / per-weekday) are set in "Weekday x slot price" on the list.',
+    pricePerHourUnit: 'Yuan/hour',
+    pricePerDayUnit: 'Yuan/day',
+    gridDefaultsTitle: 'Global default price',
+    gridBaseHint: 'Empty cells in the grid fall back to this price (3rd-level fallback).',
+    gridDayPassBaseHint: 'Weekdays with an empty day-pass cell fall back to this price.',
+    priceZeroTip: 'Base price is still ¥0.00: the mini program will charge 0. Set it in "Weekday x slot price".',
+    mpLongCloseHint:
+      'Default for "Closed today" on the board (0..{cap}; whole = tables, per-seat = seats): if staff do not change it on the board today, the mini program sells this many fewer. Board changes apply to that day only. 0 = none held back.',
     quantitySeatHint:
       'Quantity x seats per table = number of timing cells on the board (1 table x 4 seats -> quantity 1 / seats per table 4 / mode "by seat" -> 4 cells)',
-    nameRevenueHint: 'Revenue reports break down by seat type name, so use a readable name (e.g. Temp 4-seat table)',
-    dayPassTempHint: 'Temp tables do not support day passes (day pass applies only to types open to the mini program)',
+    nameRevenueHint: 'Revenue reports break down by seat type name, so use a readable name (e.g. Window 4-seat table)',
+    dayPassClosedHint: 'Table types not open to the mini program do not support day passes (day pass applies only to bookable types)',
     dayPassOff: 'Disabled',
     delConfirm: 'Delete "{type}"? (soft delete; existing bookings unaffected; its weekday prices are cleared)',
     addSuccess: 'Added',
@@ -632,9 +643,7 @@ export default {
     colPriceYuan: 'Base Price(Yuan)',
     colDayPassQuota: 'Day Pass Quota',
     colDayPassPrice: 'Day Pass Base Price',
-    colEnabled: 'Enabled',
     colCells: 'Timer cells',
-    cellsTipDisabled: '{disabled} of them are disabled and do not appear on the board.',
     cellsTipOk: 'This table type occupies {board} cells on the in-store timer board (aligned automatically on save; no manual upkeep).',
     cellsTipStale:
       'The board currently has {board} cells; per the current quantity x seats-per-table it should be {expected}. Saving this table type once will align it.',
@@ -685,21 +694,17 @@ export default {
   },
   // Pindou seat unit management (GZ-BEAN-027, ADR-0015)
   gzBeanSeat: {
-    tempTag: 'Temp',
+    mpClosedTag: 'MP closed',
     batchGenerateConflict: 'Some codes are already used by other seat types ({nos}). Pick a different prefix and retry.',
     title: 'Seat Units',
     alertTitle: 'Note',
     alertDesc:
-      'Seat units belong to a seat type; the mini-program cinema-style selection relies on them. You can add / edit / enable a single seat, but it is recommended to define seat types first, then use "Batch Generate by Type" to auto-create numbered seats (whole table numbered by table, per-seat numbered by seat). Disabling a seat does not affect its existing bookings.',
+      'Seat units belong to a seat type. You can add / edit / delete a single seat, but it is recommended to define seat types first, then use "Batch Generate by Type" to auto-create numbered seats (whole table numbered by table, per-seat numbered by seat). Seats are physical records and do not control bookability themselves: whether a seat can be booked in the mini program is decided by its seat type\'s "Open to Mini Program".',
     store: 'Store',
     seatTypeConfig: 'Seat Type',
     seatTypeConfigPlaceholder: 'All types',
     tableNo: 'Table No.',
     tableNoPlaceholder: 'e.g. T1',
-    enabled: 'Enabled',
-    enabledAll: 'All',
-    enabledYes: 'Enabled',
-    enabledNo: 'Disabled',
     search: 'Search',
     reset: 'Reset',
     batchGenerate: 'Batch Generate by Type',
@@ -720,7 +725,6 @@ export default {
     colSeatTypeConfig: 'Seat Type',
     colTableNo: 'Table No.',
     colZone: 'Zone',
-    colEnabled: 'Enabled',
     colSortNo: 'Sort',
     colAction: 'Action',
     colRemark: 'Remark',
@@ -867,7 +871,7 @@ export default {
   },
   // Pindou in-store timing board (GZ-BEAN-028, ADR-0015 §5)
   gzBeanBoard: {
-    tempTypeTag: 'Temp table',
+    mpClosedTag: 'MP closed',
     extraSeatTag: 'Extra',
     title: 'In-store Timing Board',
     alertTitle: 'About',
@@ -1067,7 +1071,44 @@ export default {
     remarkSave: 'Save',
     remarkDelete: 'Delete',
     remarkSaveSuccess: 'Note saved',
-    remarkDeleteSuccess: 'Note deleted'
+    remarkDeleteSuccess: 'Note deleted',
+    // Sellable-today drawer (ADR-0024 §3): read-only unbooked seats + per-slot / whole-day "hold N back from the mini program"
+    sellableEntry: 'Sellable today',
+    sellableTitle: 'Sellable today',
+    sellableHint:
+      '"Closed today" defaults to the table type\'s "long-term close": if staff do not touch it, the mini program sells that many fewer. Changing it here (e.g. 0 = fully open today, 3 = close 3 today) applies to today only and does not change the table type config.',
+    sellableFreeSeats: 'Unbooked seats:',
+    sellableNoFreeSeat: 'No free seat',
+    sellableColName: 'Type',
+    sellableColCapPerSlot: 'Capacity/slot',
+    sellableColLongClose: 'Long-term close',
+    sellableLongCloseTip:
+      'Default from the table type config: if staff do not change it on the board today, this many stay closed. Change the default in Seat management -> Table types.',
+    sellableInherited: 'from long-term',
+    sellableInheritedShort: 'default',
+    sellableOverridden: 'changed today',
+    sellableColActiveTotal: 'Booked today',
+    sellableColFreeSeats: 'Free seats',
+    sellableColClose: 'Closed today',
+    sellableCloseMixed: 'Per slot',
+    sellableColDayAction: 'Close for the day',
+    sellableCapHint: 'Max {cap} {unit}',
+    sellableColSlot: 'Slot',
+    sellableColSlotBooked: 'Booked',
+    sellableColSlotRemaining: 'Left',
+    sellableColSlotClose: 'Closed',
+    sellableColSlotAction: 'Close this slot',
+    sellableSlotSave: 'Save',
+    sellableApplyDayBtn: 'Close {n} all day',
+    sellableRestoreBtn: 'Fully open again',
+    sellableUnitSeat: 'seats',
+    sellableUnitTable: 'tables',
+    sellableCountInvalid: 'Enter an integer between 0 and {cap}',
+    sellableCloseSuccess: 'Closed {n} in every slot of this type today (today only)',
+    sellableRestoreSuccess: 'Fully open today (overrides the long-term default for today only)',
+    sellableSlotCloseSuccess: 'Closed {n} in {slot} (today only)',
+    sellableSlotRestoreSuccess: 'Slot {slot} is fully open again',
+    sellableEmpty: 'No table type configured'
   },
   // Pindou booking management (D05 GZ-BEAN-008)
   gzBeanBooking: {
@@ -1216,7 +1257,7 @@ export default {
     title: 'Live Availability',
     alertTitle: 'Note',
     alertDesc:
-      'View opened / booked / remaining per table type and time slot by store + date. Adjust the "Close" count to disable bookable seats for that slot (closed slots are unbookable that day); changes take effect immediately. Replaces the old per-seat closure rule. Only seat types open to the mini program are listed - temp tables are excluded from the mini program and from quota closing.',
+      'View opened / booked / remaining per table type and time slot by store + date. Adjust the "Close" count to disable bookable seats for that slot (closed slots are unbookable that day); changes take effect immediately. Replaces the old per-seat closure rule. Only seat types open to the mini program are listed - closed types are excluded from the mini program and from quota closing.',
     store: 'Store',
     storePlaceholder: 'Select store',
     date: 'Date',
@@ -1253,8 +1294,7 @@ export default {
   gzBeanSeatManagement: {
     title: 'Seat Management',
     tabSeatTypeConfig: 'Table Types',
-    tabSeat: 'Seat Units',
-    tabSlotAvailability: 'Live Availability & Closure'
+    tabSeat: 'Seat Units'
   },
   // WeChat Pay V3 channel (D07 GZ-PAY-001)
   gzPay: {

@@ -38,12 +38,6 @@
             @keyup.enter="handleQuery"
           />
         </el-form-item>
-        <el-form-item :label="t('gzBeanSeat.enabled')">
-          <el-select v-model="query.enabled" clearable :placeholder="t('gzBeanSeat.enabledAll')" style="width: 120px" @change="handleQuery">
-            <el-option :label="t('gzBeanSeat.enabledYes')" :value="1" />
-            <el-option :label="t('gzBeanSeat.enabledNo')" :value="0" />
-          </el-select>
-        </el-form-item>
         <el-form-item>
           <el-button v-hasPermi="['gz:bean:seat:list']" type="primary" :icon="Search" @click="handleQuery">
             {{ t('gzBeanSeat.search') }}
@@ -95,7 +89,7 @@
             </el-tag>
             <!-- 临时桌（GZ-BEAN-054）：只在看板可见、不进小程序 -->
             <el-tag v-if="isTempSeat(row)" type="warning" size="small" effect="plain" class="ml-1">
-              {{ t('gzBeanSeat.tempTag') }}
+              {{ t('gzBeanSeat.mpClosedTag') }}
             </el-tag>
           </template>
         </el-table-column>
@@ -104,17 +98,6 @@
         </el-table-column>
         <el-table-column :label="t('gzBeanSeat.colZone')" prop="zone" width="120" align="center">
           <template #default="{ row }">{{ row.zone || '-' }}</template>
-        </el-table-column>
-        <el-table-column :label="t('gzBeanSeat.colEnabled')" width="80" align="center">
-          <template #default="{ row }">
-            <el-switch
-              v-hasPermi="['gz:bean:seat:edit']"
-              :model-value="row.enabled === 1"
-              :active-value="true"
-              :inactive-value="false"
-              @change="(v: boolean) => handleToggleEnabled(row, v ? 1 : 0)"
-            />
-          </template>
         </el-table-column>
         <el-table-column :label="t('gzBeanSeat.colSortNo')" prop="sortNo" width="70" align="center" />
         <el-table-column :label="t('gzBeanSeat.colAction')" fixed="right" width="150" align="center">
@@ -152,14 +135,6 @@
         </el-form-item>
         <el-form-item :label="t('gzBeanSeat.colZone')">
           <el-input v-model="form.zone" maxlength="16" :placeholder="t('gzBeanSeat.zonePlaceholder')" />
-        </el-form-item>
-        <el-form-item :label="t('gzBeanSeat.colEnabled')">
-          <el-switch
-            :model-value="form.enabled === 1"
-            :active-value="true"
-            :inactive-value="false"
-            @update:model-value="(v: boolean) => (form.enabled = v ? 1 : 0)"
-          />
         </el-form-item>
         <el-form-item :label="t('gzBeanSeat.colSortNo')">
           <el-input-number v-model="form.sortNo" :min="0" :max="9999" />
@@ -213,7 +188,6 @@ import {
   listGzBeanSeat,
   addGzBeanSeat,
   updateGzBeanSeat,
-  toggleGzBeanSeatEnabled,
   delGzBeanSeat,
   batchGenerateGzBeanSeat,
   type GzBeanSeatVO,
@@ -236,7 +210,7 @@ const configMap = computed(() => new Map(configOptions.value.map((c) => [String(
 /** 桌型下拉 label：临时桌加「（临时）」后缀（GZ-BEAN-054），店员选座时一眼分辨 */
 function configOptionLabel(c: GzBeanSeatTypeConfigVO): string {
   const mode = c.bookMode === 'seat' ? t('gzBeanSeat.bookModeSeat') : t('gzBeanSeat.bookModeWhole');
-  const suffix = c.mpVisible === 0 ? `（${t('gzBeanSeat.tempTag')}）` : '';
+  const suffix = c.mpVisible === 0 ? `（${t('gzBeanSeat.mpClosedTag')}）` : '';
   return `${c.name}（${mode}）${suffix}`;
 }
 
@@ -254,8 +228,7 @@ const query = reactive<GzBeanSeatQuery>({
   pageSize: 10,
   storeId: null,
   seatTypeConfigId: null,
-  tableNo: undefined,
-  enabled: undefined
+  tableNo: undefined
 });
 
 // ============ 表单 ============
@@ -266,7 +239,6 @@ interface FormState {
   seatNo: string;
   tableNo: string;
   zone: string;
-  enabled: number;
   sortNo: number;
   remark: string;
 }
@@ -280,7 +252,6 @@ const form = reactive<FormState>({
   seatNo: '',
   tableNo: '',
   zone: '',
-  enabled: 1,
   sortNo: 0,
   remark: ''
 });
@@ -374,7 +345,6 @@ function handleQuery() {
 function handleReset() {
   query.seatTypeConfigId = null;
   query.tableNo = undefined;
-  query.enabled = undefined;
   query.pageNum = 1;
   loadList();
 }
@@ -393,7 +363,6 @@ function handleAdd() {
     seatNo: '',
     tableNo: '',
     zone: '',
-    enabled: 1,
     sortNo: 0,
     remark: ''
   });
@@ -409,7 +378,6 @@ function handleEdit(row: GzBeanSeatVO) {
     seatNo: row.seatNo,
     tableNo: row.tableNo || '',
     zone: row.zone || '',
-    enabled: row.enabled,
     sortNo: row.sortNo,
     remark: row.remark || ''
   });
@@ -432,7 +400,6 @@ async function handleSubmit() {
       seatNo: form.seatNo,
       tableNo: form.tableNo || null,
       zone: form.zone || null,
-      enabled: form.enabled,
       sortNo: form.sortNo,
       remark: form.remark || null
     };
@@ -449,17 +416,6 @@ async function handleSubmit() {
     console.error('[gz-bean-seat] submit failed', e);
   } finally {
     submitting.value = false;
-  }
-}
-
-async function handleToggleEnabled(row: GzBeanSeatVO, enabled: number) {
-  try {
-    await toggleGzBeanSeatEnabled(row.id, enabled);
-    ElMessage.success(t('gzBeanSeat.editSuccess'));
-    await loadList();
-  } catch (e) {
-    console.error('[gz-bean-seat] toggle failed', e);
-    await loadList(); // 失败回滚 switch 视图
   }
 }
 

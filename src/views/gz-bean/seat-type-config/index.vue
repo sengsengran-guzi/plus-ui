@@ -24,13 +24,6 @@
             <el-option v-for="s in storeOptions" :key="s.id" :label="`${s.storeNo} · ${s.name}`" :value="s.id" />
           </el-select>
         </el-form-item>
-        <el-form-item :label="t('gzBeanSeatTypeConfig.colChannel')">
-          <el-select v-model="channelFilter" style="width: 160px">
-            <el-option :label="t('gzBeanSeatTypeConfig.channelAll')" value="all" />
-            <el-option :label="t('gzBeanSeatTypeConfig.channelMp')" value="mp" />
-            <el-option :label="t('gzBeanSeatTypeConfig.channelTemp')" value="temp" />
-          </el-select>
-        </el-form-item>
         <el-form-item>
           <el-button v-hasPermi="['gz:bean:seatTypeConfig:add']" type="primary" plain :icon="Plus" :disabled="!currentStoreId" @click="handleAdd">{{
             t('gzBeanSeatTypeConfig.add')
@@ -39,21 +32,26 @@
         </el-form-item>
       </el-form>
 
-      <el-table v-loading="listLoading" :data="filteredList" border stripe size="small">
+      <el-table v-loading="listLoading" :data="list" border stripe size="small">
         <el-table-column :label="t('gzBeanSeatTypeConfig.colId')" prop="id" width="70" align="center" />
-        <el-table-column :label="t('gzBeanSeatTypeConfig.colName')" prop="name" min-width="140" show-overflow-tooltip />
+        <el-table-column :label="t('gzBeanSeatTypeConfig.colName')" prop="name" min-width="140" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span>{{ row.name }}</span>
+            <!-- 只对「未对小程序开放」的行出现的提示 tag：该状态下桌型不进小程序目录，mp 目录/今日可售都看不到它。
+                 这个状态在 admin 里已经没有入口（甲方 2026-09-26：admin 里不要临时桌），只在有人直接改库时才可能出现 ——
+                 所以留一个角标让人能看见，而不是静默消失。 -->
+            <el-tag v-if="isMpClosed(row)" type="info" size="small" effect="plain" class="ml-1">
+              {{ t('gzBeanSeatTypeConfig.mpVisibleClosed') }}
+            </el-tag>
+            <el-tag v-if="(row.mpLongCloseCount || 0) > 0" type="warning" size="small" effect="plain" class="ml-1">
+              {{ t('gzBeanSeatTypeConfig.mpLongCloseTag', { n: row.mpLongCloseCount }) }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column :label="t('gzBeanSeatTypeConfig.colBookMode')" width="130" align="center">
           <template #default="{ row }">
             <el-tag :type="row.bookMode === 'seat' ? 'warning' : 'success'" size="small">
               {{ row.bookMode === 'seat' ? t('gzBeanSeatTypeConfig.bookModeSeat') : t('gzBeanSeatTypeConfig.bookModeWhole') }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <!-- 渠道列：只对临时桌渲 tag，正常行留空 —— 保持表格安静（GZ-BEAN-054） -->
-        <el-table-column :label="t('gzBeanSeatTypeConfig.colChannel')" width="100" align="center">
-          <template #default="{ row }">
-            <el-tag v-if="isTempType(row)" type="warning" size="small" effect="plain">
-              {{ t('gzBeanSeatTypeConfig.tempTag') }}
             </el-tag>
           </template>
         </el-table-column>
@@ -74,8 +72,28 @@
             </el-tooltip>
           </template>
         </el-table-column>
+        <!-- 小程序可约数量（GZ-BEAN-057）：总容量 − 长期关闭 = 今天店员没在看板改时每格能约多少 -->
+        <el-table-column width="140" align="center">
+          <template #header>
+            <span>{{ t('gzBeanSeatTypeConfig.colMpSellable') }}</span>
+            <el-tooltip :content="t('gzBeanSeatTypeConfig.mpSellableTip')" placement="top">
+              <el-icon class="col-tip"><QuestionFilled /></el-icon>
+            </el-tooltip>
+          </template>
+          <template #default="{ row }">
+            <span :class="{ 'mp-sellable-zero': (row.mpSellableCapacity ?? 0) <= 0 }">
+              {{ row.mpSellableCapacity ?? 0 }}
+              {{ row.bookMode === 'seat' ? t('gzBeanSeatTypeConfig.unitSeat') : t('gzBeanSeatTypeConfig.unitTable') }}
+            </span>
+          </template>
+        </el-table-column>
         <el-table-column :label="t('gzBeanSeatTypeConfig.colPriceYuan')" width="120" align="right">
-          <template #default="{ row }">¥{{ formatYuan(row.priceCent) }}</template>
+          <template #default="{ row }">
+            <el-tooltip v-if="!(row.priceCent > 0)" :content="t('gzBeanSeatTypeConfig.priceZeroTip')" placement="top">
+              <span class="price-zero">¥{{ formatYuan(row.priceCent) }}</span>
+            </el-tooltip>
+            <span v-else>¥{{ formatYuan(row.priceCent) }}</span>
+          </template>
         </el-table-column>
         <el-table-column :label="t('gzBeanSeatTypeConfig.colDayPassQuota')" width="100" align="center">
           <template #default="{ row }">
@@ -89,23 +107,12 @@
             <span v-else class="form-hint">-</span>
           </template>
         </el-table-column>
-        <el-table-column :label="t('gzBeanSeatTypeConfig.colEnabled')" width="80" align="center">
-          <template #default="{ row }">
-            <el-switch
-              v-hasPermi="['gz:bean:seatTypeConfig:edit']"
-              :model-value="row.enabled === 1"
-              :active-value="true"
-              :inactive-value="false"
-              @change="(v: boolean) => handleToggleEnabled(row, v ? 1 : 0)"
-            />
-          </template>
-        </el-table-column>
         <el-table-column :label="t('gzBeanSeatTypeConfig.colSortNo')" prop="sortNo" width="70" align="center" />
         <el-table-column :label="t('gzBeanSeatTypeConfig.colAction')" fixed="right" width="200" align="center">
           <template #default="{ row }">
-            <!-- 临时桌不进小程序、金额由店员 walk-in 现场填 → 格价表对它无意义（GZ-BEAN-054） -->
+            <!-- 未对小程序开放的桌型不进小程序、金额由店员 walk-in 现场填 → 格价表对它无意义（GZ-BEAN-054） -->
             <el-button
-              v-if="!isTempType(row)"
+              v-if="!isMpClosed(row)"
               v-hasPermi="['gz:bean:seatTypeConfig:edit']"
               type="primary"
               link
@@ -141,14 +148,6 @@
             <el-option :label="t('gzBeanSeatTypeConfig.bookModeSeat')" value="seat" />
           </el-select>
         </el-form-item>
-        <!-- 用途（GZ-BEAN-054）：显式二选一，不做取反开关（取反是 bug 温床） -->
-        <el-form-item :label="t('gzBeanSeatTypeConfig.colChannel')">
-          <el-radio-group v-model="form.mpVisible">
-            <el-radio-button :value="1">{{ t('gzBeanSeatTypeConfig.channelMp') }}</el-radio-button>
-            <el-radio-button :value="0">{{ t('gzBeanSeatTypeConfig.channelTemp') }}</el-radio-button>
-          </el-radio-group>
-          <span class="form-hint">{{ t('gzBeanSeatTypeConfig.channelHint') }}</span>
-        </el-form-item>
         <el-form-item :label="t('gzBeanSeatTypeConfig.colCapacity')" prop="capacity">
           <el-input-number v-model="form.capacity" :min="1" :max="99" />
           <span class="form-hint">{{ t('gzBeanSeatTypeConfig.capacityHint') }}</span>
@@ -159,28 +158,27 @@
           <span class="form-hint">{{ t('gzBeanSeatTypeConfig.quantitySeatHint') }}</span>
           <span class="form-hint">{{ t('gzBeanSeatTypeConfig.nameRevenueHint') }}</span>
         </el-form-item>
-        <el-form-item :label="t('gzBeanSeatTypeConfig.colPriceYuan')" prop="priceYuan">
-          <el-input-number v-model="form.priceYuan" :min="0" :precision="2" :step="1" />
-          <span class="form-hint">{{ t('gzBeanSeatTypeConfig.priceHint') }}</span>
+        <!-- 长期关闭（GZ-BEAN-057）：长期不在小程序放出的档位数，与看板「今日关闭」是两个减项、不是两套机制 -->
+        <el-form-item :label="t('gzBeanSeatTypeConfig.colMpLongClose')" prop="mpLongCloseCount">
+          <el-input-number v-model="form.mpLongCloseCount" :min="0" :max="formCapacity" />
+          <span class="form-hint">{{ t('gzBeanSeatTypeConfig.mpLongCloseHint', { cap: formCapacity }) }}</span>
         </el-form-item>
-        <!-- 包天是纯小程序概念 → 临时桌禁用并归 0（后端 validateMpVisible 兜底，GZ-BEAN-054） -->
+        <!-- 包天是纯小程序概念 → 未对小程序开放时禁用并归 0（后端 validateMpVisible 兜底，GZ-BEAN-054） -->
         <el-form-item :label="t('gzBeanSeatTypeConfig.colDayPassQuota')">
           <el-input-number v-model="form.dayPassQuota" :min="0" :max="9999" :disabled="form.mpVisible === 0" />
           <span class="form-hint">{{
-            form.mpVisible === 0 ? t('gzBeanSeatTypeConfig.dayPassTempHint') : t('gzBeanSeatTypeConfig.dayPassQuotaHint')
+            form.mpVisible === 0 ? t('gzBeanSeatTypeConfig.dayPassClosedHint') : t('gzBeanSeatTypeConfig.dayPassQuotaHint')
           }}</span>
         </el-form-item>
-        <el-form-item :label="t('gzBeanSeatTypeConfig.colDayPassPrice')">
-          <el-input-number v-model="form.dayPassPriceYuan" :min="0" :precision="2" :step="1" :disabled="form.mpVisible === 0" />
-          <span class="form-hint">{{ t('gzBeanSeatTypeConfig.dayPassPriceHint') }}</span>
-        </el-form-item>
-        <el-form-item :label="t('gzBeanSeatTypeConfig.colEnabled')">
-          <el-switch
-            :model-value="form.enabled === 1"
-            :active-value="true"
-            :inactive-value="false"
-            @update:model-value="(v: boolean) => (form.enabled = v ? 1 : 0)"
-          />
+
+        <!-- 价格配置统一放「星期 × 时段价格」弹窗（GZ-BEAN-058，甲方 2026-09-26：价格都在一起更合理）。
+             这里只做只读展示 + 指路，不给输入框 —— 避免两处都能改、改完不知道哪边生效。 -->
+        <el-form-item :label="t('gzBeanSeatTypeConfig.colPriceMoved')">
+          <span class="form-hint form-hint--price">
+            {{
+              t('gzBeanSeatTypeConfig.priceMovedHint', { base: formatYuan(form.priceYuan * 100), dayPass: formatYuan(form.dayPassPriceYuan * 100) })
+            }}
+          </span>
         </el-form-item>
         <el-form-item :label="t('gzBeanSeatTypeConfig.colSortNo')">
           <el-input-number v-model="form.sortNo" :min="0" :max="9999" />
@@ -199,13 +197,31 @@
     <el-dialog v-model="wpVisible" :title="t('gzBeanSeatTypeConfig.weekdayPriceTitle', { name: wpName })" width="80%" top="6vh">
       <el-alert type="info" :closable="false" show-icon class="mb-3">
         <template #default>
-          <div>{{ t('gzBeanSeatTypeConfig.gridDescBase', { base: formatYuan(wpBaseCent) }) }}</div>
+          <div>{{ t('gzBeanSeatTypeConfig.gridDescBase', { base: formatYuan(wpBaseYuan * 100) }) }}</div>
           <div class="grid-rule-hint">{{ t('gzBeanSeatTypeConfig.gridDescRule') }}</div>
           <div v-if="wpDayPassOpen" class="grid-rule-hint">
-            {{ t('gzBeanSeatTypeConfig.gridDescDayPass', { base: formatYuan(wpDayPassBaseCent) }) }}
+            {{ t('gzBeanSeatTypeConfig.gridDescDayPass', { base: formatYuan(wpDayPassYuan * 100) }) }}
           </div>
         </template>
       </el-alert>
+
+      <!-- 全局默认价（GZ-BEAN-058，甲方 2026-09-26）：基础单价 / 包天基础价从「编辑座位类型」挪到这里，
+           价格配置集中在一个入口。下面表格里留空的单元格就回退到这两个值。 -->
+      <div class="wp-defaults mb-3">
+        <span class="wp-defaults__title">{{ t('gzBeanSeatTypeConfig.gridDefaultsTitle') }}</span>
+        <div class="wp-defaults__row">
+          <span class="wp-defaults__label">{{ t('gzBeanSeatTypeConfig.colPriceYuan') }}</span>
+          <el-input-number v-model="wpBaseYuan" :min="0" :precision="2" :step="1" :controls="false" size="small" class="wp-defaults__input" />
+          <span class="wp-defaults__unit">{{ t('gzBeanSeatTypeConfig.pricePerHourUnit') }}</span>
+          <span class="wp-defaults__hint">{{ t('gzBeanSeatTypeConfig.gridBaseHint') }}</span>
+        </div>
+        <div v-if="wpDayPassOpen" class="wp-defaults__row">
+          <span class="wp-defaults__label">{{ t('gzBeanSeatTypeConfig.colDayPassPrice') }}</span>
+          <el-input-number v-model="wpDayPassYuan" :min="0" :precision="2" :step="1" :controls="false" size="small" class="wp-defaults__input" />
+          <span class="wp-defaults__unit">{{ t('gzBeanSeatTypeConfig.pricePerDayUnit') }}</span>
+          <span class="wp-defaults__hint">{{ t('gzBeanSeatTypeConfig.gridDayPassBaseHint') }}</span>
+        </div>
+      </div>
 
       <div v-loading="wpLoading">
         <el-empty v-if="hourSlots.length === 0" :description="t('gzBeanSeatTypeConfig.gridNoSlot')" />
@@ -251,7 +267,7 @@
                   :step="1"
                   :controls="false"
                   size="small"
-                  :placeholder="formatYuan(wpDayPassBaseCent)"
+                  :placeholder="formatYuan(wpDayPassYuan * 100)"
                   class="wp-cell"
                 />
               </template>
@@ -266,7 +282,7 @@
                   :step="1"
                   :controls="false"
                   size="small"
-                  :placeholder="formatYuan(wpBaseCent)"
+                  :placeholder="formatYuan(wpBaseYuan * 100)"
                   class="wp-cell"
                 />
               </template>
@@ -302,7 +318,7 @@
 
 <script setup lang="ts" name="GzBeanSeatTypeConfig">
 import { ref, reactive, computed, watch, onMounted } from 'vue';
-import { Plus, Refresh, MagicStick, WarningFilled } from '@element-plus/icons-vue';
+import { Plus, Refresh, MagicStick, WarningFilled, QuestionFilled } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus';
 import { useI18n } from 'vue-i18n';
 import { getGzBeanStoreOptions, type GzBeanStoreVO } from '@/api/gz-bean/store';
@@ -310,7 +326,7 @@ import {
   listGzBeanSeatTypeConfigByStore,
   addGzBeanSeatTypeConfig,
   updateGzBeanSeatTypeConfig,
-  toggleGzBeanSeatTypeConfigEnabled,
+  updateGzBeanSeatTypeDefaultPrice,
   delGzBeanSeatTypeConfig,
   getGzBeanWeekdayPrices,
   saveGzBeanWeekdayPrices,
@@ -348,9 +364,10 @@ interface FormState {
   dayPassQuota: number;
   /** 包天固定价（元；提交时 *100 转分） */
   dayPassPriceYuan: number;
-  /** 是否对小程序开放：1=正常桌型 / 0=仅后台临时桌（GZ-BEAN-054 / ADR-0023） */
+  /** 是否对小程序开放：1=开放（小程序可订）/ 0=仅后台看板可见（GZ-BEAN-054 / ADR-0024） */
   mpVisible: number;
-  enabled: number;
+  /** 长期关闭数（GZ-BEAN-057）：长期不在小程序放出的档位数（whole=桌 / seat=座），0..总容量 */
+  mpLongCloseCount: number;
   sortNo: number;
   remark: string;
 }
@@ -368,13 +385,20 @@ const form = reactive<FormState>({
   dayPassQuota: 0,
   dayPassPriceYuan: 0,
   mpVisible: 1,
-  enabled: 1,
+  mpLongCloseCount: 0,
   sortNo: 0,
   remark: ''
 });
 
-/** 临时桌判定（GZ-BEAN-054）：mpVisible 为 null/undefined 的存量行视作正常桌型，与 DB DEFAULT 1 同口径 */
-function isTempType(row: GzBeanSeatTypeConfigVO): boolean {
+/** 该桌型总容量（= 长期关闭数的上限）：整桌 = 数量，按座 = 数量 × 每桌座位数（与后端 slotCapacity() 同口径） */
+const formCapacity = computed(() => {
+  const q = Number(form.quantity) || 0;
+  if (form.bookMode !== 'seat') return q;
+  return q * Math.max(1, Number(form.capacity) || 1);
+});
+
+/** 未对小程序开放判定：mpVisible 为 null/undefined 的存量行视作已开放，与 DB DEFAULT 1 同口径 */
+function isMpClosed(row: GzBeanSeatTypeConfigVO): boolean {
   return row.mpVisible === 0;
 }
 
@@ -382,7 +406,7 @@ function isTempType(row: GzBeanSeatTypeConfigVO): boolean {
  * 历史遗留错位判定（GZ-BEAN-055）：看板实际格数 ≠ 按配置应有的格数。
  *
  * 保存桌型时后端会自动对齐这两个数，所以**新数据不会出现这种情况**。
- * 会命中的只有两类：① 本次改动上线前就存在的历史错位；② 有人直接去「座位单元」页删/停用了座位。
+ * 会命中的只有两类：① 本次改动上线前就存在的历史错位；② 有人直接去「座位单元」页删了座位。
  * 两者都会在下次保存该桌型时自动修好 —— tooltip 就是这么写的，不给按钮、不让店员做额外动作。
  */
 function isCellsMismatch(row: GzBeanSeatTypeConfigVO): boolean {
@@ -394,28 +418,13 @@ function isCellsMismatch(row: GzBeanSeatTypeConfigVO): boolean {
 function cellsTooltip(row: GzBeanSeatTypeConfigVO): string {
   const board = row.boardCells ?? 0;
   const expected = row.expectedCells ?? 0;
-  const disabled = row.disabledCells ?? 0;
   if (!isCellsMismatch(row)) {
-    return disabled > 0
-      ? `${t('gzBeanSeatTypeConfig.cellsTipOk', { board })} ${t('gzBeanSeatTypeConfig.cellsTipDisabled', { disabled })}`
-      : t('gzBeanSeatTypeConfig.cellsTipOk', { board });
+    return t('gzBeanSeatTypeConfig.cellsTipOk', { board });
   }
-  const parts = [t('gzBeanSeatTypeConfig.cellsTipStale', { board, expected })];
-  if (disabled > 0) {
-    parts.push(t('gzBeanSeatTypeConfig.cellsTipDisabled', { disabled }));
-  }
-  return parts.join(' ');
+  return t('gzBeanSeatTypeConfig.cellsTipStale', { board, expected });
 }
 
-/** 渠道筛选：该页一次拉全量，纯前端过滤，后端零改动 */
-const channelFilter = ref<'all' | 'mp' | 'temp'>('all');
-const filteredList = computed(() => {
-  if (channelFilter.value === 'mp') return list.value.filter((r) => !isTempType(r));
-  if (channelFilter.value === 'temp') return list.value.filter((r) => isTempType(r));
-  return list.value;
-});
-
-// 切到临时桌时把包天两项归 0 —— 后端 validateMpVisible 会直接拒，先在表单里清干净免得用户提交才报错
+// 关闭「对小程序开放」时把包天两项归 0 —— 后端 validateMpVisible 会直接拒，先在表单里清干净免得用户提交才报错
 watch(
   () => form.mpVisible,
   (v) => {
@@ -442,9 +451,10 @@ const wpLoading = ref(false);
 const wpSubmitting = ref(false);
 const wpConfigId = ref<number | null>(null);
 const wpName = ref('');
-const wpBaseCent = ref(0);
-/** 该桌型的基础包天价（分）— 包天列未填时的回退值，用作 placeholder */
-const wpDayPassBaseCent = ref(0);
+/** 全局默认价 · 基础单价（元/小时）—— 可直接编辑，点确定时连同网格一起保存（GZ-BEAN-058） */
+const wpBaseYuan = ref(0);
+/** 全局默认价 · 包天基础价（元/天）—— 同上；包天列未填时回退到它 */
+const wpDayPassYuan = ref(0);
 /** 该桌型是否开放包天（day_pass_quota > 0）；否则网格不显示「包天」列 */
 const wpDayPassOpen = ref(false);
 
@@ -596,7 +606,7 @@ function placeholderForCell(row: GridRow): string {
   if (row.allDay !== undefined && row.allDay !== null) {
     return t('gzBeanSeatTypeConfig.gridPhDefault', { v: row.allDay.toFixed(2) });
   }
-  return t('gzBeanSeatTypeConfig.gridPhBase', { v: formatYuan(wpBaseCent.value) });
+  return t('gzBeanSeatTypeConfig.gridPhBase', { v: formatYuan(wpBaseYuan.value * 100) });
 }
 
 // ============ 门店选项 ============
@@ -653,7 +663,7 @@ function handleAdd() {
     dayPassQuota: 0,
     dayPassPriceYuan: 0,
     mpVisible: 1,
-    enabled: 1,
+    mpLongCloseCount: 0,
     sortNo: 0,
     remark: ''
   });
@@ -673,7 +683,7 @@ function handleEdit(row: GzBeanSeatTypeConfigVO) {
     dayPassQuota: row.dayPassQuota ?? 0,
     dayPassPriceYuan: (row.dayPassPriceCent || 0) / 100,
     mpVisible: row.mpVisible ?? 1,
-    enabled: row.enabled,
+    mpLongCloseCount: row.mpLongCloseCount ?? 0,
     sortNo: row.sortNo,
     remark: row.remark || ''
   });
@@ -689,6 +699,7 @@ async function handleSubmit() {
   await formRef.value.validate();
   submitting.value = true;
   try {
+    const isAdd = formMode.value === 'add';
     const payload: GzBeanSeatTypeConfigForm = {
       id: form.id,
       storeId: form.storeId,
@@ -696,15 +707,20 @@ async function handleSubmit() {
       bookMode: form.bookMode,
       capacity: form.capacity,
       quantity: form.quantity,
-      priceCent: Math.round((form.priceYuan || 0) * 100),
       dayPassQuota: form.dayPassQuota,
-      dayPassPriceCent: Math.round((form.dayPassPriceYuan || 0) * 100),
       mpVisible: form.mpVisible,
-      enabled: form.enabled,
+      mpLongCloseCount: form.mpLongCloseCount,
       sortNo: form.sortNo,
       remark: form.remark
     };
-    const isAdd = formMode.value === 'add';
+    // 价格（GZ-BEAN-058）：价格配置已集中到「星期 × 时段价格」弹窗 ——
+    //   新增：给 0 建行（列 NOT NULL），随后去价格弹窗设真实价；
+    //   编辑：**两个字段都不传**（后端 updateStrategy=NOT_NULL → 不写这两列），
+    //         否则会拿表单里的旧值把价格弹窗刚改的价覆盖回去。
+    if (isAdd) {
+      payload.priceCent = 0;
+      payload.dayPassPriceCent = 0;
+    }
     if (!isAdd && !(await confirmCellReduction())) {
       submitting.value = false;
       return;
@@ -752,17 +768,6 @@ async function confirmCellReduction(): Promise<boolean> {
     return true;
   } catch {
     return false;
-  }
-}
-
-async function handleToggleEnabled(row: GzBeanSeatTypeConfigVO, enabled: number) {
-  try {
-    await toggleGzBeanSeatTypeConfigEnabled(row.id, enabled);
-    ElMessage.success(t('gzBeanSeatTypeConfig.editSuccess'));
-    await loadList();
-  } catch (e) {
-    console.error('[gz-bean-seat-type-config] toggle failed', e);
-    await loadList(); // 失败回滚 switch 视图
   }
 }
 
@@ -814,8 +819,8 @@ function buildGridRows(priceRows: GzBeanSeatTypePriceVO[], dayPassRows: GzBeanDa
 async function handleWeekdayPrice(row: GzBeanSeatTypeConfigVO) {
   wpConfigId.value = row.id;
   wpName.value = row.name;
-  wpBaseCent.value = row.priceCent || 0;
-  wpDayPassBaseCent.value = row.dayPassPriceCent || 0;
+  wpBaseYuan.value = (row.priceCent || 0) / 100;
+  wpDayPassYuan.value = (row.dayPassPriceCent || 0) / 100;
   wpDayPassOpen.value = (row.dayPassQuota || 0) > 0;
   hourSlots.value = [];
   gridRows.value = [];
@@ -865,6 +870,14 @@ async function handleWeekdayPriceSave() {
         }
       });
     });
+    // ① 全局默认价（GZ-BEAN-058）：走专用端点，只改 price_cent / day_pass_price_cent 两列。
+    //    不能走 PUT 全量编辑 —— 那条路会把 dayPassQuota / mpVisible / mpLongCloseCount 按缺省值写掉。
+    await updateGzBeanSeatTypeDefaultPrice({
+      id: wpConfigId.value,
+      priceCent: Math.round((wpBaseYuan.value || 0) * 100),
+      dayPassPriceCent: Math.round((wpDayPassYuan.value || 0) * 100)
+    });
+    // ② 逐格 / 按星期覆盖价
     await saveGzBeanWeekdayPrices(wpConfigId.value, { items });
     // 包天按星期价（GZ-BEAN-053）：只在该桌型开放包天时保存，否则不动库里的行
     if (wpDayPassOpen.value) {
@@ -877,6 +890,7 @@ async function handleWeekdayPriceSave() {
       await saveGzBeanDayPassPrices(wpConfigId.value, { items: dayPassItems });
     }
     ElMessage.success(t('gzBeanSeatTypeConfig.weekdayPriceSaveSuccess'));
+    await loadList();
     wpVisible.value = false;
   } catch (e) {
     console.error('[gz-bean-seat-type-config] save weekday/hour prices failed', e);
@@ -891,6 +905,62 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* 全局默认价区块（GZ-BEAN-058）：价格配置集中到「星期 × 时段价格」后，两个兜底价放这里 */
+.wp-defaults {
+  padding: 10px 12px;
+  background: #fbfcfe;
+  border: 1px solid #e3e8ef;
+  border-radius: 8px;
+}
+.wp-defaults__title {
+  font-weight: 600;
+  color: #303133;
+}
+.wp-defaults__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.wp-defaults__label {
+  width: 92px;
+  color: #4b5666;
+  font-size: 13px;
+}
+.wp-defaults__input {
+  width: 130px;
+}
+.wp-defaults__unit {
+  color: #8792a3;
+  font-size: 12px;
+}
+.wp-defaults__hint {
+  color: #8792a3;
+  font-size: 12px;
+}
+/* 基础单价 = 0：红字（忘了设价就会按 ¥0 计价） */
+.price-zero {
+  color: #d3454b;
+  font-weight: 600;
+}
+
+/* 列头提示图标：比正文大一档、鼠标移上去能看出可交互（甲方 2026-09-26：提示放列头，图标做大一点） */
+.col-tip {
+  margin-left: 4px;
+  font-size: 15px;
+  color: #909399;
+  vertical-align: -2px;
+  cursor: help;
+}
+.col-tip:hover {
+  color: #409eff;
+}
+/* 小程序可约数量 = 0：红字提醒（这个桌型今天在小程序上约不到） */
+.mp-sellable-zero {
+  color: #d3454b;
+  font-weight: 600;
+}
+
 .ticket-tag {
   background: #f0f9ff;
   color: #0369a1;

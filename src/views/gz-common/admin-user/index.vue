@@ -422,7 +422,6 @@ const handleResetPwd = async (row: UserVO) => {
     ElMessageBox.prompt(t('gzAdminUser.resetPwdPrompt', { userName: row.userName }), t('gzAdminUser.resetPwdDialogTitle'), {
       confirmButtonText: t('gzAdminUser.confirm'),
       cancelButtonText: t('gzAdminUser.cancel'),
-      closeOnClickModal: false,
       inputPattern: /^.{5,20}$/,
       inputErrorMessage: t('gzAdminUser.rulePasswordLength'),
       inputValidator: (value) => {

@@ -35,10 +35,12 @@ export interface GzBeanSeatTypeConfigVO {
   dayPassPriceCent: number;
   /** 包天固定价（元，后端 dayPassPriceCent/100 算） */
   dayPassPriceYuan: number;
-  /** 是否对小程序开放：1=正常桌型可订 / 0=仅后台看板可见的临时桌（GZ-BEAN-054 / ADR-0023） */
+  /** 是否对小程序开放：1=开放（小程序可订）/ 0=仅后台看板可见（GZ-BEAN-054 / ADR-0024） */
   mpVisible: number;
-  /** 0=停用 / 1=启用 */
-  enabled: number;
+  /** 长期关闭数（GZ-BEAN-057）：看板「今天关闭」的默认值（whole=桌 / seat=座），0..总容量 */
+  mpLongCloseCount: number;
+  /** 小程序可约数量（派生）：总容量 − 长期关闭；「今天店员没在看板改」时每格能约多少 */
+  mpSellableCapacity?: number;
   /** 排序值 */
   sortNo: number;
   /** 创建时间 */
@@ -50,10 +52,8 @@ export interface GzBeanSeatTypeConfigVO {
 
   /** 按配置应有的计时格数（整桌=数量 / 按座=数量×每桌座位数）；也是小程序每个 1h 格能卖的数量 */
   expectedCells?: number;
-  /** 看板上实际有几个计时格（该桌型启用且未删的座位单元数）。与 expectedCells 不等 = 错配 */
+  /** 看板上实际有几个计时格（该桌型未删的座位单元数）。与 expectedCells 不等 = 错配 */
   boardCells?: number;
-  /** 占着编号但已停用的座位数 —— 「同步后仍少于应有」的合法解释 */
-  disabledCells?: number;
 }
 
 /** 新增 / 编辑 BO（与 GzBeanSeatTypeConfigBo.java 对齐；seatType code 由后端生成不传） */
@@ -69,9 +69,10 @@ export interface GzBeanSeatTypeConfigForm {
   dayPassQuota?: number;
   /** 包天固定价（分；可空=0，后端校 ≥0） */
   dayPassPriceCent?: number;
-  /** 1=小程序可订 / 0=仅后台临时桌（GZ-BEAN-054）；可空 → 后端视作 1 */
+  /** 1=对小程序开放 / 0=仅后台看板（GZ-BEAN-054）；可空 → 后端视作 1 */
   mpVisible?: number;
-  enabled?: number;
+  /** 长期关闭数（GZ-BEAN-057；可空=0，后端校 0 ≤ 值 ≤ 桌型总容量） */
+  mpLongCloseCount?: number;
   sortNo?: number;
   remark?: string | null;
 }
@@ -125,7 +126,6 @@ export interface GzBeanDayPassPriceForm {
 export interface GzBeanSeatTypeConfigQuery {
   storeId?: number | null;
   seatType?: string;
-  enabled?: number;
   pageNum?: number;
   pageSize?: number;
 }
@@ -156,6 +156,30 @@ export function getGzBeanSeatTypeConfig(id: number | string): AxiosPromise<GzBea
 }
 
 /** POST /system/gz/bean/seatTypeConfig — 新增类型配额 */
+/** 全局默认价更新入参（与 GzBeanSeatTypeConfigPriceBo.java 对齐） */
+export interface GzBeanSeatTypeDefaultPriceForm {
+  /** 桌型档 id */
+  id: number | string;
+  /** 基础单价（分/小时）：无星期 / 无格覆盖价时的兜底 */
+  priceCent: number;
+  /** 包天基础价（分/天）：包天的兜底；空视作 0 */
+  dayPassPriceCent?: number;
+}
+
+/**
+ * PUT /system/gz/bean/seatTypeConfig/default-price — 只改「全局默认价」两列（GZ-BEAN-058）。
+ *
+ * 专供「星期 × 时段价格」弹窗：价格配置集中到那一个入口后，它同时管这两个桌型级兜底价与逐格价。
+ * **不要改成走全量编辑接口** —— 那条路按缺省值会把 dayPassQuota / mpVisible / mpLongCloseCount 一起写掉。
+ */
+export function updateGzBeanSeatTypeDefaultPrice(data: GzBeanSeatTypeDefaultPriceForm): AxiosPromise<void> {
+  return request({
+    url: '/system/gz/bean/seatTypeConfig/default-price',
+    method: 'put',
+    data
+  });
+}
+
 export function addGzBeanSeatTypeConfig(data: GzBeanSeatTypeConfigForm) {
   return request({
     url: '/system/gz/bean/seatTypeConfig',
@@ -170,14 +194,6 @@ export function updateGzBeanSeatTypeConfig(data: GzBeanSeatTypeConfigForm) {
     url: '/system/gz/bean/seatTypeConfig',
     method: 'put',
     data
-  });
-}
-
-/** PUT /system/gz/bean/seatTypeConfig/{id}/enabled/{enabled} — 切换启用状态（属编辑权限） */
-export function toggleGzBeanSeatTypeConfigEnabled(id: number, enabled: number) {
-  return request({
-    url: `/system/gz/bean/seatTypeConfig/${id}/enabled/${enabled}`,
-    method: 'put'
   });
 }
 

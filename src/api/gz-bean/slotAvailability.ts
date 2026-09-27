@@ -1,53 +1,20 @@
 /**
- * 拼豆实时余量表格 + 按桌型配额关闭 API（admin 端，客户 0702 反馈 #4a）。
+ * 拼豆「按桌型配额关闭」API（客户 0702 反馈 #4a）。
  *
  * 后端路径：
- *   - GET  /system/gz/bean/booking/availability/detail — 明细数字表格（perm gz:bean:booking:list）
- *   - GET  /system/gz/bean/slotQuotaClose/list           — 配额关闭配置列表（perm gz:bean:slotQuota:list）
- *   - POST /system/gz/bean/slotQuotaClose                — upsert 单格关闭数（perm gz:bean:slotQuota:edit）
+ *   - POST /system/gz/bean/slotQuotaClose — upsert 单格关闭数（perm gz:bean:slotQuota:edit）
  *
- * 口径：remaining = max(0, opened − booked − quotaClose)。表格改「关闭数」即回写 quotaClose。
- * （ADR-0018 §3 客户 7.05：关闭统一走 quota_close，旧 seat_closure 已退休不再参与配额。）
+ * 前端唯一调用方 = 看板「今日可售」抽屉的**逐时段**关闭（`views/gz-bean/board/index.vue`）；
+ * 抽屉的**全天关闭**走 `@/api/gz-bean/daySellable` 的 `closeGzBeanSlotQuotaDay`。
+ * 独立页面「实时余量与关闭」已按甲方 2026-09-26 要求下线（店员直接在看板看），
+ * 所以本文件只剩这一个写接口，不再有 `availability/detail` / `list` 两个读接口的封装。
+ *
+ * 口径：`remaining = max(0, sellableCap − booked − quotaClose)`，
+ * `sellableCap = slotCapacity − 长期关闭数`（GZ-BEAN-057）。
  * id 一律 string（跨层契约 #1，防 JS long 精度丢失）。
  */
 import request from '@/utils/request';
 import { AxiosPromise } from 'axios';
-
-/** 实时余量表格明细行 VO（与 GzBeanSlotAvailabilityDetailVO.java 对齐） */
-export interface GzBeanSlotAvailabilityDetailVO {
-  /** 桌型档 id（string；upsert 关闭数回传） */
-  seatTypeConfigId: string;
-  /** 桌型 code（调试用） */
-  seatType?: string | null;
-  /** 桌型显示名 */
-  name: string;
-  /** 订法 whole=整桌 / seat=按座 */
-  bookMode?: string | null;
-  /** 1h 格起 HH:mm */
-  slotStart: string;
-  /** 1h 格止 HH:mm */
-  slotEnd: string;
-  /** 开放总配额 */
-  opened: number;
-  /** 已约 */
-  booked: number;
-  /** 配额关闭数（本表格 stepper 改写目标） */
-  quotaClose: number;
-  /** 剩余 = max(0, opened − booked − quotaClose) */
-  remaining: number;
-}
-
-/** 配额关闭配置行 VO（与 GzBeanSlotQuotaCloseVO.java 对齐） */
-export interface GzBeanSlotQuotaCloseVO {
-  id: string;
-  storeId: string;
-  seatTypeConfigId: string;
-  sessDate: string;
-  slotStart: string;
-  closeCount: number;
-  createTime?: string | null;
-  remark?: string | null;
-}
 
 /** upsert 关闭数入参（与 GzBeanSlotQuotaCloseBo.java 对齐） */
 export interface GzBeanSlotQuotaCloseUpsert {
@@ -59,31 +26,7 @@ export interface GzBeanSlotQuotaCloseUpsert {
   remark?: string | null;
 }
 
-/** GET /system/gz/bean/booking/availability/detail — 实时余量明细 */
-export function getGzBeanAvailabilityDetail(query: { storeId: number | string; sessDate: string }): AxiosPromise<GzBeanSlotAvailabilityDetailVO[]> {
-  return request({
-    url: '/system/gz/bean/booking/availability/detail',
-    method: 'get',
-    params: query
-  });
-}
-
-/** GET /system/gz/bean/slotQuotaClose/list — 配额关闭配置列表 */
-export function listGzBeanSlotQuotaClose(query: {
-  storeId?: number | string | null;
-  seatTypeConfigId?: number | string | null;
-  sessDate?: string | null;
-  pageNum?: number;
-  pageSize?: number;
-}): AxiosPromise<{ total: number; rows: GzBeanSlotQuotaCloseVO[] }> {
-  return request({
-    url: '/system/gz/bean/slotQuotaClose/list',
-    method: 'get',
-    params: query
-  });
-}
-
-/** POST /system/gz/bean/slotQuotaClose — upsert 单格关闭数（覆盖，不累加） */
+/** POST /system/gz/bean/slotQuotaClose — upsert 单格关闭数（覆盖，不累加；0 = 该格恢复全开） */
 export function upsertGzBeanSlotQuotaClose(data: GzBeanSlotQuotaCloseUpsert): AxiosPromise<void> {
   return request({
     url: '/system/gz/bean/slotQuotaClose',

@@ -521,7 +521,6 @@ const handleResetPwd = async (row: UserVO) => {
     ElMessageBox.prompt('请输入"' + row.userName + '"的新密码', '提示', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
-      closeOnClickModal: false,
       inputPattern: /^.{5,20}$/,
       inputErrorMessage: '用户密码长度必须介于 5 和 20 之间',
       inputValidator: (value) => {
@@ -615,9 +614,7 @@ const handleUpdate = async (row?: UserForm) => {
   dialog.title = '修改用户';
   Object.assign(form.value, data.user);
   postOptions.value = data.posts;
-  roleOptions.value = Array.from(
-    new Map([...data.roles, ...data.user.roles].map(role => [role.roleId, role])).values()
-  );
+  roleOptions.value = Array.from(new Map([...data.roles, ...data.user.roles].map((role) => [role.roleId, role])).values());
   form.value.postIds = data.postIds;
   form.value.roleIds = data.roleIds;
   form.value.password = '';

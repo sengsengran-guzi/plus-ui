@@ -13,12 +13,6 @@
           <Seat v-if="loaded.seat" />
         </keep-alive>
       </el-tab-pane>
-
-      <el-tab-pane :label="t('gzBeanSeatManagement.tabSlotAvailability')" name="slotAvailability">
-        <keep-alive>
-          <SlotAvailability v-if="loaded.slotAvailability" />
-        </keep-alive>
-      </el-tab-pane>
     </el-tabs>
   </div>
 </template>
@@ -28,19 +22,17 @@ import { ref, reactive } from 'vue';
 import { useI18n } from 'vue-i18n';
 import SeatTypeConfig from '@/views/gz-bean/seat-type-config/index.vue';
 import Seat from '@/views/gz-bean/seat/index.vue';
-import SlotAvailability from '@/views/gz-bean/slot-availability/index.vue';
 
 const { t } = useI18n();
 
-type TabName = 'seatTypeConfig' | 'seat' | 'slotAvailability';
+type TabName = 'seatTypeConfig' | 'seat';
 
 const activeTab = ref<TabName>('seatTypeConfig');
 
 // 懒加载标志：首次进入某 tab 才挂载对应组件；配合 keep-alive 缓存已挂载子页的内部状态。
 const loaded = reactive<Record<TabName, boolean>>({
   seatTypeConfig: true,
-  seat: false,
-  slotAvailability: false
+  seat: false
 });
 
 const onTabChange = (name: string | number) => {

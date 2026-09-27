@@ -13,31 +13,46 @@
       <el-col :xs="24" :sm="12" :md="8" :lg="6">
         <el-card shadow="hover" class="v11-card">
           <div class="v11-card-title">{{ t('dashboard.v11.todayOrders') }}</div>
-          <div class="v11-ab"><span>A {{ s.todayOrderCountPreorder }}</span><span>B {{ s.todayOrderCountGacha }}</span></div>
+          <div class="v11-ab">
+            <span>A {{ s.todayOrderCountPreorder }}</span
+            ><span>B {{ s.todayOrderCountGacha }}</span>
+          </div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :md="8" :lg="6">
         <el-card shadow="hover" class="v11-card">
           <div class="v11-card-title">{{ t('dashboard.v11.todayGmv') }}</div>
-          <div class="v11-ab"><span>A ¥{{ yuan(s.todayGmvCentPreorder) }}</span><span>B ¥{{ yuan(s.todayGmvCentGacha) }}</span></div>
+          <div class="v11-ab">
+            <span>A ¥{{ yuan(s.todayGmvCentPreorder) }}</span
+            ><span>B ¥{{ yuan(s.todayGmvCentGacha) }}</span>
+          </div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :md="8" :lg="6">
         <el-card shadow="hover" class="v11-card">
           <div class="v11-card-title">{{ t('dashboard.v11.monthGmv') }}</div>
-          <div class="v11-ab"><span>A ¥{{ yuan(s.monthGmvCentPreorder) }}</span><span>B ¥{{ yuan(s.monthGmvCentGacha) }}</span></div>
+          <div class="v11-ab">
+            <span>A ¥{{ yuan(s.monthGmvCentPreorder) }}</span
+            ><span>B ¥{{ yuan(s.monthGmvCentGacha) }}</span>
+          </div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :md="8" :lg="6">
         <el-card shadow="hover" class="v11-card">
           <div class="v11-card-title">{{ t('dashboard.v11.monthRefund') }}</div>
-          <div class="v11-ab"><span>A ¥{{ yuan(s.monthRefundCentPreorder) }}</span><span>B ¥{{ yuan(s.monthRefundCentGacha) }}</span></div>
+          <div class="v11-ab">
+            <span>A ¥{{ yuan(s.monthRefundCentPreorder) }}</span
+            ><span>B ¥{{ yuan(s.monthRefundCentGacha) }}</span>
+          </div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :md="8" :lg="6">
         <el-card shadow="hover" class="v11-card v11-card--settle">
           <div class="v11-card-title">{{ t('dashboard.v11.monthSettle') }}</div>
-          <div class="v11-ab"><span>A ¥{{ yuan(s.monthSettleCentPreorder) }}</span><span>B ¥{{ yuan(s.monthSettleCentGacha) }}</span></div>
+          <div class="v11-ab">
+            <span>A ¥{{ yuan(s.monthSettleCentPreorder) }}</span
+            ><span>B ¥{{ yuan(s.monthSettleCentGacha) }}</span>
+          </div>
         </el-card>
       </el-col>
       <el-col :xs="24" :sm="12" :md="8" :lg="6">
@@ -58,7 +73,9 @@
 
     <!-- 热销预购 Top10 -->
     <el-card shadow="never" class="mt-2">
-      <template #header><span class="v11-card-title">{{ t('dashboard.v11.topProducts') }}</span></template>
+      <template #header
+        ><span class="v11-card-title">{{ t('dashboard.v11.topProducts') }}</span></template
+      >
       <el-table :data="s.topProducts" border size="small">
         <el-table-column :label="t('dashboard.v11.rank')" type="index" width="70" align="center" />
         <el-table-column :label="t('dashboard.v11.productName')" prop="name" min-width="200" show-overflow-tooltip />
@@ -114,8 +131,10 @@ async function load() {
 }
 
 // 待发货卡片点击 → 跳订单管理（owner 在此推进物流，GZ-ADMIN-104）
+// 全路径 = 父菜单「交易与对账」(path gz-order-recon, menu 5201) + 本页 (path gz-ord-orders, menu 11007)。
+// 路由由后端 getRouters 下发，前端无静态表 —— 改菜单层级时这里要跟着改。
 function goLogistics() {
-  router.push('/gz-ord/orders');
+  router.push('/gz-order-recon/gz-ord-orders');
 }
 
 load();
