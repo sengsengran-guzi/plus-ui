@@ -31,7 +31,8 @@
             />
           </el-form-item>
           <el-form-item :label="t('gzBeanRevenue.store')">
-            <el-select v-model="storeId" filterable clearable style="width: 190px" :placeholder="t('gzBeanRevenue.storeAll')" @change="load">
+            <!-- 必选：本报表是「一家店一个店地看」，全部门店会把同一月份重复渲染成多段（Kevin 2026-09-28） -->
+            <el-select v-model="storeId" filterable style="width: 190px" :placeholder="t('gzBeanRevenue.storePick')" @change="load">
               <el-option v-for="s in storeOptions" :key="s.id" :label="`${s.storeNo} · ${s.name}`" :value="s.id" />
             </el-select>
           </el-form-item>
@@ -112,6 +113,90 @@
       </div>
 
       <!-- 营业明细（区间下钻，桌型 + 支付方式筛选） -->
+      <!-- 桌型使用时长 · 上桌率（GZ-BEAN-059，甲方 2026-09-28）：不看金额，只用时长 —— 店员没填现金 -->
+      <div class="section">
+        <div class="section-title section-title--inline">
+          {{ t('gzBeanRevenue.usageTitle') }}
+          <el-tooltip :content="t('gzBeanRevenue.usageHint')" placement="top">
+            <el-icon class="usage-tip"><QuestionFilled /></el-icon>
+          </el-tooltip>
+          <el-select v-model="usageType" size="small" style="width: 150px" :placeholder="t('gzBeanRevenue.usageTypeAll')">
+            <el-option :label="t('gzBeanRevenue.usageTypeAll')" value="" />
+            <el-option v-for="ty in usageTypeOptions" :key="ty" :label="ty" :value="ty" />
+          </el-select>
+        </div>
+        <el-table
+          v-loading="usageLoading"
+          :data="usageRows"
+          border
+          stripe
+          size="small"
+          show-summary
+          :summary-method="usageSummary"
+          :span-method="usageSpanMethod"
+          @sort-change="onUsageSort"
+        >
+          <!-- 月份是分组键：相邻同月单元格合并（rowspan），且不参与排序 -->
+          <el-table-column :label="t('gzBeanRevenue.usageColMonth')" prop="month" width="110" align="center" />
+          <el-table-column :label="t('gzBeanRevenue.usageColType')" min-width="130" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span>{{ row.name }}</span>
+              <el-tag size="small" effect="plain" class="ml-1">{{ unitOf(row) }}</el-tag>
+            </template>
+          </el-table-column>
+          <!-- 该桌型的座位数/桌数（平均值的分母，摆出来让甲方能自己验算）。prop 必须有：合计行按 prop 分派 -->
+          <el-table-column :label="t('gzBeanRevenue.usageColCapacity')" prop="capacityPerSlot" width="120" align="right" sortable="custom">
+            <template #default="{ row }">
+              <span>{{ row.capacityPerSlot }} {{ unitOf(row) }}</span>
+            </template>
+          </el-table-column>
+          <!-- 主指标 1：该桌型这个月一共被坐了多少小时（甲方原话） -->
+          <el-table-column :label="t('gzBeanRevenue.usageColUsed')" prop="usedHours" width="120" align="right" sortable="custom">
+            <template #default="{ row }">
+              <b class="usage-used">{{ row.usedHours }}</b>
+            </template>
+          </el-table-column>
+          <!-- 主指标 2：平均每个座位（整桌桌型 = 每张桌）多少小时（甲方追问后明确要的数） -->
+          <el-table-column :label="t('gzBeanRevenue.usageColAvg')" prop="avgHoursPerUnit" width="150" align="right" sortable="custom">
+            <template #default="{ row }">
+              <b v-if="row.avgHoursPerUnit !== null" class="usage-avg">{{ row.avgHoursPerUnit.toFixed(1) }}</b>
+              <span v-else class="usage-na">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('gzBeanRevenue.usageColSellable')" prop="sellableHours" width="120" align="right" sortable="custom" />
+          <el-table-column :label="t('gzBeanRevenue.usageColRate')" prop="occupancyRate" width="170" align="center" sortable="custom">
+            <template #default="{ row }">
+              <template v-if="row.occupancyRate === null">
+                <span class="usage-na">—</span>
+              </template>
+              <template v-else>
+                <el-progress :percentage="Math.round(row.occupancyRate * 100)" :stroke-width="10" :show-text="false" />
+                <span class="usage-rate">{{ (row.occupancyRate * 100).toFixed(1) }}%</span>
+              </template>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('gzBeanRevenue.usageColOpenRate')" prop="openOccupancyRate" width="110" align="right" sortable="custom">
+            <template #default="{ row }">
+              <span v-if="row.openOccupancyRate === null" class="usage-na">—</span>
+              <span v-else>{{ (row.openOccupancyRate * 100).toFixed(1) }}%</span>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('gzBeanRevenue.usageColBookings')" prop="bookings" width="80" align="right" sortable="custom" />
+          <el-table-column :label="t('gzBeanRevenue.usageColSeated')" prop="seatedBookings" width="90" align="right" sortable="custom" />
+          <el-table-column :label="t('gzBeanRevenue.usageColNoShow')" prop="noShowBookings" width="90" align="right" sortable="custom">
+            <template #default="{ row }">
+              <span :class="{ 'usage-warn': row.noShowBookings > 0 }">{{ row.noShowBookings }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('gzBeanRevenue.usageColCancelled')" prop="cancelledBookings" width="90" align="right" sortable="custom" />
+          <el-table-column :label="t('gzBeanRevenue.usageColDayPass')" prop="dayPassBookings" width="90" align="right" sortable="custom" />
+          <template #empty>
+            <el-empty :description="t('gzBeanRevenue.usageEmpty')" :image-size="60" />
+          </template>
+        </el-table>
+        <div class="usage-note">{{ t('gzBeanRevenue.usageNote') }}</div>
+      </div>
+
       <div class="section">
         <div class="detail-header">
           <span class="section-title section-title--inline">{{ t('gzBeanRevenue.detailTitle') }}</span>
@@ -185,17 +270,19 @@
 </template>
 
 <script setup lang="ts" name="GzBeanRevenue">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import * as echarts from 'echarts';
-import { Search, Refresh, Money, Wallet, Coin } from '@element-plus/icons-vue';
+import { Search, Refresh, Money, Wallet, Coin, QuestionFilled } from '@element-plus/icons-vue';
 import { useI18n } from 'vue-i18n';
 import { getGzBeanStoreOptions, type GzBeanStoreVO } from '@/api/gz-bean/store';
 import {
   getGzBeanRevenueAggregate,
+  getGzBeanSeatUsage,
   listGzBeanRevenueDetail,
   type RevenueGranularity,
   type GzBeanRevenueAggregateVO,
   type GzBeanRevenueCategoryDim,
+  type GzBeanSeatUsageVO,
   type GzBeanRevenueDetailVO
 } from '@/api/gz-bean/revenue';
 
@@ -471,15 +558,179 @@ function reloadDetail() {
 }
 
 /** 聚合 + 明细一起刷（明细回第一页） */
+// ============ 桌型使用时长 · 上桌率（GZ-BEAN-059） ============
+const usageLoading = ref(false);
+/** 后端返回的原始顺序（月份 → 门店 → 桌型），也是「清空排序」时的还原目标 */
+const usageBase = ref<GzBeanSeatUsageVO[]>([]);
+/** 当前展示顺序（默认 = usageBase；点表头排序后 = 排过序的副本） */
+const usageRows = ref<GzBeanSeatUsageVO[]>([]);
+/** 桌型筛选（'' = 全部）：只影响本区块，不影响上方金额区块 */
+const usageType = ref<string>('');
+/** 当前排序（'' = 后端默认顺序：月份 → 桌型） */
+let usageSort: { prop: string; order: 'ascending' | 'descending' } | null = null;
+
+/** 桌型下拉选项：从本区间实际返回的行里取（自定义桌型自动出现，不需要另拉配置） */
+const usageTypeOptions = computed(() => Array.from(new Set(usageBase.value.map((r) => r.name))));
+
+/** 桌型的计量单位：整桌 = 桌，按座 = 座（容量、平均值都用它） */
+function unitOf(row: GzBeanSeatUsageVO): string {
+  return row.bookMode === 'seat' ? t('gzBeanRevenue.unitSeat') : t('gzBeanRevenue.unitTable');
+}
+
+/** 拉月度使用时长报表：与营业额同区间 / 同门店筛选（区间控件改动会一起刷新） */
+async function loadUsage() {
+  usageLoading.value = true;
+  try {
+    const resp = await getGzBeanSeatUsage({
+      startDate: dateRange.value[0],
+      endDate: dateRange.value[1],
+      storeId: storeId.value ?? null
+    });
+    const rows = ((resp as any).data || []) as GzBeanSeatUsageVO[];
+    usageBase.value = rows;
+    // 换区间后原来选中的桌型可能已经不出现 → 回到「全部」，否则表格会静默空掉
+    if (usageType.value && !rows.some((r) => r.name === usageType.value)) {
+      usageType.value = '';
+    }
+    applyUsageView();
+  } catch (e) {
+    console.error('[gz-bean-revenue] load seat usage failed', e);
+  } finally {
+    usageLoading.value = false;
+  }
+}
+
+/**
+ * 可空数值列的排序键：`null`（分母 0 / 容量 0 → 页面显示「—」）当 -1，排在所有真实值之下，
+ * 不许参与算术（`null - 1` 会被 JS 当 0，让「—」的行混进 0 那一档里）。
+ */
+function sortKey(row: GzBeanSeatUsageVO, prop: string): number {
+  const v = (row as unknown as Record<string, unknown>)[prop];
+  return typeof v === 'number' ? v : -1;
+}
+
+/**
+ * 排序**由本页自己做**（列上用 `sortable="custom"`），不用 el-table 内置排序。
+ *
+ * <p>原因：月份/门店单元格是 rowspan 合并的，合并结果按**当前展示顺序**现算；若让 el-table 在内部排一份
+ * 副本，`usageRows` 与屏幕上那几行就不是同一个顺序 → 合并范围错位（格子横跨到别的月份上）。
+ * 自己排序 → `usageRows` 永远等于屏幕顺序，合并与合计行都跟着走。</p>
+ */
+function onUsageSort({ prop, order }: { prop: string; order: 'ascending' | 'descending' | null }) {
+  usageSort = !order || !prop ? null : { prop, order };
+  applyUsageView();
+}
+
+/**
+ * 由「原始行 → 桌型筛选 → 排序」算出展示顺序。
+ *
+ * <p>过滤与排序都作用在同一个数组上，所以合并单元格的范围、合计行、排序三者永远一致；
+ * 排序恒为 stable，因此「未排序时」= 后端默认顺序（月份 → 桌型）。</p>
+ */
+function applyUsageView() {
+  let rows = usageBase.value;
+  if (usageType.value) {
+    rows = rows.filter((r) => r.name === usageType.value);
+  }
+  const view = [...rows];
+  if (usageSort) {
+    const dir = usageSort.order === 'ascending' ? 1 : -1;
+    view.sort((a, b) => dir * (sortKey(a, usageSort!.prop) - sortKey(b, usageSort!.prop)));
+  }
+  usageRows.value = view;
+}
+
+/**
+ * 月份列的 rowspan 合并表（按当前展示顺序现算）：同一月份的连续若干行（桌型 × 个数）合并成一格，
+ * 这样「4 月」只出现一次。门店已经是筛选条件，表里不再有门店维度。
+ */
+const usageMonthSpans = computed(() => {
+  const rows = usageRows.value;
+  const month = new Array<number>(rows.length).fill(0);
+  for (let i = 0; i < rows.length; ) {
+    let j = i + 1;
+    while (j < rows.length && rows[j].month === rows[i].month) j++;
+    month[i] = j - i;
+    i = j;
+  }
+  return month;
+});
+
+/** 合并单元格：0 列 = 月份；合计行 / 越界行一律不合并。 */
+function usageSpanMethod({ row, rowIndex, columnIndex }: { row?: GzBeanSeatUsageVO; rowIndex: number; columnIndex: number }) {
+  const rows = usageRows.value;
+  if (columnIndex !== 0 || rowIndex >= rows.length || !row || row.month === undefined) {
+    return [1, 1];
+  }
+  const span = usageMonthSpans.value[rowIndex];
+  return span ? [span, 1] : [0, 0];
+}
+
+/**
+ * 合计行：时长列求和，比率列**不求和**（比率不能加），改按合计口径重算 = Σ上桌 / Σ可售，
+ * 避免"把几个百分比加起来"这种典型误读。
+ *
+ * <p>「桌数/座位数」与「平均每桌/座时长」两列合计给「—」：整桌（桌）与按座（座）不是同一单位，
+ * 跨桌型横向相加 / 求平均没有业务含义（同一单位内的平均才成立）。</p>
+ */
+function usageSummary({ columns, data }: { columns: any[]; data: GzBeanSeatUsageVO[] }) {
+  const sums: string[] = [];
+  columns.forEach((col, i) => {
+    const label = col.label as string;
+    if (i === 0) {
+      sums[i] = t('gzBeanRevenue.usageTotal');
+      return;
+    }
+    const sum = (pick: (r: GzBeanSeatUsageVO) => number) => data.reduce((a, r) => a + (pick(r) || 0), 0);
+    if (col.property === 'usedHours') {
+      sums[i] = String(sum((r) => r.usedHours));
+    } else if (col.property === 'capacityPerSlot') {
+      sums[i] = '—';
+    } else if (label === t('gzBeanRevenue.usageColAvg')) {
+      sums[i] = '—';
+    } else if (col.property === 'sellableHours') {
+      sums[i] = String(sum((r) => r.sellableHours));
+    } else if (col.property === 'bookings') {
+      sums[i] = String(sum((r) => r.bookings));
+    } else if (col.property === 'seatedBookings') {
+      sums[i] = String(sum((r) => r.seatedBookings));
+    } else if (col.property === 'cancelledBookings') {
+      sums[i] = String(sum((r) => r.cancelledBookings));
+    } else if (col.property === 'dayPassBookings') {
+      sums[i] = String(sum((r) => r.dayPassBookings));
+    } else if (col.property === 'noShowBookings') {
+      sums[i] = String(sum((r) => r.noShowBookings));
+    } else if (label === t('gzBeanRevenue.usageColRate')) {
+      const used = sum((r) => r.usedHours);
+      const sellable = sum((r) => r.sellableHours);
+      sums[i] = sellable > 0 ? `${((used / sellable) * 100).toFixed(1)}%` : '—';
+    } else if (label === t('gzBeanRevenue.usageColOpenRate')) {
+      const used = sum((r) => r.usedHours);
+      const open = sum((r) => r.openHours);
+      sums[i] = open > 0 ? `${((used / open) * 100).toFixed(1)}%` : '—';
+    } else {
+      sums[i] = '';
+    }
+  });
+  return sums;
+}
+
+watch(usageType, () => applyUsageView());
+
 function load() {
   pageNum.value = 1;
   loadAggregate();
+  loadUsage();
   loadDetail();
 }
 
 onMounted(async () => {
   window.addEventListener('resize', onResize);
   await loadStoreOptions();
+  // 门店是必选项（没有「全部门店」）→ 默认落到第一家，避免首屏发一次 storeId=null 的请求
+  if (storeId.value === null && storeOptions.value.length) {
+    storeId.value = storeOptions.value[0].id;
+  }
   load();
 });
 onUnmounted(() => {
@@ -490,6 +741,46 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* 桌型使用时长 · 上桌率（GZ-BEAN-059） */
+.usage-tip {
+  margin-left: 4px;
+  font-size: 15px;
+  color: #909399;
+  vertical-align: -2px;
+  cursor: help;
+}
+.usage-tip:hover {
+  color: #409eff;
+}
+.usage-used {
+  color: #1f2733;
+  font-variant-numeric: tabular-nums;
+}
+/* 平均每桌/每座时长：与总时长同为「主指标」，用品牌绿把它从一堆百分比里拉出来 */
+.usage-avg {
+  color: #33b36b;
+  font-variant-numeric: tabular-nums;
+}
+.usage-rate {
+  margin-left: 6px;
+  font-size: 12px;
+  color: #4b5666;
+  font-variant-numeric: tabular-nums;
+}
+.usage-na {
+  color: #c0c4cc;
+}
+.usage-warn {
+  color: #d3454b;
+  font-weight: 600;
+}
+.usage-note {
+  margin-top: 6px;
+  color: #8792a3;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .revenue-page {
   --revenue-total: var(--el-color-primary);
   --revenue-cash: var(--el-color-warning);

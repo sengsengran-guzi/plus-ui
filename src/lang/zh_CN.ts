@@ -1182,6 +1182,29 @@ export default {
   },
   // 拼豆营业额（按天，只统计拼豆；客户 0702 反馈 #5）
   gzBeanRevenue: {
+    usageTitle: '桌型使用时长 · 上桌率',
+    usageHint:
+      '每种桌型每个月「一共坐了多少小时」+「每个座位/每张桌平均坐了多少小时」。不看金额（店员没填现金时金额不准），时长完全由已上桌单的时段推出。',
+    usageTypeAll: '全部桌型',
+    usageColMonth: '月份',
+    usageColType: '桌型',
+    usageColCapacity: '桌数/座位数',
+    usageColUsed: '上桌时长',
+    usageColAvg: '平均每桌/座时长',
+    usageColSellable: '可售时长',
+    usageColRate: '上桌率',
+    usageColOpenRate: '营业占用率',
+    usageColBookings: '总单数',
+    usageColSeated: '已上桌',
+    usageColNoShow: '未到店',
+    usageColCancelled: '已取消',
+    usageColDayPass: '含包天',
+    usageTotal: '合计',
+    usageEmpty: '该区间没有可统计的单',
+    usageNote:
+      '口径：①「上桌时长」= 该桌型这个月一共被坐了多少小时（单位 = 桌·小时 / 座·小时：整桌按桌、按座按座）。只算已上桌（已核销/已完结）且已收款的单；包天按当天营业时段折算（午休那几格不算）；组单每个座位各算一次。②「平均每桌/座时长」= 上桌时长 ÷ 桌数（座位数）—— 即每个座位/每张桌平均坐了多少小时。整桌桌型一次预订就是整桌座位都在用，所以「平均每桌」与「平均每座」是同一个值。③「上桌率」= 上桌时长 ÷ 可售时长（可售 = 容量扣掉长期关闭与当日关闭，与小程序能卖的量同源），是同一件事的百分比视图，用来横向比不同月份（天数不同）；「营业占用率」= 上桌时长 ÷ （营业时段 × 容量）。④ 合计行的比率按合计重算（不是把各行百分比相加）；「桌数/座位数」与「平均每桌/座时长」的合计给「—」，因为桌与座不是同一单位，跨桌型相加或求平均没有意义。⑤ 全部数字与金额无关 —— 店员没填现金，金额不可信。',
+    unitSeat: '座',
+    unitTable: '桌',
     title: '拼豆营业额',
     // 筛选
     granularity: '时间维度',
@@ -1200,6 +1223,7 @@ export default {
     presetThisYear: '本年',
     store: '门店',
     storeAll: '全部门店',
+    storePick: '请选择门店（必选）',
     query: '查询',
     refresh: '刷新',
     // 汇总卡

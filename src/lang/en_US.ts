@@ -611,7 +611,8 @@ export default {
       'How many can be booked per hour slot in the mini program when staff have not changed anything on the board today (= capacity - long-term close). Board changes apply to that day only.',
     mpLongCloseTag: 'Long close {n}',
     colPriceMoved: 'Pricing',
-    priceMovedHint: 'Base price ¥{base}/hour, day-pass base ¥{dayPass}/day. All prices (incl. per-slot / per-weekday) are set in "Weekday x slot price" on the list.',
+    priceMovedHint:
+      'Base price ¥{base}/hour, day-pass base ¥{dayPass}/day. All prices (incl. per-slot / per-weekday) are set in "Weekday x slot price" on the list.',
     pricePerHourUnit: 'Yuan/hour',
     pricePerDayUnit: 'Yuan/day',
     gridDefaultsTitle: 'Global default price',
@@ -1194,6 +1195,29 @@ export default {
   },
   // Pindou daily revenue (customer feedback 0702 #5; pindou only)
   gzBeanRevenue: {
+    usageTitle: 'Seat-type usage hours / occupancy',
+    usageHint:
+      'Total hours each table type was used per month, plus the average hours per seat (or per table), plus occupancy. Amounts are not used (staff do not record cash, so money figures are unreliable); hours come purely from seated bookings.',
+    usageTypeAll: 'All types',
+    usageColMonth: 'Month',
+    usageColType: 'Type',
+    usageColCapacity: 'Tables / Seats',
+    usageColUsed: 'Used hours',
+    usageColAvg: 'Avg hours per seat',
+    usageColSellable: 'Sellable hours',
+    usageColRate: 'Occupancy',
+    usageColOpenRate: 'Occupancy (open)',
+    usageColBookings: 'Bookings',
+    usageColSeated: 'Seated',
+    usageColNoShow: 'No-show',
+    usageColCancelled: 'Cancelled',
+    usageColDayPass: 'Day pass',
+    usageTotal: 'Total',
+    usageEmpty: 'No bookings in this range',
+    usageNote:
+      "How to read: (1) Used hours = total hours this seat type was occupied in the month (units: table-hours for whole-table mode, seat-hours for per-seat mode). Only seated (verified/completed) and paid bookings count; day passes convert to that day's business hours (lunch gaps excluded); each seat of a group booking counts separately. (2) Avg hours per seat = used hours / table (seat) count - how many hours one seat or table was used on average. For whole-table types a booking occupies the whole table, so avg per table equals avg per seat. (3) Occupancy = used / sellable, where sellable = capacity minus long-term and per-day closures (same source as the mini program); it is the percentage view of the same figure and is what makes months of different length comparable. Open-hours occupancy = used / (business hours x capacity). (4) The total row recomputes rates from the totals instead of summing percentages, and shows - for table/seat count and average, because tables and seats are different units and averaging across types is meaningless. (5) No money is involved anywhere - staff do not record cash, so amounts are unreliable.",
+    unitSeat: 'seats',
+    unitTable: 'tables',
     title: 'Pindou Revenue',
     // filters
     granularity: 'Granularity',
@@ -1212,6 +1236,7 @@ export default {
     presetThisYear: 'This year',
     store: 'Store',
     storeAll: 'All stores',
+    storePick: 'Select a store (required)',
     query: 'Query',
     refresh: 'Refresh',
     // summary cards

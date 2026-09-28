@@ -152,6 +152,56 @@ export function getGzBeanRevenueAggregate(query: GzBeanRevenueAggregateQuery): A
   });
 }
 
+/**
+ * 「桌型使用时长 · 上桌率」月度报表行（与 GzBeanSeatUsageVO.java 对齐，GZ-BEAN-059）。
+ *
+ * 甲方要的是「每个月每种桌型坐了多少小时」（用于店内调整）：**不看金额**（店员没填现金，金额不可靠），
+ * 时长完全由已成交单的时段推出。量纲统一为「单位·小时」（整桌=桌 / 按座=座）。
+ */
+export interface GzBeanSeatUsageVO {
+  storeId: string;
+  storeName?: string | null;
+  /** yyyy-MM */
+  month: string;
+  seatTypeConfigId: string;
+  seatType?: string | null;
+  name: string;
+  /** whole=整桌 / seat=按座（决定单位显示「桌」还是「座」） */
+  bookMode?: string | null;
+  /** 每格容量（= 单位数） */
+  capacityPerSlot: number;
+  /** 【主指标】已上桌时长（单位·小时）= 已上桌单覆盖的营业格数 */
+  usedHours: number;
+  /** 可售时长（单位·小时）= Σ 营业格有效容量（扣长期关闭 + 当日关闭）—— 上桌率分母 */
+  sellableHours: number;
+  /** 营业时长（单位·小时）= 营业格数 × 容量（不扣关闭）—— 营业占用率分母 */
+  openHours: number;
+  /** 【甲方要的第二个数】平均每个座位（整桌桌型 = 每张桌）时长 = usedHours / capacityPerSlot；容量 0 → null */
+  avgHoursPerUnit: number | null;
+  /** usedHours / sellableHours；分母 0 → null（显示「—」） */
+  occupancyRate: number | null;
+  /** usedHours / openHours；分母 0 → null */
+  openOccupancyRate: number | null;
+  bookings: number;
+  seatedBookings: number;
+  noShowBookings: number;
+  cancelledBookings: number;
+  dayPassBookings: number;
+}
+
+/** GET /system/gz/bean/revenue/seat-usage — 桌型使用时长 · 上桌率（按月 × 桌型） */
+export function getGzBeanSeatUsage(query: {
+  startDate: string;
+  endDate: string;
+  storeId?: number | string | null;
+}): AxiosPromise<GzBeanSeatUsageVO[]> {
+  return request({
+    url: '/system/gz/bean/revenue/seat-usage',
+    method: 'get',
+    params: query
+  });
+}
+
 /** GET /system/gz/bean/revenue/detail — 营业额明细分页（区间下钻） */
 export function listGzBeanRevenueDetail(query: GzBeanRevenueDetailQuery): AxiosPromise<{ total: number; rows: GzBeanRevenueDetailVO[] }> {
   return request({
