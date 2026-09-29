@@ -151,6 +151,8 @@ test.describe('拼豆营业额 · 桌型使用时长', () => {
     const idxType = heads.findIndex((h) => h.includes('桌型'));
     const idxCap = heads.findIndex((h) => h.includes('桌数'));
     const idxUsed = heads.findIndex((h) => h.includes('上桌时长'));
+    const idxMp = heads.findIndex((h) => h.includes('小程序时长'));
+    const idxOffline = heads.findIndex((h) => h.includes('线下时长'));
     const idxAvg = heads.findIndex((h) => h.includes('平均每桌'));
     const idxSellable = heads.findIndex((h) => h.includes('可售时长'));
     const idxRate = heads.findIndex((h) => h === '上桌率');
@@ -159,6 +161,8 @@ test.describe('拼豆营业额 · 桌型使用时长', () => {
       ['桌型', idxType],
       ['桌数/座位数', idxCap],
       ['上桌时长', idxUsed],
+      ['小程序时长', idxMp],
+      ['线下时长', idxOffline],
       ['平均每桌/座时长', idxAvg],
       ['可售时长', idxSellable],
       ['上桌率', idxRate]
@@ -190,6 +194,13 @@ test.describe('拼豆营业额 · 桌型使用时长', () => {
       expect(cells[idxCap], `${cells[idxMonth]}/${apiRow.name} 桌数/座位数（后端 ${apiRow.capacityPerSlot}）`).toBe(
         `${apiRow.capacityPerSlot} ${unit}`
       );
+      // 来源拆分：两列各自与后端一致，且**相加恒等于上桌时长**（拆错就会漏算或重复算）
+      expect(cells[idxMp], `${cells[idxMonth]}/${apiRow.name} 小程序时长（后端 ${apiRow.mpHours}）`).toBe(String(apiRow.mpHours));
+      expect(cells[idxOffline], `${cells[idxMonth]}/${apiRow.name} 线下时长（后端 ${apiRow.offlineHours}）`).toBe(String(apiRow.offlineHours));
+      expect(
+        Number(apiRow.mpHours) + Number(apiRow.offlineHours),
+        `${cells[idxMonth]}/${apiRow.name} 小程序时长 + 线下时长 必须 = 上桌时长（后端 ${apiRow.usedHours}）`
+      ).toBe(Number(apiRow.usedHours));
       if (apiRow.avgHoursPerUnit === null) {
         expect(cells[idxAvg], `${cells[idxMonth]}/${apiRow.name} 容量 0 → 平均值应为「—」`).toBe('—');
       } else {
@@ -206,6 +217,13 @@ test.describe('拼豆营业额 · 桌型使用时长', () => {
     expect(summaryCells[0], '合计行首格应是「合计」').toBe('合计');
     expect(summaryCells[idxCap], '合计行的桌数/座位数应为「—」（混量纲）').toBe('—');
     expect(summaryCells[idxAvg], '合计行的平均值应为「—」（混量纲）').toBe('—');
+    // 合计行也要守住「两段相加 = 总时长」（这是甲方这条需求的核心不变量）
+    expect(summaryCells[idxMp], '合计行应有小程序时长合计').not.toBe('');
+    expect(Number(summaryCells[idxMp]) + Number(summaryCells[idxOffline]), '合计行：小程序 + 线下 必须 = 上桌时长合计').toBe(
+      Number(summaryCells[idxUsed])
+    );
+    // 口径说明要讲清线下入座「一直计入、只是拆开看」
+    await expect(section).toContainText('线下');
 
     // 桌型筛选：选中一个桌型 → 每月只剩该桌型，合计行只算该桌型
     const typeFilter = section.locator('.section-title .el-select').first();

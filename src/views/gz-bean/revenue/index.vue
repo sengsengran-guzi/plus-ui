@@ -156,6 +156,18 @@
               <b class="usage-used">{{ row.usedHours }}</b>
             </template>
           </el-table-column>
+          <!-- 甲方 2026-09-29：线下现金入座的单也算时长，但要和小程序来的分开看（两列相加 = 上桌时长） -->
+          <el-table-column :label="t('gzBeanRevenue.usageColMp')" prop="mpHours" width="110" align="right" sortable="custom">
+            <template #default="{ row }">
+              <span>{{ row.mpHours }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('gzBeanRevenue.usageColOffline')" prop="offlineHours" width="110" align="right" sortable="custom">
+            <template #default="{ row }">
+              <b v-if="row.offlineHours > 0" class="usage-offline">{{ row.offlineHours }}</b>
+              <span v-else>{{ row.offlineHours }}</span>
+            </template>
+          </el-table-column>
           <!-- 主指标 2：平均每个座位（整桌桌型 = 每张桌）多少小时（甲方追问后明确要的数） -->
           <el-table-column :label="t('gzBeanRevenue.usageColAvg')" prop="avgHoursPerUnit" width="150" align="right" sortable="custom">
             <template #default="{ row }">
@@ -190,6 +202,12 @@
           </el-table-column>
           <el-table-column :label="t('gzBeanRevenue.usageColCancelled')" prop="cancelledBookings" width="90" align="right" sortable="custom" />
           <el-table-column :label="t('gzBeanRevenue.usageColDayPass')" prop="dayPassBookings" width="90" align="right" sortable="custom" />
+          <el-table-column :label="t('gzBeanRevenue.usageColOfflineCount')" prop="offlineBookings" width="100" align="right" sortable="custom">
+            <template #default="{ row }">
+              <b v-if="row.offlineBookings > 0" class="usage-offline">{{ row.offlineBookings }}</b>
+              <span v-else>{{ row.offlineBookings }}</span>
+            </template>
+          </el-table-column>
           <template #empty>
             <el-empty :description="t('gzBeanRevenue.usageEmpty')" :image-size="60" />
           </template>
@@ -690,6 +708,12 @@ function usageSummary({ columns, data }: { columns: any[]; data: GzBeanSeatUsage
       sums[i] = '—';
     } else if (col.property === 'sellableHours') {
       sums[i] = String(sum((r) => r.sellableHours));
+    } else if (col.property === 'mpHours') {
+      sums[i] = String(sum((r) => r.mpHours));
+    } else if (col.property === 'offlineHours') {
+      sums[i] = String(sum((r) => r.offlineHours));
+    } else if (col.property === 'offlineBookings') {
+      sums[i] = String(sum((r) => r.offlineBookings));
     } else if (col.property === 'bookings') {
       sums[i] = String(sum((r) => r.bookings));
     } else if (col.property === 'seatedBookings') {
@@ -757,6 +781,11 @@ onUnmounted(() => {
   font-variant-numeric: tabular-nums;
 }
 /* 平均每桌/每座时长：与总时长同为「主指标」，用品牌绿把它从一堆百分比里拉出来 */
+/* 线下时长/单数：有值时用暖色，让"线下生意"一眼可见（本月是否有现金入座） */
+.usage-offline {
+  color: #d98a2b;
+  font-variant-numeric: tabular-nums;
+}
 .usage-avg {
   color: #33b36b;
   font-variant-numeric: tabular-nums;

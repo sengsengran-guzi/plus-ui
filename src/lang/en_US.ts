@@ -1203,6 +1203,9 @@ export default {
     usageColType: 'Type',
     usageColCapacity: 'Tables / Seats',
     usageColUsed: 'Used hours',
+    usageColMp: 'Mini-program hours',
+    usageColOffline: 'Walk-in hours',
+    usageColOfflineCount: 'Walk-in bookings',
     usageColAvg: 'Avg hours per seat',
     usageColSellable: 'Sellable hours',
     usageColRate: 'Occupancy',
@@ -1215,7 +1218,7 @@ export default {
     usageTotal: 'Total',
     usageEmpty: 'No bookings in this range',
     usageNote:
-      "How to read: (1) Used hours = total hours this seat type was occupied in the month (units: table-hours for whole-table mode, seat-hours for per-seat mode). Only seated (verified/completed) and paid bookings count; day passes convert to that day's business hours (lunch gaps excluded); each seat of a group booking counts separately. (2) Avg hours per seat = used hours / table (seat) count - how many hours one seat or table was used on average. For whole-table types a booking occupies the whole table, so avg per table equals avg per seat. (3) Occupancy = used / sellable, where sellable = capacity minus long-term and per-day closures (same source as the mini program); it is the percentage view of the same figure and is what makes months of different length comparable. Open-hours occupancy = used / (business hours x capacity). (4) The total row recomputes rates from the totals instead of summing percentages, and shows - for table/seat count and average, because tables and seats are different units and averaging across types is meaningless. (5) No money is involved anywhere - staff do not record cash, so amounts are unreliable.",
+      "How to read: (1) Used hours = total hours this seat type was occupied in the month (units: table-hours for whole-table mode, seat-hours for per-seat mode). Only seated (verified/completed) and paid bookings count; day passes convert to that day's business hours (lunch gaps excluded); each seat of a group booking counts separately. (2) Avg hours per seat = used hours / table (seat) count - how many hours one seat or table was used on average. For whole-table types a booking occupies the whole table, so avg per table equals avg per seat. (3) Occupancy = used / sellable, where sellable = capacity minus long-term and per-day closures (same source as the mini program); it is the percentage view of the same figure and is what makes months of different length comparable. Open-hours occupancy = used / (business hours x capacity). (4) The total row recomputes rates from the totals instead of summing percentages, and shows - for table/seat count and average, because tables and seats are different units and averaging across types is meaningless. (5) No money is involved anywhere - staff do not record cash, so amounts are unreliable. (6) Mini-program hours vs walk-in hours split the used hours by source: mini-program = booked by the customer in the app; walk-in = seated by staff on the board (cash) plus staff-created bookings. The two always add up to used hours - walk-in cash seats were always counted, they were just mixed in before. Walk-in bookings = how many of them there were (staff often do not record the amount, so reconcile cash against this count).",
     unitSeat: 'seats',
     unitTable: 'tables',
     title: 'Pindou Revenue',

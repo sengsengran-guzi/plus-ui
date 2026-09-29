@@ -172,6 +172,12 @@ export interface GzBeanSeatUsageVO {
   capacityPerSlot: number;
   /** 【主指标】已上桌时长（单位·小时）= 已上桌单覆盖的营业格数 */
   usedHours: number;
+  /** 其中**小程序**来的时长（source='mp'） */
+  mpHours: number;
+  /** 其中**线下**来的时长（看板现金入座 walk_in + 后台代客 admin） */
+  offlineHours: number;
+  /** 其中线下的**单数**（现金入座常常没录金额，靠单数对账） */
+  offlineBookings: number;
   /** 可售时长（单位·小时）= Σ 营业格有效容量（扣长期关闭 + 当日关闭）—— 上桌率分母 */
   sellableHours: number;
   /** 营业时长（单位·小时）= 营业格数 × 容量（不扣关闭）—— 营业占用率分母 */
