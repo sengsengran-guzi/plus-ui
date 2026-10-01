@@ -8,6 +8,9 @@ import { expect, test, type Page } from '@playwright/test';
  *   2. 点击后开的是**抽屉**且真的渲染出桌型行 + 逐时段余量行（接口不通 / 权限缺失时这里会红，而不是静默空抽屉）
  *   3. **不再有「今天不上小程序」**（甲方明确不要整档关停；要关满把该格 stepper 调到上限即可）
  *   4. 逐时段表四列齐（时段 / 已订 / 剩余 / 今日关闭）—— 这是「目前不同时段还剩多少」的落地形态
+ *   5. **两种口径不许再混着读**（甲方 2026-09-29：「关闭了桌子，空闲座位还显示 1」）：
+ *      「今天还能卖」= 档位口径（随关闭变化，= 各格剩余最小值，与展开的逐时段表对得上）；
+ *      「今天没被预订的座位」= 座位口径（不受关闭影响）。两列都必须挂列头说明，且旧名「空闲座位」不得再出现。
  *
  * **只读**：不写库、不改配额 —— 断言完即止。改售卖量的真实链路由后端单测 + 人工真机验收覆盖。
  */
@@ -91,6 +94,32 @@ test.describe('看板「今日可售」抽屉', () => {
     for (const col of ['时段', '已订', '剩余', '今天关闭']) {
       await expect(slotTable.getByText(col, { exact: false }).first()).toBeVisible({ timeout: 10000 });
     }
+
+    // ④b 口径守卫（甲方 2026-09-29）：两列各自挂列头说明；「今天还能卖」必须等于展开后各格剩余的最小值。
+    //     这是只读交叉校验 —— 抽屉摘要与逐时段明细同源，一旦谁改了算法就会在这里红。
+    await expect(drawer.getByText('今天还能卖').first()).toBeVisible({ timeout: 10000 });
+    await expect(drawer.getByText('今天没被预订的座位').first()).toBeVisible({ timeout: 10000 });
+    expect(bodyText, '「空闲座位」这个会被读成"关了还空着"的旧列名不该再出现').not.toContain('空闲座位');
+
+    // 按**列头**定位（不按位置硬取：列增删后位置会变）
+    const drawerHeads = (await table.locator('thead th').allInnerTexts()).map((h) => h.replace(/\s+/g, ''));
+    const idxMinRemaining = drawerHeads.findIndex((h) => h.includes('今天还能卖'));
+    expect(idxMinRemaining, '抽屉应有「今天还能卖」列').toBeGreaterThanOrEqual(0);
+    const slotHeads = (await slotTable.locator('thead th').allInnerTexts()).map((h) => h.replace(/\s+/g, ''));
+    const idxSlotRemaining = slotHeads.findIndex((h) => h.includes('剩余'));
+    expect(idxSlotRemaining, '逐时段表应有「剩余」列').toBeGreaterThanOrEqual(0);
+
+    const firstRowCells = await rows.first().locator('td').allInnerTexts();
+    const summaryMin = Number(String(firstRowCells[idxMinRemaining]).replace(/\D/g, ''));
+    const slotRemainings = await slotTable
+      .locator('tbody tr.el-table__row')
+      .evaluateAll(
+        (trs, ci) => trs.map((tr) => Number(((tr.querySelectorAll('td')[ci] as HTMLElement)?.innerText ?? '').replace(/\D/g, ''))),
+        idxSlotRemaining
+      );
+    expect(slotRemainings.length, '至少要有一格逐时段剩余可比').toBeGreaterThan(0);
+    const minRemaining = Math.min(...slotRemainings);
+    expect(summaryMin, `抽屉首行「今天还能卖」应 = 逐时段剩余最小值 ${minRemaining}（逐时段= ${JSON.stringify(slotRemainings)}）`).toBe(minRemaining);
 
     // ⑤ 回归守卫：甲方明确不要「今天不上小程序」整档关停按钮
     expect(bodyText, '不应再有「今天不上小程序」按钮').not.toContain('今天不上小程序');

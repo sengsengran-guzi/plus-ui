@@ -1089,7 +1089,14 @@ export default {
     sellableInheritedShort: 'default',
     sellableOverridden: 'changed today',
     sellableColActiveTotal: 'Booked today',
-    sellableColFreeSeats: 'Free seats',
+    sellableActiveTip:
+      'Active bookings for the WHOLE day (a multi-hour booking counts once), not one slot - so it cannot be subtracted from "capacity per slot" directly. Use "sellable at tightest slot" or expand the row for per-slot numbers.',
+    sellableColMinRemaining: 'Sellable (tightest hour)',
+    sellableMinRemainingTip:
+      'Quota view: how many are still sellable in the TIGHTEST hour today (= capacity per slot - closed today - booked in that slot). Closing lowers this by the same amount; closing everything gives 0. Expand the row for per-slot detail.',
+    sellableFreeSeatsTip:
+      'Seat view: physical seats with no booking at all today (used to judge how many walk-ins can still be seated). It is NOT affected by "closed today" - closing removes sellable quota (tables/seats), not the seats themselves.',
+    sellableColFreeSeats: 'Seats not booked today',
     sellableColClose: 'Closed today',
     sellableCloseMixed: 'Per slot',
     sellableColDayAction: 'Close for the day',

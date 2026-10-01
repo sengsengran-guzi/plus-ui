@@ -1065,7 +1065,7 @@ export default {
     sellableEntry: '今日小程序剩余座位',
     sellableTitle: '今日小程序剩余座位',
     sellableHint:
-      '「今天关闭」默认沿用桌型配置里的「长期关闭」：店员今天不动，小程序就按长期关闭的数少卖；今天在这里改（例如改成 0 = 今天全开、改成 3 = 今天关 3 个）只对今天生效，不会改掉桌型配置。',
+      '「今天关闭」默认沿用桌型配置里的「长期关闭」：店员今天不动，小程序就按长期关闭的数少卖；今天在这里改（例如改成 0 = 今天全开、改成 3 = 今天关 3 个）只对今天生效，不会改掉桌型配置。右侧「今天还能卖」是档位口径（关几个就少几个，关满 = 0）；「今天没被预订的座位」是座位口径，不受关闭影响。',
     sellableFreeSeats: '没被预订的座位：',
     sellableNoFreeSeat: '无空位',
     sellableColName: '桌型',
@@ -1076,7 +1076,14 @@ export default {
     sellableInheritedShort: '沿用',
     sellableOverridden: '今天已改',
     sellableColActiveTotal: '今日已订(单)',
-    sellableColFreeSeats: '空闲座位',
+    sellableActiveTip:
+      '今天**全天**的活跃单数（一张跨多小时的单只算 1 单），不是某个时段的占用 —— 所以不能和「每格容量」直接相减。某个时段还剩多少看「今天还能卖」或展开后的逐时段表。',
+    sellableColMinRemaining: '今天还能卖',
+    sellableMinRemainingTip:
+      '按档位算：今天**最难订的那个小时**还剩几个（= 每格容量 − 今天关闭 − 该时段已订）。关闭几个这里就少几个，关满 = 0。逐时段明细点左侧箭头展开。',
+    sellableFreeSeatsTip:
+      '按**座位**算：今天一整天都没被任何预约占用的座位数（用来判断线下来客还能接几桌）。它**不受「今天关闭」影响** —— 关闭少卖的是档位（桌/座），座位本身还在。',
+    sellableColFreeSeats: '今天没被预订的座位',
     sellableColClose: '今天关闭',
     sellableCloseMixed: '分时段',
     sellableColDayAction: '全天关闭几个',

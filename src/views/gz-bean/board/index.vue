@@ -285,8 +285,40 @@
               </template>
               <template #default="{ row }">{{ row.longCloseCount }}</template>
             </el-table-column>
-            <el-table-column :label="t('gzBeanBoard.sellableColActiveTotal')" prop="activeBookings" width="110" align="center" />
-            <el-table-column :label="t('gzBeanBoard.sellableColFreeSeats')" width="110" align="center">
+            <!-- 「今日已订(单)」是**全天单数**（跨格单只算 1），不是某个时段的占用 → 不能和「每格容量」直接相减，故挂列头说明 -->
+            <el-table-column width="120" align="center">
+              <template #header>
+                <span>{{ t('gzBeanBoard.sellableColActiveTotal') }}</span>
+                <el-tooltip :content="t('gzBeanBoard.sellableActiveTip')" placement="top">
+                  <el-icon class="sellable-tip"><QuestionFilled /></el-icon>
+                </el-tooltip>
+              </template>
+              <template #default="{ row }">{{ row.activeBookings }}</template>
+            </el-table-column>
+            <!-- 【档位口径】今天最难订的那个小时还剩几个：随关闭立刻变化（关满 = 0）。
+                 这是「关闭有没有生效」该看的那个数 —— 甲方 2026-09-29 误以为是右边那列。 -->
+            <el-table-column width="120" align="center">
+              <template #header>
+                <span>{{ t('gzBeanBoard.sellableColMinRemaining') }}</span>
+                <el-tooltip :content="t('gzBeanBoard.sellableMinRemainingTip')" placement="top">
+                  <el-icon class="sellable-tip"><QuestionFilled /></el-icon>
+                </el-tooltip>
+              </template>
+              <template #default="{ row }">
+                <el-tag :type="row.minSlotRemaining <= 0 ? 'danger' : 'success'" size="small" effect="light">
+                  {{ row.minSlotRemaining }} {{ unitOf(row) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <!-- 【物理座位口径】今天一整天都没被任何活跃单占用的**座位**数（判断线下来客还能接几桌）。
+                 它**不受关闭影响**：关闭少卖的是档位，不是座位 → 列头必须写清，否则会被读成"关了还空着" -->
+            <el-table-column width="150" align="center">
+              <template #header>
+                <span>{{ t('gzBeanBoard.sellableColFreeSeats') }}</span>
+                <el-tooltip :content="t('gzBeanBoard.sellableFreeSeatsTip')" placement="top">
+                  <el-icon class="sellable-tip"><QuestionFilled /></el-icon>
+                </el-tooltip>
+              </template>
               <template #default="{ row }">
                 <el-tag :type="row.freeSeats.length <= 0 ? 'danger' : 'success'" size="small" effect="light">
                   {{ row.freeSeats.length }}

@@ -63,6 +63,8 @@ export interface GzBeanDaySellableVO {
    * 不下发「逐格剩余合计」—— 那是「档位·小时」量纲（跨格单重复计），摆到界面上会被当成「还能接几单」误读。
    */
   slots: GzBeanDaySellableSlotRow[];
+  /** 【档位口径】各小时格 remaining 的最小值 = 「今天最难订的那个小时还剩几个」；随关闭立刻变化，关满 = 0 */
+  minSlotRemaining: number;
   /** 当天没被预订的座位（只读参考，unbooked 即看板口径下当天无活跃单的座位） */
   freeSeats: Array<{
     seatId: string;
